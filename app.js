@@ -406,7 +406,7 @@ async function describe(){
   try{
     const refs=await refBlobs();
     let images=[]; if(sampleImages){ if(S.upload) images.push(S.upload); refs.forEach(r=>images.push(r.blob)); images=images.slice(0,sampleImages.maxCount||5); }
-    const imgNote=images.length?`Images attached, in order: ${S.upload?"image 1 is the USER'S IMAGE to describe and rebuild; then ":""}${refs.slice(0,images.length-(S.upload?1:0)).map((r,i)=>`image ${i+1+(S.upload?1:0)} is ${({bae:"a BAE GUIDELINE photo",yt:"a YOUTH CAMPAIGN reference",mj:"a Mari Juliano reference",user:"the user's own reference"})[refById(r.id)?.set]||"a reference"} (${refById(r.id)?.d})`).join("; ")}. BAE guideline photos define the brand's light, depth and set style; YOUTH CAMPAIGN references define wardrobe, camera angle and energy for the bold look (ignore their logos, products and any orange clothing); Mari Juliano photos add clean natural light and candid energy. Borrow craft only, never their people, clothing, brands or locations.`:"No images attached; work from the brief and these reference notes: "+S.picked.map(id=>refById(id)?.d).join(" | ");
+    const imgNote=images.length?`Images attached, in order: ${S.upload?"image 1 is the USER'S IMAGE to describe and rebuild; then ":""}${refs.slice(0,images.length-(S.upload?1:0)).map((r,i)=>`image ${i+1+(S.upload?1:0)} is ${({bae:"a BAE GUIDELINE photo",yt:"a YOUTH CAMPAIGN reference",mj:"a Mari Juliano reference",user:"the user's own reference"})[refById(r.id)?.set]||"a reference"} (${refById(r.id)?.d})`).join("; ")}. BAE guideline photos define the brand's light, depth and set style; YOUTH CAMPAIGN references define wardrobe, camera angle and energy for the bold look (ignore their logos, products and any orange clothing); Mari Juliano photos add clean natural light and candid energy. All references are camera and photography-style direction only: borrow camera angle, lens feel, light and colour grade, never their composition, framing, people, clothing, brands or locations.`:"No images attached; work from the brief and these reference notes: "+S.picked.map(id=>refById(id)?.d).join(" | ");
     const prompt=`You are the art director for Bank al Etihad (Jordan). Describe the photograph we will produce.
 ${BAE_RULES}
 
@@ -472,7 +472,7 @@ Requirements:
 - Encode selective focus with one focal anchor${S.look==="Bold"?" (faces sharp)":" and the BAE warm palette"}.
 - State that the attached reference images guide light, colour grading, set style and candid energy only; do not copy their people, clothing, brands or exact scenes.
 - No logos, text, signage, watermarks.
-Format: one flowing descriptive paragraph that reads like a photographer's shot description, 130-200 words. Refer to the attached references by their tags, in this order: ${refPlan().map(r=>`${r.tag} (${r.use})`).join("; ")||"none attached"}. Example: "light and colour grade like @img1, wardrobe and low camera angle like @img2".
+Format: one flowing descriptive paragraph that reads like a photographer's shot description, 130-200 words. Refer to the attached references by their tags, in this order: ${refPlan().map(r=>`${r.tag} (${r.use})`).join("; ")||"none attached"}. Use each tag ONLY as camera and photography-style direction, for example "camera angle and lens feel like @img1, lighting and colour grade like @img2". Never ask the model to copy a reference's composition, framing, subject, people, clothing or location, or to reproduce it as is; the composition is set by this prompt (subject centred).
 Also return a checklist of 6-8 BAE rules with status "pass" or "note" and a 3-6 word label.
 
 Reply with only JSON: {"prompt_nano":"","negative":"comma list of things to avoid","checklist":[{"label":"","status":"pass"}]}`;
@@ -562,12 +562,12 @@ let refCache=null;
 function refRole(id,meta){
   const set=id==="user-image"?"user-image":meta?.set;
   return ({
-    "user-image":{role:"reference",use:"the user's own image: content and composition to rebuild"},
-    bae:{role:"style",use:meta?.studio?"BAE studio set, backdrop and soft directional light":"BAE light, depth, focus and colour grade"},
-    yt:{role:"style",use:"wardrobe, colour-block styling, low wide camera angle and energy"},
-    mj:{role:"style",use:"clean natural light and candid energy"},
-    user:{role:"style",use:"the user's reference for light, wardrobe and camera"}
-  })[set]||{role:"style",use:"style reference"};
+    "user-image":{role:"style",use:"camera and photography style direction (lens feel, light, colour); its subject is already described in words"},
+    bae:{role:"style",use:meta?.studio?"photography style direction: soft directional studio light, backdrop tone and colour grade":"photography style direction: light, depth of field, focus and colour grade"},
+    yt:{role:"style",use:"camera and photography style direction: low wide angle, lens feel, hard sunlight, saturated colour grade and styling energy"},
+    mj:{role:"style",use:"photography style direction: clean natural light and colour"},
+    user:{role:"style",use:"camera and photography style direction"}
+  })[set]||{role:"style",use:"camera and photography style direction"};
 }
 /* ---- Magnific reference library: images uploaded once to a Magnific folder named "BAE References" ----
    Magnific's upload tool only takes public links, and claude.ai pages can't send files to outside servers,
@@ -665,7 +665,8 @@ async function downloadPack(){
   finally{ b.disabled=false; b.textContent=old; }
 }
 function refPlan(){ const ids=[...(S.upload&&$("useUpAsRef").checked?["user-image"]:[]),...S.picked]; return ids.map((id,i)=>({id,tag:"@img"+(i+1),...refRole(id,refById(id))})); }
-function refLine(list){ return list.length?"Reference images: "+list.map(r=>`${r.tag} = ${r.use}`).join("; ")+". Use them for those qualities only; never copy their people, logos or orange clothing.":""; }
+/* References steer the camera and the photographic style only, never the composition or the content */
+function refLine(list){ return list.length?"Reference images (camera and photography style direction ONLY): "+list.map(r=>`${r.tag} = ${r.use}`).join("; ")+". Take only the camera angle, lens feel, lighting, colour grade and overall photographic style from them. Do NOT copy their composition, framing, layout, poses, subjects, people, clothing, locations, logos or text, and do not reproduce any reference image as is. Composition and content come only from this prompt.":""; }
 async function uploadRefs(){
   const sig=S.picked.join(",")+"|"+(S.upload&&$("useUpAsRef").checked?S.upload.size:"");
   if(refCache&&refCache.sig===sig&&!refCache.errors.length) return refCache;
