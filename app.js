@@ -595,13 +595,13 @@ let refCache=null;
 function refRole(id,meta){
   const set=id==="user-image"?"user-image":meta?.set;
   return ({
-    "user-image":{role:"style",use:"camera and photography style direction (lens feel, light, colour); its subject is already described in words"},
-    bae:{role:"style",use:meta?.studio?"photography style direction: soft directional studio light, backdrop tone and colour grade":"photography style direction: light, depth of field, focus and colour grade"},
-    yt:{role:"style",use:"camera and photography style direction: low wide angle, lens feel, hard sunlight, saturated colour grade and styling energy"},
-    mj:{role:"style",use:"photography style direction: clean natural light and colour"},
-    user:{role:"style",use:"camera and photography style direction"},
-    ic:{role:"style",use:"BAE illustration style direction: translucent layered material, orange-to-burgundy gradient, soft rounded 3D forms, isometric angle and lighting"}
-  })[set]||{role:"style",use:"camera and photography style direction"};
+    "user-image":{role:"image",use:"camera and photography style direction (lens feel, light, colour); its subject is already described in words"},
+    bae:{role:"image",use:meta?.studio?"photography style direction: soft directional studio light, backdrop tone and colour grade":"photography style direction: light, depth of field, focus and colour grade"},
+    yt:{role:"image",use:"camera and photography style direction: low wide angle, lens feel, hard sunlight, saturated colour grade and styling energy"},
+    mj:{role:"image",use:"photography style direction: clean natural light and colour"},
+    user:{role:"image",use:"camera and photography style direction"},
+    ic:{role:"image",use:"BAE illustration style direction: translucent layered material, orange-to-burgundy gradient, soft rounded 3D forms, isometric angle and lighting"}
+  })[set]||{role:"image",use:"camera and photography style direction"};
 }
 /* ---- Magnific reference library: images uploaded once to a Magnific folder named "BAE References" ----
    Magnific's upload tool only takes public links, and claude.ai pages can't send files to outside servers,
@@ -808,7 +808,7 @@ Quality: the highest available${P.best_quality?` ("${P.best_quality}"${P.quality
 ${mode?`Mode: "${mode}"${modeParam?` on setting "${modeParam}"`:""}.`:"Mode: model default."}
 Aspect ratio: ${typeof aspect==="string"?(aspect==="auto"?"auto (let the model choose)":aspect):`custom ${aspect.width}x${aspect.height} px`}.
 Number of images: ${count}.
-REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this order, so the first becomes @img1, the second @img2 and so on (the prompt refers to them by those tags). Use the schema's reference field(s) with the uploaded creation identifiers (or URLs if the schema takes URLs). If the schema has separate style / character / general reference slots, put role "style" items in the style slot, "character" items in the character slot and the rest in the general reference list, keeping the order. Do not drop any reference. Fill the negative prompt field if the schema has one. Turn off any prompt auto-enhancement so the brand prompt stays as written.`,
+REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this order, so the first becomes @img1, the second @img2 and so on (the prompt refers to them by those tags). Use the schema's reference field(s) with the uploaded creation identifiers (or URLs if the schema takes URLs). Put EVERY reference in the GENERAL image reference list (reference type "image", shown as @img1, @img2… in Magnific), keeping the order. NEVER use the "style" reference type/slot and NEVER the "character" or "product" slot: the style slot must stay empty/default because it changes the rendering type (photo vs illustration vs 3D). If the schema needs a type per reference, set it to "image". Do not drop any reference. Fill the negative prompt field if the schema has one. Turn off any prompt auto-enhancement so the brand prompt stays as written.`,
       {model:modelId, model_label:m.label, model_settings:opt.raw, prompt, negative_prompt:negativeNow(), composition:"person centred on the vertical centre line", setting:S.setting, aspect_ratio:aspect, resolution:P.res_4k||"4K", quality:P.best_quality||"high", mode, num_images:count, references:refs},"default");
     const r=await callMag("images_generate",plan.args);
     let rr=readResult(r); if(!rr.ids.length&&!rr.urls.length&&!rr.images.length) rr=await extractWithClaude(r,"the creation identifiers of the images being generated");
