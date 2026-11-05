@@ -235,6 +235,26 @@ Reply with only this JSON object: {"args":{...},"expected_long_side_px":null,"no
   if(!out||typeof out!=="object"||!out.args) throw {code:"invalid_json"};
   return out;
 }
+/* Magnific wants every reference as {identifier, …}. Whatever key the argument writer used
+   (creationIdentifier, id, uuid…) or if it sent bare strings, normalise to "identifier", in order. */
+function fixRefs(args,refs){
+  const ALIASES=["identifier","creationIdentifier","creation_identifier","assetIdentifier","id","uuid","creationId"];
+  const known=(refs||[]).map(r=>r&&(r.id||r.identifier)).filter(Boolean);
+  const fix=(arr)=>arr.map((it,i)=>{
+    if(typeof it==="string") return {identifier:it,type:"image"};
+    if(!it||typeof it!=="object") return it;
+    const o={...it}; let idv=null;
+    for(const k of ALIASES){ if(o[k]!=null&&o[k]!==""){ idv=idv||String(o[k]); if(k!=="identifier") delete o[k]; } }
+    o.identifier=idv||known[i]||o.identifier;
+    if(o.type&&o.type!=="image") o.type="image";
+    return o; });
+  const visit=(o,d=0)=>{ if(!o||typeof o!=="object"||d>6) return;
+    for(const k of Object.keys(o)){ const v=o[k];
+      if(/reference/i.test(k)&&Array.isArray(v)) o[k]=fix(v);
+      else if(v&&typeof v==="object") visit(v,d+1); } };
+  const copy=JSON.parse(JSON.stringify(args||{})); visit(copy);
+  return copy;
+}
 function replaceDeep(o,token,val){
   if(Array.isArray(o)) return o.map(x=>replaceDeep(x,token,val));
   if(o&&typeof o==="object"){ const r={}; for(const k in o) r[k]=replaceDeep(o[k],token,val); return r; }
@@ -865,8 +885,9 @@ Quality: the highest available${P.best_quality?` ("${P.best_quality}"${P.quality
 ${mode?`Mode: "${mode}"${modeParam?` on setting "${modeParam}"`:""}.`:"Mode: model default."}
 Aspect ratio: ${typeof aspect==="string"?(aspect==="auto"?"auto (let the model choose)":aspect):`custom ${aspect.width}x${aspect.height} px`}.
 Number of images: ${count}.
-REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this order, so the first becomes @img1, the second @img2 and so on (the prompt refers to them by those tags). Use the schema's reference field(s) with the uploaded creation identifiers (or URLs if the schema takes URLs). Put EVERY reference in the GENERAL image reference list (reference type "image", shown as @img1, @img2… in Magnific), keeping the order. NEVER use the "style" reference type/slot and NEVER the "character" or "product" slot: the style slot must stay empty/default because it changes the rendering type (photo vs illustration vs 3D). If the schema needs a type per reference, set it to "image". Do not drop any reference. Fill the negative prompt field if the schema has one. Turn off any prompt auto-enhancement so the brand prompt stays as written.`,
+REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this order, so the first becomes @img1, the second @img2 and so on (the prompt refers to them by those tags). Use the schema's reference field(s) with the uploaded creation identifiers (or URLs if the schema takes URLs). Put EVERY reference in the GENERAL image reference list (reference type "image", shown as @img1, @img2… in Magnific), keeping the order. NEVER use the "style" reference type/slot and NEVER the "character" or "product" slot: the style slot must stay empty/default because it changes the rendering type (photo vs illustration vs 3D). Each reference object carries the creation id in the field "identifier" (exactly that name). If the schema needs a type per reference, set it to "image". Do not drop any reference. Fill the negative prompt field if the schema has one. Turn off any prompt auto-enhancement so the brand prompt stays as written.`,
       {model:modelId, model_label:m.label, model_settings:opt.raw, prompt, negative_prompt:negativeNow(), composition:"person centred on the vertical centre line", setting:S.setting, aspect_ratio:aspect, resolution:P.res_4k||"4K", quality:P.best_quality||"high", mode, num_images:count, references:refs},"default");
+    plan.args=fixRefs(plan.args,refs);
     const r=await callMag("images_generate",plan.args);
     let rr=readResult(r); if(!rr.ids.length&&!rr.urls.length&&!rr.images.length) rr=await extractWithClaude(r,"the creation identifiers of the images being generated");
     const genIds=rr.ids.slice();
