@@ -69,6 +69,22 @@ const YOUTH_REFS = [
 ALL_REFS.push(...YOUTH_REFS);
 const PICK_BOLD=["yt04","yt06","yt03","bae_b108_2"];
 const PICK_BOLD_STUDIO=["bae_b114_1","bae_b113_0","yt06","yt05"];
+/* BAE illustration set (guidelines p.101, light mode), used as style direction for the Icons mode */
+const ICON_REFS=[
+ ["ic_savings","BAE icon: translucent coin over a stack of orange-to-burgundy coins"],
+ ["ic_cards","BAE icon: three stacked translucent cards in soft orange and burgundy"],
+ ["ic_investments","BAE icon: coin riding a curved orange-to-burgundy arrow pointing up"],
+ ["ic_fraud_security","BAE icon: frosted fingerprint tile over a burgundy check-mark disc"],
+ ["ic_application","BAE icon: phone with app tiles and a translucent card floating over it"],
+ ["ic_branches","BAE icon: isometric orange building with a translucent glass roof"],
+ ["ic_branch_location","BAE icon: small isometric building with a translucent location pin"],
+ ["ic_financial_literacy","BAE icon: translucent light bulb behind a curved burgundy wallet"],
+ ["ic_gold_bars","BAE icon: translucent bars and burgundy cards fanned together"],
+ ["ic_community","BAE icon: three soft paper-cut figures holding hands over a globe"],
+ ["ic_brand_hand","BAE icon: hand holding a wavy ring shape"]
+].map(([id,d])=>({id,d,src:`refs/${id}.jpg`,set:"ic",studio:false}));
+ALL_REFS.push(...ICON_REFS);
+const PICK_ICON=["ic_savings","ic_cards","ic_investments","ic_fraud_security"];
 const MAX_REFS=6;
 
 /* ---------------- BAE guideline digest given to Claude ---------------- */
@@ -279,7 +295,7 @@ async function connect(silent){
     if(models.length<2 && sample){ const o=await sample.json(`List every image model in this Magnific result as JSON [{"id":"exact identifier to pass as the model argument","name":"display name"}]. Result:\n${trimJSON(r.payload??r.content,20000)}`,{modelTier:"quick"}); if(Array.isArray(o)) models=o.filter(m=>m&&m.id).map(m=>({id:String(m.id),name:String(m.name||m.id)})); }
     pickModels(models);
     S.connected=true;
-    await loadOptions("nano");
+    await loadOptions("nano"); await loadOptions("icon");
     S.connected=true; setMag("on","Magnific: connected"); $("btnConnect").textContent="Reconnect";
     if(!Object.keys(S.magIds||{}).length) setTimeout(linkLibrary,0);
   }catch(e){ setMag("off","Magnific: "+(e?.code||"error")); if(!silent) flash($("s3state"),mcpCopy(e),true); }
@@ -302,14 +318,24 @@ function pickModels(list){
   if(!nano.length) sel.innerHTML=`<option value="">Nano Banana 2.1 (not found in your Magnific models)</option>`;
   nano.forEach(m=>{ const o=document.createElement("option"); o.value=m.id; o.textContent=m.name+(exact.length?" · locked":" · 2.1 not found, pick one"); sel.appendChild(o); });
   sel.disabled=!!exact.length;
-  if(nano[0]) $("mNanoName").textContent=nano[0].name+" · via Magnific";
+  if(nano[0]) S.nanoName=nano[0].name;
   log("·","model locked",{nano:nano.map(m=>m.name)});
+  /* Icons mode: locked to GPT 2.5 (newest GPT image model in Magnific) */
+  const gptAll=list.filter(m=>/gpt|openai|chatgpt/i.test(m.id+" "+m.name)).sort((a,b)=>ver(b.id+" "+b.name)-ver(a.id+" "+a.name));
+  const g25=gptAll.filter(m=>/2[\s._-]?5(?!\d)/.test(m.id+" "+m.name));
+  const gpt=g25.length?g25.slice(0,1):gptAll.slice(0,1);
+  const gs=$("selIcon"); gs.innerHTML="";
+  if(!gpt.length) gs.innerHTML='<option value="">GPT 2.5 (not found in your Magnific models)</option>';
+  gpt.forEach(m=>{ const o=document.createElement("option"); o.value=m.id; o.textContent=m.name+(g25.length?" · locked":" · 2.5 not found, newest GPT"); gs.appendChild(o); });
+  gs.disabled=true; log("·","icon model locked",{gpt:gpt.map(m=>m.name)});
+  if(gpt[0]) S.gptName=gpt[0].name;
+  $("mNanoName").textContent=S.mode==="icon"?(S.gptName||"GPT 2.5")+" · via Magnific":(S.nanoName||"Nano Banana 2.1")+" · via Magnific";
 }
 
 /* ---------------- UI: brief, segs, upload, refs ---------------- */
 const DEFAULT_BRIEF="Three young Jordanian friends laughing together on a rooftop terrace in modern Abdali, one showing the others her savings goal on her iPhone 18, bright afternoon sun and a clear blue sky behind them.";
 try{ const saved=localStorage.getItem("bae_brief"); $("brief").value=saved&&!/Jabal Amman, morning light through the window|tailored (camel|cream) blazer checks her savings/.test(saved)?saved:DEFAULT_BRIEF; }catch{ $("brief").value=DEFAULT_BRIEF; }
-$("brief").addEventListener("input",()=>{ try{ localStorage.setItem("bae_brief",$("brief").value);}catch{} countBrief(); });
+$("brief").addEventListener("input",()=>{ if(S.mode!=="icon") try{ localStorage.setItem("bae_brief",$("brief").value);}catch{} countBrief(); });
 function countBrief(){ $("briefCount").textContent=$("brief").value.trim().split(/\s+/).filter(Boolean).length+" words"; }
 countBrief();
 document.querySelectorAll(".seg[data-key]").forEach(seg=>seg.addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return; seg.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b?"true":"false")); S[seg.dataset.key]=b.dataset.v; if(seg.dataset.key==="setting"||seg.dataset.key==="look") onSetting(); }));
@@ -366,6 +392,7 @@ function renderRefs(){
 function syncTabs(){ document.querySelectorAll("#refTabs button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.tab===S.refTab?"true":"false"));
   $("addRefWrap").hidden=S.refTab!=="user";
   $("refHint").textContent=({
+    ic:"BAE illustration set (guidelines p.101, light mode). Sent to GPT 2.5 as style direction only: material, translucency, gradient, angle and lighting.",
     user:"Your own reference photos, kept only on this device. Add licensed images that show the light, wardrobe or camera angle you want.",
     bae:"Photos from the Bank al Etihad guidelines. Picked frames go to Claude for style analysis and to Nano Banana 2.1 as references. Up to 6, from any set. Choosing Studio picks the BAE studio frames for you.",
     yt:"Youth campaign set: bold streetwear, low-angle wide camera, blue sky, hard sun and friends mid-laugh. Used for wardrobe, camera and energy; their logos and orange clothing are never copied.",
@@ -402,6 +429,7 @@ $("pNano").addEventListener("input",syncButtons);
 /* ---------------- STEP 1: describe ---------------- */
 $("btnDescribe").onclick=describe;
 async function describe(){
+  if(S.mode==="icon") return describeIcon();
   stage(1,"active"); flash($("s1state"),"Thinking…"); $("btnDescribe").disabled=true;
   try{
     const refs=await refBlobs();
@@ -445,6 +473,7 @@ function renderAnalysis(a){
 /* ---------------- STEP 2: prompts ---------------- */
 $("btnPrompt").onclick=writePrompts;
 async function writePrompts(){
+  if(S.mode==="icon") return writeIconPrompt();
   stage(2,"active"); flash($("s2state"),"Writing…"); $("btnPrompt").disabled=true;
   try{
     const prompt=`Write one production image prompt for Google Nano Banana 2.1 for this Bank al Etihad photograph.
@@ -485,6 +514,7 @@ Reply with only JSON: {"prompt_nano":"","negative":"comma list of things to avoi
   finally{ $("btnPrompt").disabled=!sample; syncButtons(); }
 }
 function enforce(p){
+  if(S.mode==="icon") return enforceIcon(p);
   let t=p.trim();
   if(!/professional photography/i.test(t)||!/clean natural light/i.test(t)) t="Professional photography, clean natural light. "+t;
   if(!/4k/i.test(t)) t+=" Ultra-detailed 4K resolution.";
@@ -496,10 +526,11 @@ function enforce(p){
 }
 
 /* ---------------- STEP 3: generate ---------------- */
-const MODELS={ nano:{el:"rNano",sel:"selNano",mode:"modeNano",prompt:"pNano",label:"Nano Banana 2.1"} };
-function negativeNow(){ return [S.negative||"logos, text, watermark, signage, oversaturated, HDR, extra fingers",CLIENT_NEG,COMPOSITION_NEG,S.setting==="Studio"?STUDIO_NEG:"",S.look==="Bold"?LOOK_BOLD_NEG:""].filter(Boolean).join(", "); }
+const MODELS={ nano:{el:"rNano",sel:"selNano",mode:"modeNano",prompt:"pNano",label:"Nano Banana 2.1"}, icon:{el:"rNano",sel:"selIcon",mode:"modeIcon",prompt:"pNano",label:"GPT 2.5 icon"} };
+const genKey=()=>S.mode==="icon"?"icon":"nano";
+function negativeNow(){ if(S.mode==="icon") return ICON_NEG; return [S.negative||"logos, text, watermark, signage, oversaturated, HDR, extra fingers",CLIENT_NEG,COMPOSITION_NEG,S.setting==="Studio"?STUDIO_NEG:"",S.look==="Bold"?LOOK_BOLD_NEG:""].filter(Boolean).join(", "); }
 const STEPS=["Upload references","Render in 4K","4K check","Ready"];
-function aspectVal(){ const v=$("aspect").value; if(v==="custom"){ const w=parseInt($("cw").value,10)||0,h=parseInt($("ch").value,10)||0; return w&&h?{width:w,height:h}:"auto"; } return v; }
+function aspectVal(){ if(S.mode==="icon") return "1:1"; const v=$("aspect").value; if(v==="custom"){ const w=parseInt($("cw").value,10)||0,h=parseInt($("ch").value,10)||0; return w&&h?{width:w,height:h}:"auto"; } return v; }
 function aspectText(){ const a=aspectVal(); return typeof a==="string"?a:`${a.width}×${a.height}px`; }
 function ratioCSS(){ const a=aspectVal(); if(a==="auto") return "4 / 3"; if(typeof a==="object") return `${a.width} / ${a.height}`; const [w,h]=a.split(":").map(Number); return `${w} / ${h}`; }
 function renderCard(key,st){
@@ -507,11 +538,12 @@ function renderCard(key,st){
   const outs=st.outs||[]; const o=outs[st.sel||0];
   const res=o&&o.long?(o.long>=3800?`4K · ${o.long}px`:`${o.long}px`):"";
   el.innerHTML=`<div class="head"><b>${esc(m.label)}</b><span class="count">${esc(name)}</span></div>
-  <div class="frame ${st.busy?"busy":""}" style="aspect-ratio:${ratioCSS()}">${o?.img?`<img src="${o.img}" alt="Generated image ${(st.sel||0)+1} from ${esc(m.label)}">`:`${!o&&!st.busy?`<div class="ph-mosaic" aria-hidden="true">${S.picked.slice(0,3).map(id=>`<img src="${refById(id)?.src}" alt="">`).join("")}</div>`:""}<span class="ph-txt">${esc(o?"Magnific sent a link but not the image itself, and claude.ai blocks outside images inside pages. Open the PNG below to view or save it.":(st.ph||"Your image appears here"))}</span>`}${res?`<span class="badge">${esc(res)}</span>`:""}${st.busy?`<span class="elapsed" id="elapsed-${key}">${fmtTime(st.t0)}</span>`:""}</div>
+  <div class="frame ${st.busy?"busy":""}${key==="icon"?" iconframe":""}" style="aspect-ratio:${ratioCSS()}">${o?.img?`<img src="${o.img}" alt="Generated image ${(st.sel||0)+1} from ${esc(m.label)}">`:`${!o&&!st.busy?`<div class="ph-mosaic" aria-hidden="true">${S.picked.slice(0,3).map(id=>`<img src="${refById(id)?.src}" alt="">`).join("")}</div>`:""}<span class="ph-txt">${esc(o?"Magnific sent a link but not the image itself, and claude.ai blocks outside images inside pages. Open the PNG below to view or save it.":(st.ph||"Your image appears here"))}</span>`}${res?`<span class="badge">${esc(res)}</span>`:""}${st.busy?`<span class="elapsed" id="elapsed-${key}">${fmtTime(st.t0)}</span>`:""}</div>
   ${outs.length>1?`<div class="thumbs">${outs.map((x,i)=>`<button type="button" data-i="${i}" aria-pressed="${i===(st.sel||0)}" aria-label="Show image ${i+1}">${x.img?`<img src="${x.img}" alt="">`:i+1}</button>`).join("")}</div>`:""}
   <ol class="steps">${STEPS.map((s,i)=>`<li class="${st.steps?.[i]||""}">${s}${st.stepNote?.[i]?` · ${esc(st.stepNote[i])}`:""}</li>`).join("")}</ol>
   ${st.err?`<div class="msg">${esc(st.err)}</div>`:""}${st.refWarn?`<div class="msg info">${esc(st.refWarn)}</div>`:""}
   <div class="btns">${o?.blob?`<button class="btn small primary" data-act="dl">Download ${/png/.test(o.blob.type)?"PNG":"image"}</button>`:""}${o?.url?`<a class="btn small ${o.blob?"":"primary"}" href="${esc(o.url)}" target="_blank" rel="noopener">Open ${o.long>=3800?"4K ":""}PNG</a><button class="btn small" data-act="copy">Copy link</button>`:""}${o?.webUrl?`<a class="btn small ${o.blob||o.url?"":"primary"}" href="${esc(o.webUrl)}" target="_blank" rel="noopener">Open in Magnific</a>`:""}${st.done||st.err?`<button class="btn small" data-act="regen">Regenerate</button>`:""}</div>
+  ${key==="icon"&&o?.blob?`<div class="btns exports"><span class="t12 muted">Export PNG on white:</span>${[96,144,192,256,1024].map(s=>`<button class="btn small" data-exp="${s}" title="${({96:"S · dashboards, tooltips",144:"M · spot, onboarding, empty states",192:"L · modals, marketing",256:"XL · hero moments",1024:"Master"})[s]}">${({96:"S 96",144:"M 144",192:"L 192",256:"XL 256",1024:"1024"})[s]}</button>`).join("")}</div>`:""}
   ${o?.url?`<input type="text" readonly class="linkbox" id="link-${key}" value="${esc(o.url)}" aria-label="Image link">`:""}
   ${o?.links?.length>1?`<details class="links"><summary>All links from Magnific (${o.links.length})</summary>${o.links.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`).join("")}</details>`:""}`;
   el.querySelector('[data-act="dl"]')?.addEventListener("click",()=>save(key,o));
@@ -519,12 +551,13 @@ function renderCard(key,st){
   el.querySelector('[data-act="regen"]')?.addEventListener("click",()=>generate([key]));
   el.querySelectorAll(".thumbs button").forEach(b=>b.addEventListener("click",()=>{ st.sel=+b.dataset.i; renderCard(key,st); }));
   el.querySelector(".frame > img")?.addEventListener("click",()=>openLightbox(o.img));
+  el.querySelectorAll("[data-exp]").forEach(b=>b.addEventListener("click",()=>exportIcon(o,+b.dataset.exp)));
 }
-const cards={nano:{}};
-function idle(){ for(const k in MODELS){ cards[k]={ph:"Your 4K image appears here. Write a brief above and press Create image.",steps:[]}; renderCard(k,cards[k]); } }
+const cards={nano:{},icon:{}};
+function idle(){ const k=genKey(); if(!cards[k].steps) cards[k]={ph:S.mode==="icon"?"Your icon appears here on white, 1:1. Describe the icon above and press Create icon.":"Your 4K image appears here. Write a brief above and press Create image.",steps:[]}; renderCard(k,cards[k]); }
 function fmtTime(t0){ if(!t0) return "0:00"; const s=Math.max(0,Math.round((Date.now()-t0)/1000)); return Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); }
 idle();
-function onAspect(){ $("customWrap").hidden=$("aspect").value!=="custom"; $("aspectPill").textContent=aspectText(); for(const k in MODELS) renderCard(k,cards[k]); }
+function onAspect(){ $("customWrap").hidden=S.mode==="icon"||$("aspect").value!=="custom"; $("aspectPill").textContent=S.mode==="icon"?"1:1 · locked":aspectText(); renderCard(genKey(),cards[genKey()]); }
 ["aspect","cw","ch"].forEach(id=>$(id).addEventListener(id==="aspect"?"change":"input",onAspect)); onAspect();
 function setCount(n){ n=Math.max(1,Math.min(4,n)); $("count").value=n; $("countOut").textContent=n; }
 $("cMinus").onclick=()=>setCount(+$("count").value-1); $("cPlus").onclick=()=>setCount(+$("count").value+1);
@@ -556,7 +589,7 @@ Reply with only JSON: {"modes":[{"value":"exact value","label":"short label","pa
 }
 $("selNano").addEventListener("change",()=>loadOptions("nano"));
 
-$("btnGen").onclick=()=>generate(["nano"]);
+$("btnGen").onclick=()=>generate([genKey()]);
 let refCache=null;
 /* What each reference is used for; the order here is the @img1, @img2… order sent to Magnific */
 function refRole(id,meta){
@@ -566,7 +599,8 @@ function refRole(id,meta){
     bae:{role:"style",use:meta?.studio?"photography style direction: soft directional studio light, backdrop tone and colour grade":"photography style direction: light, depth of field, focus and colour grade"},
     yt:{role:"style",use:"camera and photography style direction: low wide angle, lens feel, hard sunlight, saturated colour grade and styling energy"},
     mj:{role:"style",use:"photography style direction: clean natural light and colour"},
-    user:{role:"style",use:"camera and photography style direction"}
+    user:{role:"style",use:"camera and photography style direction"},
+    ic:{role:"style",use:"BAE illustration style direction: translucent layered material, orange-to-burgundy gradient, soft rounded 3D forms, isometric angle and lighting"}
   })[set]||{role:"style",use:"camera and photography style direction"};
 }
 /* ---- Magnific reference library: images uploaded once to a Magnific folder named "BAE References" ----
@@ -577,7 +611,7 @@ try{ S.magIds=JSON.parse(localStorage.getItem(LIB_KEY)||"{}"); }catch{ S.magIds=
 function libStatus(txt,kind){ const el=$("libState"); if(el){ el.textContent=txt; el.className="t12 "+(kind==="ok"?"ok-t":kind==="bad"?"bad-t":"muted"); } }
 function libSummary(){ const n=Object.keys(S.magIds||{}).length; const total=ALL_REFS.filter(r=>r.set!=="user").length; return n?`${n} of ${total} references linked from your Magnific library.`:"Not linked yet. Upload the reference pack to a Magnific folder named “BAE References”, then press Link library."; }
 /* Names in the pack: bae_b114_1, yt04, r025 (Magnific may drop the .jpg) */
-const REF_NAME_RE=/(?<![A-Za-z0-9])(bae_b\d{3}_\d|yt\d{2}|r\d{3})(?![0-9])/i;
+const REF_NAME_RE=/(?<![A-Za-z0-9])(bae_b\d{3}_\d|yt\d{2}|r\d{3}|ic_[a-z_]+?)(?=\.jpe?g|\.png|$|[^a-z_])/i;
 const NAME_KEYS=/^(name|title|file_?name|original_?(file_?)?name|label|display_?name|asset_?name)$/i;
 const REF_KEYS=["folderReference","projectReference","reference","identifier","id","uuid","slug"];
 /* Magnific answers some tools with JSON and others with YAML-like text; both are read here */
@@ -590,7 +624,7 @@ function findFolder(p){
   return hit;
 }
 /* An item may carry its id as identifier, creationIdentifier, assetIdentifier, id or uuid */
-function itemId(v){ for(const k of ["identifier","creationIdentifier","assetIdentifier","creation_id","asset_id","id","uuid"]){ if(typeof v[k]==="string"&&v[k].length>=4) return v[k]; if(typeof v[k]==="number") return String(v[k]); } return null; }
+function itemId(v){ for(const k of ["identifier","creationIdentifier","assetIdentifier","creation_id","asset_id","id","uuid"]){ if(typeof v[k]==="string"&&v[k].length>=2) return v[k]; if(typeof v[k]==="number") return String(v[k]); } return null; }
 function matchRefs(p,map){
   const put=(name,id)=>{ const m=String(name||"").match(REF_NAME_RE); if(m&&id&&!map[m[1].toLowerCase()]) map[m[1].toLowerCase()]=String(id); };
   if(p&&typeof p==="object") walk(p,(k,v)=>{ if(!v||typeof v!=="object"||Array.isArray(v)) return; const id=itemId(v); if(typeof id!=="string") return;
@@ -666,7 +700,9 @@ async function downloadPack(){
 }
 function refPlan(){ const ids=[...(S.upload&&$("useUpAsRef").checked?["user-image"]:[]),...S.picked]; return ids.map((id,i)=>({id,tag:"@img"+(i+1),...refRole(id,refById(id))})); }
 /* References steer the camera and the photographic style only, never the composition or the content */
-function refLine(list){ return list.length?"Reference images (camera and photography style direction ONLY): "+list.map(r=>`${r.tag} = ${r.use}`).join("; ")+". Take only the camera angle, lens feel, lighting, colour grade and overall photographic style from them. Do NOT copy their composition, framing, layout, poses, subjects, people, clothing, locations, logos or text, and do not reproduce any reference image as is. Composition and content come only from this prompt.":""; }
+function refLine(list){
+  if(S.mode==="icon") return list.length?"Reference images (BAE illustration style direction ONLY): "+list.map(r=>`${r.tag} = ${r.use}`).join("; ")+". Take only their material, translucency, orange-to-burgundy gradient, softness, isometric angle and lighting. Do NOT copy their objects, composition or any symbol, and do not reproduce any reference as is. The object and composition come only from this prompt.":"";
+  return list.length?"Reference images (camera and photography style direction ONLY): "+list.map(r=>`${r.tag} = ${r.use}`).join("; ")+". Take only the camera angle, lens feel, lighting, colour grade and overall photographic style from them. Do NOT copy their composition, framing, layout, poses, subjects, people, clothing, locations, logos or text, and do not reproduce any reference image as is. Composition and content come only from this prompt.":""; }
 async function uploadRefs(){
   const sig=S.picked.join(",")+"|"+(S.upload&&$("useUpAsRef").checked?S.upload.size:"");
   if(refCache&&refCache.sig===sig&&!refCache.errors.length) return refCache;
@@ -766,7 +802,7 @@ async function runModel(key,refs){
     const opt=(modelId&&S.opts[modelId])||{raw:await modelDetails(modelId),parsed:{}}; const P=opt.parsed||{};
     const modeParam=(P.modes||[]).find(x=>String(x.value)===String(mode))?.param||null;
     const plan=await buildArgs("images_generate",
-      `Generate exactly ${count} photorealistic image(s) with model "${modelId||m.label}". Use the prompt verbatim.
+      `Generate exactly ${count} ${S.mode==="icon"?"3D icon illustration image(s), square 1:1, on a pure white background,":"photorealistic image(s)"} with model "${modelId||m.label}". Use the prompt verbatim.
 Resolution: 4K. Use the exact 4K value from the model settings${P.res_4k?` ("${P.res_4k}")`:""}; if 4K is not offered, use the largest value${P.max_res?` ("${P.max_res}")`:""}.
 Quality: the highest available${P.best_quality?` ("${P.best_quality}"${P.quality_param?` on "${P.quality_param}"`:""})`:""}.
 ${mode?`Mode: "${mode}"${modeParam?` on setting "${modeParam}"`:""}.`:"Mode: model default."}
@@ -800,7 +836,7 @@ REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this o
     /* 4K check: Magnific upscale only for an output that came back under 4K */
     let ups=0;
     for(const o of c.outs){
-      if(o.long>=3800) continue;
+      if(o.long>=3800||key==="icon") continue;
       if(S.upModes===null){ try{ const mr=await callMag("images_upscale_modes_list",{}); S.upModes=mr.payload??mr.content; }catch{ S.upModes=""; } }
       const factor=o.long?Math.max(2,Math.min(16,Math.pow(2,Math.ceil(Math.log2(3840/o.long))))):2;
       const ua=await buildArgs("images_upscale",`Upscale this photograph ${factor}x so the long side is at least 3840 px (4K) for ${$("channel").value}. Photographic realism: preserve faces, skin texture and fabric faithfully, keep creativity/hallucination at the minimum, no stylisation.`,
@@ -813,7 +849,7 @@ REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this o
       if(shot){ o.img=`data:${shot.mime};base64,${shot.data}`; o.blob=b64Blob(shot.data,shot.mime); }
       o.id=ux.ids[0]||o.id; o.url=ux.urls[0]||o.url; o.long=uw||(o.long?o.long*factor:3840); ups++; up();
     }
-    c.steps[2]="ok"; c.stepNote[2]=ups?`${ups} upscaled with Magnific`:"native 4K";
+    c.steps[2]="ok"; c.stepNote[2]=key==="icon"?"not needed: icons export up to 1024 px":ups?`${ups} upscaled with Magnific`:"native 4K";
     /* Make sure every image has a PNG link, and bytes for the preview where Magnific provides them */
     c.steps[3]="run"; c.stepNote[3]="getting PNG links"; up();
     for(const o of c.outs){ await completeFiles(o,rr); up(); }
@@ -821,6 +857,7 @@ REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this o
     c.steps[3]=got?"ok":"err"; c.stepNote[3]=got?`${got} file${got>1?"s":""}`:"no file link returned";
     if(!got) c.err="Magnific finished but sent no image file or link. Open your Magnific creations, or send the Connector log to Claude.";
     c.busy=false; c.done=true; up();
+    if(key==="icon"){ for(const o of c.outs) await whitenOut(o); up(); }
     c.outs.forEach(o=>{ if(o.url||o.img) addHistory(o); });
   }catch(e){
     c.busy=false; const i=c.steps.findIndex(s=>s==="run"); if(i>=0) c.steps[i]="err";
@@ -861,7 +898,7 @@ async function createAll(){
   /* Without an Anthropic key the web version writes the prompt from the brief and the locked rules */
   if(S.web&&!getKey("anthropic")){
     const b=$("btnCreate"); b.disabled=true; b.textContent="Creating…";
-    try{ $("pNano").value=enforce(localPrompt()); stage(1,"done"); stage(2,"done"); flash($("s1state"),"Skipped: no Anthropic key, so the prompt was built from your brief and the locked rules."); syncButtons(); await generate(["nano"]); }
+    try{ $("pNano").value=enforce(localPrompt()); stage(1,"done"); stage(2,"done"); flash($("s1state"),"Skipped: no Anthropic key, so the prompt was built from your brief and the locked rules."); syncButtons(); await generate([genKey()]); }
     finally{ b.disabled=false; b.textContent="Create image"; }
     return;
   }
@@ -872,7 +909,7 @@ async function createAll(){
     await describe();
     if(!$("pNano").value.trim()) return;
     if(!mcp){ flash($("s3state"),"Magnific isn't reachable in this view. Open the page in claude.ai.",true); return; }
-    await generate(["nano"]);
+    await generate([genKey()]);
   }finally{ b.disabled=false; b.textContent="Create image"; }
 }
 $("brief").addEventListener("keydown",e=>{ if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){ e.preventDefault(); createAll(); } });
@@ -979,6 +1016,7 @@ function localPrompt(){
   return `${$("brief").value.trim()} ${S.shot}, ${S.setting==="Studio"?"photographed in a minimal BAE studio set":"on location in modern Amman"}. ${look}. Depth over flatness, clarity through focus with one sharp focal anchor, warm considered colour. Believable Jordanian people, natural expressions, real camera language.${S.picked.length?" Use the attached reference images for light, colour grade, wardrobe and camera angle only, never copy their people or logos.":""}`;
 }
 async function generateWeb(){
+  if(S.mode==="icon"){ cards.icon={err:"Icons are rendered with GPT 2.5 through Magnific, which works in the claude.ai version of this studio.",steps:[],ph:"Not available here"}; renderCard("icon",cards.icon); return; }
   const key="nano", m=MODELS.nano, c=cards.nano={busy:true,t0:Date.now(),ph:"Preparing references…",steps:["run"],stepNote:[]};
   const t0=c.t0, up=()=>renderCard(key,c);
   $("btnGen").disabled=true; stage(3,"active"); flash($("s3state"),"Rendering with Nano Banana 2.1…"); up();
@@ -1042,6 +1080,120 @@ async function bootWeb(){
 function webStatus(){ setClaude(getKey("anthropic")?"on":"wait",getKey("anthropic")?"Claude: key added":"Claude: optional key"); if(!getKey("gemini")) setMag("off","Google: add API key"); }
 $("btnSaveKeys").onclick=()=>{ setKey("gemini",$("keyGemini").value); setKey("anthropic",$("keyAnthropic").value); S.connected=false; webStatus(); $("keysMsg").textContent="Saved on this device."; checkGemini(false); };
 $("btnForgetKeys").onclick=()=>{ setKey("gemini",""); setKey("anthropic",""); $("keyGemini").value=""; $("keyAnthropic").value=""; S.connected=false; webStatus(); $("keysMsg").textContent="Keys removed from this device."; };
+
+/* ===================== ICONS MODE =====================
+   BAE illustration system (guidelines pp.91–101), rendered by GPT 2.5 through Magnific,
+   locked to a square 1:1 canvas on pure white. */
+const ICON_RULES=`BANK AL ETIHAD ILLUSTRATION / ICON SYSTEM (Deep Clarity, guidelines pp.91–101)
+Principles: Warmth (leads with humanity), Expressiveness (confident character), Simplicity (every element earns its place).
+Visual style: soft, layered depth. Translucent frosted-glass gradients build form, light passes through, shapes feel suspended rather than placed; edges are soft and dissolve slightly into atmosphere; negative space carries as much weight as the marks. Ethereal but considered: every icon belongs to the same family.
+Form: premium 3D objects seen from a gentle isometric three-quarter view (about 30° from above, turned about 45°), softly rounded edges and bevels, smooth satin surfaces with a subtle inner glow, simple geometric volumes. Typical motifs in the set: a coin over a stack of coins (savings), three stacked translucent cards (cards), a coin riding a rising curved arrow (investments), a frosted fingerprint tile over a check-mark disc (security), a phone with app tiles and a floating card (app), an isometric building with a glass roof (branches), a location pin over a small building, a light bulb behind a curved wallet (financial literacy), bars and cards fanned (gold), paper-cut figures over a globe (community).
+Colour: ONLY the illustration palette — Burgundy #A33755, Medium Burgundy #B9516E, Light Burgundy #F1C0B6, Orange #FA6428, Dark Orange #C13A23, Soft Orange #FDCBB4, Light Orange #FFFAF4. The warm orange-to-burgundy gradient is the unifying thread: solid forms graded from orange to burgundy, translucent layers in soft orange / light burgundy laid over them. No other hues.
+Composition: ONE focal point per frame; one main object plus at most one or two supporting elements, overlapping for depth, not decoration; universally understood objects; centred with generous breathing room (10×10 grid with a 1X exclusion margin).
+Mode: light-mode treatment, built for a white background.
+Never: text, letters, numbers, logos or the BAE symbol (coin or card faces stay clean or carry a simple abstract emboss); overcrowding or decorative bits (sparkles, confetti, motion lines); mixing styles (no flat vector, line icon, cartoon or photo); illustration used as texture.`;
+const ICON_LOCK="Icon lock: one premium 3D icon in the Bank al Etihad illustration style, centred and isolated on a pure flat white #FFFFFF background that fills the entire square 1:1 canvas edge to edge; no floor or ground plane, no cast shadow on the background, no backdrop gradient, no vignette, no frame or border; the icon fills about 60–70% of the canvas with even white margin on all sides; light-mode treatment; only Burgundy, Medium Burgundy, Light Burgundy, Orange, Dark Orange, Soft Orange and Light Orange; no text, letters, numbers or logos.";
+const ICON_NEG="coloured background, grey background, off-white background, beige background, gradient background, floor, ground plane, cast shadow on background, drop shadow, vignette, frame, border, text, letters, numbers, logo, watermark, brand symbol, photograph, people's faces, flat 2D vector, line icon, outline icon, clip art, cartoon, emoji, sticker, blue, green, purple, teal, yellow gold, chrome metal, clutter, multiple separate icons, sparkles, confetti, motion lines";
+function enforceIcon(p){
+  let t=String(p||"").trim().replace(/\n*Icon lock:[^\n]*/g,"").replace(/\n*Reference images[^\n]*/g,"");
+  if(!/^premium 3d/i.test(t)) t="Premium 3D brand icon illustration, square 1:1, isolated on a pure white background. "+t;
+  return t+"\n\n"+ICON_LOCK;
+}
+async function describeIcon(){
+  stage(1,"active"); flash($("s1state"),"Designing the icon concept…"); $("btnDescribe").disabled=true;
+  try{
+    const refs=await refBlobs(); let images=[]; if(sampleImages){ if(S.upload) images.push(S.upload); refs.forEach(r=>images.push(r.blob)); images=images.slice(0,sampleImages.maxCount||5); }
+    const a=await sample.json(`You are the illustration lead for Bank al Etihad. Design ONE icon in the brand's illustration system.
+${ICON_RULES}
+
+Icon request (Arabic or English): "${$("brief").value}"
+${images.length?`Attached images: ${S.upload?"image 1 is the user's sketch or example (use its idea only); then ":""}the BAE illustration references (style only: material, gradient, angle, softness — not their subjects).`:""}
+Choose the clearest universally understood metaphor for a banking audience in Jordan, in the BAE motif language.
+Reply in English with only JSON:
+{"summary":"1-2 sentences describing the finished icon","metaphor":"why this metaphor reads instantly","main_object":"","supporting":"0-2 supporting elements and how they overlap","layering":"which parts are solid gradient and which are translucent frosted layers","colour_map":"which palette colours go where","angle":"view angle and orientation","avoid":"anything that could be misread or culturally off"}`,{images:images.length?images:undefined});
+    S.analysis=a;
+    const f=[["Main object",a.main_object],["Supporting",a.supporting],["Layering",a.layering],["Colour",a.colour_map],["Angle",a.angle],["Why it reads",a.metaphor]];
+    $("s1body").innerHTML=`<p class="summary">${esc(a.summary)}</p><dl class="spec">${f.filter(x=>x[1]).map(([k,v])=>`<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>`+(a.avoid?`<div class="msg info">Watch: ${esc(a.avoid)}</div>`:"");
+    stage(1,"done"); flash($("s1state"),"Concept ready.");
+    await writeIconPrompt();
+  }catch(e){ stage(1); flash($("s1state"),sampleCopy(e),true); }
+  finally{ $("btnDescribe").disabled=!sample; }
+}
+async function writeIconPrompt(){
+  stage(2,"active"); flash($("s2state"),"Writing the icon prompt…"); $("btnPrompt").disabled=true;
+  try{
+    const o=await sample.json(`Write one production prompt for GPT 2.5 (image model) to render this Bank al Etihad icon.
+${ICON_RULES}
+
+Icon concept: ${JSON.stringify(S.analysis||{request:$("brief").value})}
+References attached, in order: ${refPlan().map(r=>`${r.tag} (${r.use})`).join("; ")||"none"}. Mention them only as style direction for material, gradient, translucency, softness, angle and lighting, e.g. "material and gradient like @img1"; never ask to copy their objects or composition.
+Requirements: start with "Premium 3D brand icon illustration"; describe the main object and supporting elements precisely (shapes, which parts are solid orange-to-burgundy gradient and which are translucent frosted layers, soft rounded edges, isometric three-quarter view, soft even studio light with gentle inner glow); centred with generous white margin; pure flat white #FFFFFF background filling the whole square canvas with no floor and no shadow on it; palette colours by name and hex; no text, numbers or logos. 90-150 words, one paragraph.
+Also return a checklist of 6 short labels about BAE illustration rules with status "pass" or "note".
+Reply with only JSON: {"prompt_icon":"","checklist":[{"label":"","status":"pass"}]}`);
+    $("pNano").value=enforceIcon(o.prompt_icon||"");
+    $("checks").innerHTML=(o.checklist||[]).map(c=>`<span class="check ${c.status==="pass"?"":"note"}">${c.status==="pass"?"✓":"!"} ${esc(c.label)}</span>`).join("");
+    stage(2,"done"); flash($("s2state"),"Ready. Edit freely, then generate.");
+  }catch(e){ stage(2); flash($("s2state"),sampleCopy(e),true); }
+  finally{ $("btnPrompt").disabled=!sample; syncButtons(); }
+}
+/* White lock: flood-fill from the edges so the background is exactly #FFFFFF, keeping light tones inside the icon */
+async function whitenOut(o){
+  if(!o?.img) return;
+  try{
+    const bmp=await createImageBitmap(await (await fetch(o.img)).blob());
+    const W=bmp.width,H=bmp.height; const c=document.createElement("canvas"); c.width=W; c.height=H; const x=c.getContext("2d"); x.drawImage(bmp,0,0);
+    const d=x.getImageData(0,0,W,H), p=d.data, seen=new Uint8Array(W*H), st=new Int32Array(W*H); let sp=0;
+    const near=i=>{ const r=p[i*4],g=p[i*4+1],b=p[i*4+2]; return r>232&&g>232&&b>232&&Math.max(r,g,b)-Math.min(r,g,b)<14; };
+    for(let X=0;X<W;X++){ st[sp++]=X; st[sp++]=(H-1)*W+X; } for(let Y=0;Y<H;Y++){ st[sp++]=Y*W; st[sp++]=Y*W+W-1; }
+    let changed=0;
+    while(sp){ const i=st[--sp]; if(seen[i]) continue; seen[i]=1; if(!near(i)) continue; p[i*4]=p[i*4+1]=p[i*4+2]=255; p[i*4+3]=255; changed++;
+      const X=i%W; if(X>0) st[sp++]=i-1; if(X<W-1) st[sp++]=i+1; if(i>=W) st[sp++]=i-W; if(i<W*(H-1)) st[sp++]=i+W; }
+    x.putImageData(d,0,0);
+    const blob=await new Promise(r=>c.toBlob(r,"image/png")); o.blob=blob; o.img=URL.createObjectURL(blob); o.whitened=Math.round(changed/(W*H)*100);
+    log("·","white background locked",{size:`${W}×${H}`,background_pixels:o.whitened+"%"});
+  }catch(e){ log("✕","white lock skipped",{message:String(e?.message||e)}); }
+}
+/* Exports at the BAE illustration sizes (S 96 · M 144 · L 192 · XL 256), on white */
+async function exportIcon(o,size){
+  try{
+    const bmp=await createImageBitmap(o.blob); const c=document.createElement("canvas"); c.width=c.height=size; const x=c.getContext("2d");
+    x.fillStyle="#FFFFFF"; x.fillRect(0,0,size,size); x.imageSmoothingQuality="high";
+    const k=Math.min(size/bmp.width,size/bmp.height), w=bmp.width*k, h=bmp.height*k; x.drawImage(bmp,(size-w)/2,(size-h)/2,w,h);
+    const blob=await new Promise(r=>c.toBlob(r,"image/png")); const name=`BAE_icon_${({96:"S",144:"M",192:"L",256:"XL",1024:"master"})[size]}_${size}.png`;
+    if(downloads&&!S.web) await downloads.save({filename:name,data:blob}); else { const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click(); }
+  }catch(e){ if(e?.code!=="declined") flash($("s3state"),"Couldn't export that size: "+(e?.message||e?.code),true); }
+}
+/* Mode switch: Photography ↔ Icons */
+const ICON_PRESETS=[["Savings goal","A savings goal: a translucent coin rising above a small stack of coins with a soft target ring"],["Mobile payment","Paying with a phone: a phone with a translucent card hovering over it and a soft tap ripple"],["Home loan","A home loan: a small modern house with a translucent key floating in front of it"],["Security","Account security: a frosted shield over a burgundy check-mark disc"],["Travel card","A travel card: a translucent card in front of a small globe with a curved flight path"],["Salary transfer","Salary transfer: two translucent cards exchanging a coin along a curved arrow"]];
+const PHOTO_PRESETS=[...document.querySelectorAll("#presets button")].map(b=>[b.textContent,b.dataset.b]);
+const PROMPT_STASH={photo:"",icon:""};
+function setMode(m,init){
+  if(!init) PROMPT_STASH[S.mode]=$("pNano").value;
+  S.mode=m; try{ localStorage.setItem("bae_mode",m); }catch{}
+  document.body.classList.toggle("mode-icon",m==="icon");
+  document.querySelectorAll("#modeSeg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.mode===m?"true":"false"));
+  const icon=m==="icon";
+  $("heroTitle").textContent=icon?"Turn an idea into a BAE icon.":"Turn a brief into an on-brand 4K photograph.";
+  $("heroLede").textContent=icon?"Describe the icon. Claude designs it in the BAE illustration system (soft layered depth, translucent orange-to-burgundy gradients, one focal point) and GPT 2.5 renders it square, on pure white.":"Write what the photo should show. Claude reads it against the BAE photography rules and your references, writes the prompt, and Nano Banana 2.1 renders it in 4K.";
+  if(!S.web) $("heroSub").textContent=icon?"GPT 2.5 · 1:1 · white background · via Magnific":"Nano Banana 2.1 · native 4K · via Magnific";
+  $("briefLbl").textContent=icon?"Icon idea":"Brief";
+  $("btnCreate").textContent=icon?"Create icon":"Create image";
+  $("presets").innerHTML=(icon?ICON_PRESETS:PHOTO_PRESETS).map(([l,b])=>`<button type="button" data-b="${esc(b)}">${esc(l)}</button>`).join("");
+  if(!S.web) $("mNanoName").textContent=icon?(S.gptName||"GPT 2.5")+" · via Magnific":(S.nanoName||"Nano Banana 2.1")+" · via Magnific";
+  $("pNano").value=PROMPT_STASH[m]||""; $("pNano").placeholder=icon?"The icon prompt is written after the concept. You can edit it before generating.":"Written after the scene is described. You can edit it before generating.";
+  $("promptLbl").textContent=icon?"GPT 2.5 icon prompt":"Nano Banana 2.1 prompt";
+  if(icon){ S._photoPicked=S.picked.slice(); S.picked=S._iconPicked||PICK_ICON.slice(); S.refTab="ic"; }
+  else { S._iconPicked=S.picked.slice(); S.picked=S._photoPicked||S.picked.filter(id=>!/^ic_/.test(id)); if(S.refTab==="ic") S.refTab=S.look==="Bold"?"yt":"bae"; }
+  S.picked=S.picked.filter(id=>refById(id));
+  if(icon){ try{ const saved=localStorage.getItem("bae_icon_brief"); $("brief").value=saved||ICON_PRESETS[0][1]; }catch{ $("brief").value=ICON_PRESETS[0][1]; } }
+  else { try{ $("brief").value=localStorage.getItem("bae_brief")||DEFAULT_BRIEF; }catch{} }
+  countBrief(); syncTabs(); renderRefs(); onAspect(); idle(); syncButtons();
+  ["s1","s2","s3"].forEach(id=>$(id).classList.remove("active","done")); ["pg2","pg3","pg4"].forEach(id=>$(id).classList.remove("active","done"));
+  $("s1body").innerHTML=`<div class="empty">${icon?"The icon concept appears here: main object, supporting elements, layering, colour map and angle, checked against the BAE illustration rules.":"The scene breakdown appears here: subject, setting, wardrobe, light, composition, depth and palette, with notes on how it meets the BAE photography principles."}</div>`; $("checks").innerHTML="";
+}
+$("modeSeg").addEventListener("click",e=>{ const b=e.target.closest("button[data-mode]"); if(b&&b.dataset.mode!==S.mode) setMode(b.dataset.mode); });
+$("brief").addEventListener("input",()=>{ if(S.mode==="icon") try{ localStorage.setItem("bae_icon_brief",$("brief").value); }catch{} });
+try{ if(localStorage.getItem("bae_mode")==="icon") setMode("icon",true); }catch{}
 
 $("btnLinkLib").onclick=linkLibrary; $("btnPack").onclick=downloadPack;
 libStatus(libSummary(),Object.keys(S.magIds||{}).length?"ok":"");

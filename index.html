@@ -28,6 +28,16 @@
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
+body.mode-icon .only-photo{display:none!important}
+body:not(.mode-icon) .only-icon{display:none!important}
+.modeseg{margin-bottom:4px}
+.modeseg button{min-height:40px;padding:8px 18px;font-size:16px}
+.iconrules{margin:0;padding-inline-start:18px;display:flex;flex-direction:column;gap:6px;line-height:1.35}
+.pal{display:flex;gap:6px}
+.pal i{width:22px;height:22px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(25,24,30,.08)}
+.frame.iconframe{background:#FFFFFF;box-shadow:inset 0 0 0 1px var(--stone-light);max-width:640px}
+.frame.iconframe img{object-fit:contain}
+.exports{gap:6px}
 html{background:var(--orange-light)}
 body{margin:0;background:var(--orange-light);color:var(--ink);font-family:var(--font);font-weight:400;font-size:16px;line-height:1.2;letter-spacing:0;
   padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px));padding-block:0 64px;-webkit-font-smoothing:antialiased}
@@ -276,12 +286,13 @@ details.log summary{cursor:pointer}
   <div class="grad" aria-hidden="true"><i class="g1"></i><i class="g2"></i><i class="g3"></i><i class="g4"></i><i class="veil"></i></div>
   <div class="hero-in">
     <div class="hero-copy">
+      <div class="seg modeseg" id="modeSeg" role="group" aria-label="What to create"><button type="button" data-mode="photo" aria-pressed="true">Photography</button><button type="button" data-mode="icon" aria-pressed="false">Icons</button></div>
       <span class="t12 muted" id="heroSub">Nano Banana 2.1 · native 4K · via Magnific</span>
       <h1 class="t40" id="heroTitle">Turn a brief into an on-brand 4K photograph.</h1>
-      <p class="t16 muted">Write what the photo should show. Claude reads it against the BAE photography rules and your references, writes the prompt, and Nano Banana 2.1 renders it in 4K.</p>
+      <p class="t16 muted" id="heroLede">Write what the photo should show. Claude reads it against the BAE photography rules and your references, writes the prompt, and Nano Banana 2.1 renders it in 4K.</p>
     </div>
     <div class="brief-card">
-      <div class="brief-meta"><label class="t18" for="brief">Brief</label><span class="count" id="briefCount"></span></div>
+      <div class="brief-meta"><label class="t18" for="brief" id="briefLbl">Brief</label><span class="count" id="briefCount"></span></div>
       <textarea id="brief" dir="auto" rows="4" aria-describedby="briefHint"></textarea>
       <div class="presets" id="presets" aria-label="Example briefs">
         <button type="button" data-b="Three young Jordanian friends laughing together on a rooftop terrace in modern Abdali, one showing the others her savings goal on her iPhone 18, bright afternoon sun and a clear blue sky behind them.">Friends on a rooftop</button>
@@ -309,7 +320,20 @@ details.log summary{cursor:pointer}
       <div class="btns"><button class="btn small primary" type="button" id="btnSaveKeys">Save keys</button><button class="btn small" type="button" id="btnForgetKeys">Remove keys</button><span class="t12 light" id="keysMsg" aria-live="polite"></span></div>
       <p class="t12 muted" style="line-height:1.35">Keys never leave this device except to call Google and Anthropic directly. Image and text usage is billed to the account that owns each key. Use this page only on a computer you trust.</p>
     </div>
-    <div class="card">
+    <div class="card only-icon">
+      <div class="card-h"><div class="ttl"><h2 class="t18">Icon system</h2><span class="t12 light">Locked to the BAE illustration rules</span></div></div>
+      <div class="lockrow"><span class="ic" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/></svg></span><div><span class="t16">Square 1:1 on pure white</span><p class="t12 muted" style="margin-top:4px;line-height:1.3">The background is locked to #FFFFFF. After rendering, the page flood-fills the edges to exact white, so no grey, floor or shadow is left.</p></div></div>
+      <ul class="t12 muted iconrules">
+        <li>Soft layered depth: translucent frosted layers over solid orange-to-burgundy forms.</li>
+        <li>Isometric three-quarter view, soft rounded edges, gentle inner glow.</li>
+        <li>One focal point, up to two supporting elements, generous breathing room.</li>
+        <li>Illustration palette only: Burgundy, Medium and Light Burgundy, Orange, Dark, Soft and Light Orange.</li>
+        <li>No text, numbers, logos or the BAE symbol.</li>
+      </ul>
+      <div class="pal"><i style="background:#A33755" title="Burgundy"></i><i style="background:#B9516E" title="Medium Burgundy"></i><i style="background:#F1C0B6" title="Light Burgundy"></i><i style="background:#FA6428" title="Orange"></i><i style="background:#C13A23" title="Dark Orange"></i><i style="background:#FDCBB4" title="Soft Orange"></i><i style="background:#FFFAF4" title="Light Orange"></i></div>
+    </div>
+
+    <div class="card only-photo">
       <div class="card-h"><div class="ttl"><h2 class="t18">Look and framing</h2><span class="t12 light">Wardrobe, place and shot</span></div></div>
       <div><span class="lbl">Look</span><div class="seg" data-key="look"><button type="button" data-v="Bold" aria-pressed="true">Bold &amp; colourful</button><button type="button" data-v="Calm" aria-pressed="false">Elegant &amp; calm</button></div></div>
       <div><span class="lbl">Setting</span><div class="seg" data-key="setting"><button type="button" data-v="On-location" aria-pressed="true">On-location</button><button type="button" data-v="Studio">Studio</button></div></div>
@@ -319,7 +343,8 @@ details.log summary{cursor:pointer}
 
     <div class="card">
       <div class="card-h"><div class="ttl"><h2 class="t18">Output</h2><span class="t12 light">Size, count and model</span></div></div>
-      <div>
+      <div class="only-icon"><span class="lbl">Aspect ratio</span><span class="pill strong">1:1 · square · locked</span></div>
+      <div class="only-photo">
         <div><label class="lbl" for="aspect">Aspect ratio</label>
           <select id="aspect">
             <option value="auto">Auto · model picks</option>
@@ -343,12 +368,14 @@ details.log summary{cursor:pointer}
       </div>
       <div class="row">
         <div><span class="lbl" id="countLbl">Images</span><div class="stepper" role="group" aria-labelledby="countLbl"><button type="button" id="cMinus" aria-label="Fewer images">−</button><output id="countOut">1</output><button type="button" id="cPlus" aria-label="More images">+</button><input type="hidden" id="count" value="1"></div></div>
-        <div><label class="lbl" for="channel">Channel</label>
+        <div class="only-photo"><label class="lbl" for="channel">Channel</label>
           <select id="channel"><option>Social</option><option>Website</option><option>OOH</option><option>Print</option><option>App</option></select></div>
       </div>
-      <div><label class="lbl" for="modeNano">Mode</label><select id="modeNano"><option value="">Default (loads when Magnific connects)</option></select></div>
-      <div><label class="lbl" for="selNano">Model</label><select id="selNano"><option value="">Nano Banana 2.1 (locked)</option></select></div>
-      <label class="check-l"><input type="checkbox" id="copySpace" checked> Leave even, clean space around the centred subject for copy and the gradient shape</label>
+      <div class="only-photo"><label class="lbl" for="modeNano">Mode</label><select id="modeNano"><option value="">Default (loads when Magnific connects)</option></select></div>
+      <div class="only-photo"><label class="lbl" for="selNano">Model</label><select id="selNano"><option value="">Nano Banana 2.1 (locked)</option></select></div>
+      <div class="only-icon"><label class="lbl" for="modeIcon">Mode</label><select id="modeIcon"><option value="">Default (loads when Magnific connects)</option></select></div>
+      <div class="only-icon"><label class="lbl" for="selIcon">Model</label><select id="selIcon"><option value="">GPT 2.5 (locked)</option></select></div>
+      <label class="check-l only-photo"><input type="checkbox" id="copySpace" checked> Leave even, clean space around the centred subject for copy and the gradient shape</label>
     </div>
 
     <div class="card">
@@ -370,7 +397,7 @@ details.log summary{cursor:pointer}
         <div class="btns"><button class="btn small" type="button" id="btnPack">Download reference pack</button><button class="btn small primary" type="button" id="btnLinkLib">Link library</button></div>
       </div>
       <div class="picked" id="picked" aria-label="Selected references"></div>
-      <div class="seg" id="refTabs"><button type="button" data-tab="bae" aria-pressed="false">BAE guideline</button><button type="button" data-tab="yt" aria-pressed="true">Youth campaign</button><button type="button" data-tab="mj" aria-pressed="false">Mari Juliano</button><button type="button" data-tab="user" aria-pressed="false">Your references</button></div>
+      <div class="seg" id="refTabs"><button type="button" data-tab="ic" class="only-icon" aria-pressed="false">BAE icons</button><button type="button" data-tab="bae" class="only-photo" aria-pressed="false">BAE guideline</button><button type="button" data-tab="yt" class="only-photo" aria-pressed="true">Youth campaign</button><button type="button" data-tab="mj" class="only-photo" aria-pressed="false">Mari Juliano</button><button type="button" data-tab="user" aria-pressed="false">Your references</button></div>
       <p class="t12 muted" id="refHint" style="line-height:1.35"></p>
       <div class="btns" id="addRefWrap" hidden><label class="btn small" for="addRef">Add reference photos</label><input type="file" id="addRef" accept="image/jpeg,image/png,image/webp" multiple class="sr"><button class="btn small" type="button" id="btnDelUserRefs">Remove all of mine</button></div>
       <div class="refs" id="refs"></div>
@@ -431,8 +458,9 @@ details.log summary{cursor:pointer}
         <div class="ttl"><h2 class="t24">Prompt</h2><span class="state" id="s2state">Written for Nano Banana 2.1. You can edit it before generating.</span></div>
         <button class="btn" type="button" id="btnPrompt" disabled>Rewrite prompt</button>
       </div>
-      <div class="locked"><span class="lbl">Always included</span><code>professional photography</code><code>clean natural light</code><code>4K</code><code>no logos or text</code><code id="lookChip">bold &amp; colourful</code><code>no hijab / traditional dress</code><code>no orange clothing</code><code>retouched skin tone</code><code>iPhone 18</code><code>IKEA-style decor</code><code>centred subject</code><code id="setChip">on-location</code></div>
-      <div><div class="mtag"><label for="pNano">Nano Banana 2.1 prompt</label></div><textarea class="prompt" id="pNano" placeholder="Written after the scene is described. You can edit it before generating." spellcheck="false"></textarea></div>
+      <div class="locked only-icon"><span class="lbl">Always included</span><code>BAE illustration style</code><code>GPT 2.5</code><code>1:1 square</code><code>pure white #FFFFFF</code><code>no floor or shadow</code><code>illustration palette only</code><code>one focal point</code><code>no text or logo</code><code>light mode</code></div>
+      <div class="locked only-photo"><span class="lbl">Always included</span><code>professional photography</code><code>clean natural light</code><code>4K</code><code>no logos or text</code><code id="lookChip">bold &amp; colourful</code><code>no hijab / traditional dress</code><code>no orange clothing</code><code>retouched skin tone</code><code>iPhone 18</code><code>IKEA-style decor</code><code>centred subject</code><code id="setChip">on-location</code></div>
+      <div><div class="mtag"><label for="pNano" id="promptLbl">Nano Banana 2.1 prompt</label></div><textarea class="prompt" id="pNano" placeholder="Written after the scene is described. You can edit it before generating." spellcheck="false"></textarea></div>
       <div class="checks" id="checks"></div>
     </article>
 
