@@ -38,14 +38,14 @@ const REFS = [
 /* Photos from the Bank al Etihad guidelines (photography chapter, pp.106–114) */
 const BAE_REFS = [
  ["bae_b113_0","BAE studio people: woman in a white shirt seated, warm plaster backdrop, soft directional light, calm confident gaze",1],
- ["bae_b114_1","BAE studio set: bearded man in a brown cardigan at a white desk, warm textured plaster wall, centred, direct gaze",1],
- ["bae_b114_2","BAE studio set: woman in a cream turtleneck seated, patterned backdrop and sheer curtain, restrained architectural set",1],
+ ["bae_b114_1","BAE studio set: bearded man in a camel knit cardigan over a white tee at a white desk, warm textured plaster wall, centred, direct gaze",1],
+ ["bae_b114_2","BAE studio set: woman in a cream turtleneck with a jade-green knit skirt seated, patterned backdrop and sheer curtain, restrained architectural set",1],
  ["bae_b113_1","BAE studio product: hand holding a phone with the banking app, warm wood background, soft dramatic light",1],
- ["bae_b106_1","BAE depth: foreground bokeh of warm flowers framing a woman in a black jacket",0],
- ["bae_b107_0","BAE selective focus: young woman writing, soft warm background, window light",0],
+ ["bae_b106_1","BAE depth: foreground bokeh of warm flowers framing a woman in a black tailored jacket and a blue-and-white printed midi skirt",0],
+ ["bae_b107_0","BAE selective focus: young woman writing in a white blouse with a printed blue-and-red silk scarf, soft warm background, window light",0],
  ["bae_b107_1","BAE selective focus through a blurred foreground, woman in a black coat, intimate",0],
  ["bae_b107_3","BAE layered depth: man seen through a window with reflections, warm light",0],
- ["bae_b108_2","BAE medium close-up: two women laughing together against a warm wall, candid connection",0],
+ ["bae_b108_2","BAE medium close-up: two women laughing together in pink and blue madras-check shirts against a warm wall, candid connection",0],
  ["bae_b111_1","BAE foreground bokeh: profile of a woman behind a soft warm blurred foreground",0],
  ["bae_b111_2","BAE clarity: man in sunglasses sharp amid a motion-blurred city street",0],
  ["bae_b111_3","BAE movement: woman mid-stride in a motion-blurred urban scene",0]
@@ -53,7 +53,7 @@ const BAE_REFS = [
 const ALL_REFS=[...BAE_REFS,...REFS];
 const refById=id=>ALL_REFS.find(r=>r.id===id);
 const PICK_STUDIO=["bae_b113_0","bae_b114_1","bae_b114_2"];
-const PICK_LOCATION=["bae_b111_1","bae_b107_0","r061","r037"];
+const PICK_LOCATION=["bae_b106_1","bae_b111_2","bae_b107_1","bae_b108_2"];
 /* Youth campaign references sent by the client (style, wardrobe and camera only) */
 const YOUTH_REFS = [
  ["yt01","Youth: two young men on wooden steps under palm trees, extreme low-angle wide shot, sun flare, retro football tee, baggy light denim shorts, striped tube socks, chunky sneakers"],
@@ -112,10 +112,29 @@ const LOOK_BOLD = `LOOK — BOLD & COLOURFUL (follow the youth campaign referenc
 Wardrobe: Gen Z street-style fashion — oversized plain tees, retro football-style tees without crests or text, baggy and wide-leg light-wash denim, denim jackets, colour-block knit sweater vests and fluffy cardigans, camp-collar and striped retro shirts, crop tops with pleated wide trousers, crochet vests, bucket hats and beanies, striped tube socks, chunky retro sneakers, tinted round sunglasses. Saturated colour-block palette: cobalt blue, kelly and lime green, lilac and purple, hot pink, butter yellow, red, sky blue, white, light denim. Never orange.
 Camera: low-angle (worm's-eye) wide-angle 16–24 mm hero shot looking up at the subjects, a big clean blue sky (or bright open background) behind them, bright hard sunlight with crisp shadows and an occasional sun flare, punchy saturated commercial colour grade, deep focus with the faces sharp.
 Energy: friends together, laughing out loud, mid-action and playful (selfies, piggybacks, leaning in cheek to cheek, walking towards camera); slight motion blur allowed on limbs. Props when they fit: skateboards, iced drinks, iPhone 18, backpacks — no logos.`;
-const LOOK_CALM = `LOOK — ELEGANT & CALM: tailored, smart-casual or refined fashion in white, cream, beige, camel, taupe, grey, navy, black or soft muted tones; composed, warm and confident; eye-level or gentle angles with selective focus and soft natural light.`;
+/* ELEGANT & CALM wardrobe, read from the 12 BAE guideline photos (pp.106–114): dark tailoring anchors every frame
+   (black blazer, navy coat, dark denim workwear), warm knits as the mid-tone (camel cardigan, chocolate, olive),
+   crisp white or ecru as ONE layer, and one colour or pattern accent per person (cobalt, jade, rose, burgundy, teal,
+   blue-and-white print, pink/blue madras check, printed silk scarf). Never head-to-toe beige. */
+const LOOK_CALM = `LOOK — ELEGANT & CALM, WARDROBE FROM THE BAE GUIDELINE PHOTOS (pp.106–114):
+Palette families (build every outfit from these):
+ 1. Dark anchors: ink black or midnight navy relaxed tailoring — soft-shouldered blazer, long wool coat, dark denim or workwear shirt, black fine-knit.
+ 2. Warm mid-tones: camel or tobacco knit cardigan, chocolate brown, olive, warm charcoal grey.
+ 3. Light layer: crisp white shirt, white tee or ecru turtleneck — used as ONE layer, never head to toe.
+ 4. One accent per person: a solid colour (cobalt or sky blue, jade or sea green, dusty rose, deep burgundy #A33755, teal #32969B, mustard) OR one pattern piece (blue-and-white printed midi skirt, pink/blue madras-check shirt, printed silk scarf). Statement earrings, simple rings or dark sunglasses as accessories.
+Rules: every outfit has real contrast — at least one dark-anchor or accent piece; NEVER head-to-toe beige, cream, sand or white; in couples and groups each person wears a different palette family (never matching outfits); real matte fabrics (wool, knit, linen, denim, silk) with visible texture; relaxed, slightly oversized modern fits. No orange.
+Choose the wardrobe for the SCENE:
+ - Home, family, planning money at home → knitwear: camel cardigan over white tee, jade or navy knit, dark denim.
+ - City, street, commute, business district → dark tailoring: black or navy blazer or coat, dark trousers, sunglasses, one cobalt or burgundy accent.
+ - Café, friends, social → colour and pattern: madras-check or printed shirt, printed skirt, rose or sky-blue piece, against one dark anchor.
+ - Work, creative studio, small business → workwear denim or dark shirt with rolled sleeves, cardigan, teal or burgundy knit.
+ - Premium, wealth, investment → ink and navy tailoring with an ecru knit layer, minimal jewellery.
+ - Studio portrait → one strong solid piece (crisp white shirt, ink blazer, jade or burgundy knit) against the plaster set.
+Mood and camera: composed, warm and confident; eye-level or gentle angles with selective focus, foreground depth and soft directional natural light.`;
+const LOOK_CALM_NEG = "all-beige outfit, head-to-toe beige, head-to-toe cream, all-white outfit, monochrome beige styling, sand-coloured outfits, matching couple outfits, matching coats, washed-out pastel wardrobe";
 const LOOK_BOLD_NEG = "all-beige outfit, all-neutral outfit, muted dull colours, formal business suit, stiff pose, eye-level flat framing";
 function lookRule(){ return S.look==="Bold"?LOOK_BOLD+(S.setting==="Studio"?"\nIn the studio, keep the bold wardrobe, low-angle wide camera and saturated grade; the backdrop may be a single saturated seamless colour (cobalt, lilac, pink, lime or sky blue) instead of plaster.":""):LOOK_CALM; }
-function lookLine(){ return S.look==="Bold"?"Look lock: BOLD & COLOURFUL — Gen Z streetwear in saturated colour-block (cobalt, green, lilac, pink, butter yellow, red, denim, white; no orange), low-angle wide-angle 16–24 mm hero shot against a bright open sky or backdrop, hard bright sunlight, punchy saturated grade, friends laughing mid-action.":"Look lock: ELEGANT & CALM — tailored refined wardrobe in white, cream, beige, camel, grey, navy or black; composed and warm; gentle angle and soft natural light."; }
+function lookLine(){ return S.look==="Bold"?"Look lock: BOLD & COLOURFUL — Gen Z streetwear in saturated colour-block (cobalt, green, lilac, pink, butter yellow, red, denim, white; no orange), low-angle wide-angle 16–24 mm hero shot against a bright open sky or backdrop, hard bright sunlight, punchy saturated grade, friends laughing mid-action.":"Look lock: ELEGANT & CALM — BAE guideline wardrobe: a dark anchor (ink black or midnight navy tailoring, dark denim) plus warm knit mid-tones (camel, chocolate, olive) with white or ecru as one layer only, and one colour or pattern accent per person (cobalt, jade, rose, burgundy, teal, print or madras check); never head-to-toe beige or cream, never matching outfits; composed and warm; gentle angle and soft natural light."; }
 const CLIENT_LINE = "Mandatory art direction: modern, contemporary, upscale setting; modern wardrobe that follows the look lock, with no orange clothing on anyone; no hijab, no headscarf, no traditional Arab clothing; professionally retouched skin with an even skin tone and subtle real texture; any phone is a modern iPhone 18 with no visible logo; modern Scandinavian IKEA-style decor.";
 const CLIENT_NEG = "orange clothing, orange shirt, orange jacket, orange dress, orange sweater, rust clothing, terracotta clothing, coral clothing, hijab, headscarf, head covering, niqab, abaya, thobe, dishdasha, keffiyeh, shemagh, kaftan, traditional Arab clothing, old buildings, souk, old town, rustic, dated decor, ornate furniture, clutter, old phone, generic phone, visible logo, blemishes, uneven skin tone, acne, plastic skin, waxy skin";
 /* Composition lock — always on */
@@ -521,7 +540,7 @@ Requirements:
 - Apply every point of the CLIENT ART DIRECTION explicitly in the prompt: modern upscale setting, modern elegant wardrobe, no hijab or traditional Arab clothing, professionally retouched even skin tone, iPhone 18 for any phone, modern IKEA-style decor.
 - State the composition explicitly: the person centred on the vertical centre line, balanced framing, equal space left and right.
 - ${S.setting==="Studio"?"STUDIO: describe the studio set, backdrop and softbox light explicitly; translate any location in the brief into one or two modern props on the set; no real location.":"ON-LOCATION: encode depth layers and foreground bokeh in a modern real place."}
-- ${S.look==="Bold"?"LOOK BOLD & COLOURFUL: describe each person's streetwear outfit piece by piece in saturated colour-block colours (never orange, never all-beige), the low-angle wide-angle 16–24 mm camera looking up, the bright open sky or backdrop, hard bright sunlight and the playful mid-laugh interaction, exactly in the spirit of the youth campaign references.":"LOOK ELEGANT & CALM: describe a refined, tailored wardrobe in calm neutral tones and a composed, warm mood."}
+- ${S.look==="Bold"?"LOOK BOLD & COLOURFUL: describe each person's streetwear outfit piece by piece in saturated colour-block colours (never orange, never all-beige), the low-angle wide-angle 16–24 mm camera looking up, the bright open sky or backdrop, hard bright sunlight and the playful mid-laugh interaction, exactly in the spirit of the youth campaign references.":"LOOK ELEGANT & CALM: choose each person's outfit for THIS scene from the BAE guideline wardrobe (see the look rules): name every piece and its colour, give each person a dark anchor or a colour/pattern accent, give people in the same frame different palette families, and never dress anyone head-to-toe in beige, cream or white."}
 - Encode selective focus with one focal anchor${S.look==="Bold"?" (faces sharp)":" and the BAE warm palette"}.
 - State that the attached reference images guide light, colour grading, set style and candid energy only; do not copy their people, clothing, brands or exact scenes.
 - No logos, text, signage, watermarks.
@@ -555,7 +574,7 @@ const genKey=()=>S.mode==="icon"?"icon":"nano";
 /* Icons render with both models side by side; photography with Nano Banana 2.1 */
 const genKeys=()=>S.mode==="icon"?["icon","iconNano"]:["nano"];
 const isIconKey=k=>k==="icon"||k==="iconNano";
-function negativeNow(){ if(S.mode==="icon") return ICON_NEG; return [S.negative||"logos, text, watermark, signage, oversaturated, HDR, extra fingers",CLIENT_NEG,COMPOSITION_NEG,S.setting==="Studio"?STUDIO_NEG:"",S.look==="Bold"?LOOK_BOLD_NEG:""].filter(Boolean).join(", "); }
+function negativeNow(){ if(S.mode==="icon") return ICON_NEG; return [S.negative||"logos, text, watermark, signage, oversaturated, HDR, extra fingers",CLIENT_NEG,COMPOSITION_NEG,S.setting==="Studio"?STUDIO_NEG:"",S.look==="Bold"?LOOK_BOLD_NEG:LOOK_CALM_NEG].filter(Boolean).join(", "); }
 const STEPS=["Upload references","Render in 4K","4K check","Ready"];
 function aspectVal(){ if(S.mode==="icon") return "16:9"; const v=$("aspect").value; if(v==="custom"){ const w=parseInt($("cw").value,10)||0,h=parseInt($("ch").value,10)||0; return w&&h?{width:w,height:h}:"auto"; } return v; }
 function aspectText(){ const a=aspectVal(); return typeof a==="string"?a:`${a.width}×${a.height}px`; }
