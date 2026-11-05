@@ -576,29 +576,59 @@ const LIB_KEY="bae_mag_ids_v1";
 try{ S.magIds=JSON.parse(localStorage.getItem(LIB_KEY)||"{}"); }catch{ S.magIds={}; }
 function libStatus(txt,kind){ const el=$("libState"); if(el){ el.textContent=txt; el.className="t12 "+(kind==="ok"?"ok-t":kind==="bad"?"bad-t":"muted"); } }
 function libSummary(){ const n=Object.keys(S.magIds||{}).length; const total=ALL_REFS.filter(r=>r.set!=="user").length; return n?`${n} of ${total} references linked from your Magnific library.`:"Not linked yet. Upload the reference pack to a Magnific folder named “BAE References”, then press Link library."; }
-const REF_NAME_RE=/(bae_b\d{3}_\d|yt\d{2}|r\d{3})/i;
-function findFolder(p){ let hit=null; walk(p,(k,v)=>{ if(hit||!v||typeof v!=="object"||Array.isArray(v)) return; const name=v.name||v.title||v.label; if(typeof name==="string"&&/bae[\s_-]*ref/i.test(name)) hit={name,ref:v.folderReference||v.reference||v.identifier||v.id||v.uuid||null,raw:v}; }); return hit; }
-function matchRefs(p,map){ walk(p,(k,v)=>{ if(!v||typeof v!=="object"||Array.isArray(v)) return; const id=v.identifier||v.creationIdentifier; if(typeof id!=="string") return; let s=""; try{ s=JSON.stringify(v); }catch{} const m=s.match(REF_NAME_RE); if(m&&!map[m[1].toLowerCase()]) map[m[1].toLowerCase()]=id; }); return map; }
+/* Names in the pack: bae_b114_1, yt04, r025 (Magnific may drop the .jpg) */
+const REF_NAME_RE=/(?<![A-Za-z0-9])(bae_b\d{3}_\d|yt\d{2}|r\d{3})(?![0-9])/i;
+const NAME_KEYS=/^(name|title|file_?name|original_?(file_?)?name|label|display_?name|asset_?name)$/i;
+const REF_KEYS=["folderReference","projectReference","reference","identifier","id","uuid","slug"];
+/* Magnific answers some tools with JSON and others with YAML-like text; both are read here */
+function textBlocks(t){ return String(t).split(/\n(?=\s*-\s)|\n\s*\n|\n(?=identifier:)/).filter(b=>b.trim()); }
+function textVal(block,keys){ for(const k of keys){ const m=block.match(new RegExp("(?:^|\\n|\\s|-\\s)"+k+"\\s*:\\s*\"?([^\\n\"]+)","i")); if(m) return m[1].trim(); } return null; }
+function findFolder(p){
+  let hit=null;
+  if(p&&typeof p==="object") walk(p,(k,v)=>{ if(hit||!v||typeof v!=="object"||Array.isArray(v)) return; const name=v.name||v.title||v.label||v.displayName||v.projectName; if(typeof name==="string"&&/bae[\s_-]*ref/i.test(name)){ const key=REF_KEYS.find(x=>typeof v[x]==="string"||typeof v[x]==="number"); hit={name,ref:key?v[key]:null,raw:v}; } });
+  else if(typeof p==="string") for(const b of textBlocks(p)){ if(/bae[\s_-]*ref/i.test(b)){ hit={name:"BAE References",ref:textVal(b,["folderReference","projectReference","reference","identifier","id","uuid"]),raw:b.slice(0,400)}; break; } }
+  return hit;
+}
+function matchRefs(p,map){
+  const put=(name,id)=>{ const m=String(name||"").match(REF_NAME_RE); if(m&&id&&!map[m[1].toLowerCase()]) map[m[1].toLowerCase()]=String(id); };
+  if(p&&typeof p==="object") walk(p,(k,v)=>{ if(!v||typeof v!=="object"||Array.isArray(v)) return; const id=v.identifier||v.creationIdentifier; if(typeof id!=="string") return;
+    let nm=null; for(const kk of Object.keys(v)) if(NAME_KEYS.test(kk)&&typeof v[kk]==="string"&&REF_NAME_RE.test(v[kk])){ nm=v[kk]; break; }
+    if(!nm){ walk(v,(k2,v2)=>{ if(!nm&&NAME_KEYS.test(k2)&&typeof v2==="string"&&REF_NAME_RE.test(v2)) nm=v2; }); }
+    put(nm,id); });
+  else if(typeof p==="string") for(const b of textBlocks(p)){ const id=textVal(b,["identifier","creationIdentifier"]); const nm=textVal(b,["name","title","fileName","filename","originalName","label"]); put(nm,id); }
+  return map;
+}
+function countItems(p){ let n=0; if(p&&typeof p==="object") walk(p,(k,v)=>{ if(v&&typeof v==="object"&&!Array.isArray(v)&&typeof (v.identifier||v.creationIdentifier)==="string") n++; }); else if(typeof p==="string") n=(p.match(/(^|\n)\s*-?\s*identifier\s*:/g)||[]).length; return n; }
+function findCursor(p){ let cur=null; if(p&&typeof p==="object") walk(p,(k,v)=>{ if(!cur&&/^(next_?cursor|cursor|next_?page_?token|next_?page|next)$/i.test(k)&&(typeof v==="string"||typeof v==="number")&&v!=="") cur=v; }); else if(typeof p==="string"){ const m=p.match(/next_?(cursor|page_?token|page)\s*:\s*"?([^\s"\n]+)/i); if(m&&m[2]!=="null") cur=m[2]; } return cur; }
 async function linkLibrary(){
   if(S.web||!mcp||!sample) return;
   const b=$("btnLinkLib"); b.disabled=true; libStatus("Looking for the “BAE References” folder in Magnific…");
   try{
     if(!S.connected) await connect(true);
+    /* "BAE References" can be a personal folder or a shared TEAM project: look in both */
     let folder=null;
-    try{ const fa=await buildArgs("folders_list","List all of the user's folders and projects, including their names and references.",{}); const fr=await callMag("folders_list",fa.args); folder=findFolder(fr.payload??fr.content); }
-    catch(e){ log("✕","folders_list",{code:e?.code,message:e?.message}); }
+    for(const [goal,data] of [["List all of the user's folders and projects, including their names and references.",{}],["List the team's shared projects (team / shared scope), including their names and references.",{scope:"team",team:true}]]){
+      if(folder) break;
+      try{ const fa=await buildArgs("folders_list",goal,data); const fr=await callMag("folders_list",fa.args); const pl=fr.payload??fr.content; folder=findFolder(pl);
+        if(!folder&&/bae[\s_-]*ref/i.test(trimJSON(pl,60000))){ const o=await sample.json(`Find the folder or project named "BAE References" in this Magnific result and return the exact value to pass as its folder/project reference. Result:\n${trimJSON(pl,14000)}\n\nReply with only JSON: {"name":"","ref":""}`,{modelTier:"quick"}).catch(()=>null); if(o?.ref) folder={name:o.name||"BAE References",ref:o.ref,raw:null}; } }
+      catch(e){ log("✕","folders_list",{code:e?.code,message:e?.message}); }
+    }
+    log("·","library folder",folder||"not found");
     const map={}; let seen=0;
-    for(let page=0;page<4;page++){
-      const la=await buildArgs("creations_list",`List the creations (including uploaded images) ${folder?`inside the folder/project named "${folder.name}" (reference ${JSON.stringify(folder.ref)})`:"in the user's library, newest first, including uploads"}. Return as many items per call as the tool allows, with their names, titles or file names. ${page?`This is page ${page+1}: use the cursor/offset from Data to continue.`:""}`,{folderReference:folder?.ref||null,folder:folder?.raw||null,page:page+1,cursor:S._libCursor||null,limit:100});
+    for(let page=0;page<6;page++){
+      const la=await buildArgs("creations_list",`List the creations and uploaded images ${folder?`inside the folder/project named "${folder.name}" (reference ${JSON.stringify(folder.ref)}) — pass that reference in the folder/project argument`:"in the user's library, newest first, including uploads"}. Return as many items per call as the tool allows (100 or the maximum), including each item's name, title or file name. ${page?`This is page ${page+1}: pass the cursor from Data.`:""}`,{folderReference:folder?.ref||null,folderName:folder?.name||null,page:page+1,cursor:S._libCursor||null,limit:100});
       const lr=await callMag("creations_list",la.args); const pl=lr.payload??lr.content;
-      const before=Object.keys(map).length; matchRefs(pl,map); let cnt=0; walk(pl,(k,v)=>{ if(v&&typeof v==="object"&&!Array.isArray(v)&&typeof (v.identifier||v.creationIdentifier)==="string") cnt++; }); seen+=cnt;
-      let cur=null; walk(pl,(k,v)=>{ if(!cur&&/^(next_?cursor|cursor|next_?page_?token|next)$/i.test(k)&&(typeof v==="string"||typeof v==="number")&&v!=="") cur=v; }); S._libCursor=cur;
-      if(!cur||Object.keys(map).length===before&&page>0) break;
+      const before=Object.keys(map).length; matchRefs(pl,map); seen+=countItems(pl);
+      /* Last resort: let Claude read the names if the shape is unusual */
+      if(Object.keys(map).length===before&&countItems(pl)){ const o=await sample.json(`From this Magnific list of creations, return every item's identifier and its name/title/file name. Result:\n${trimJSON(pl,15000)}\n\nReply with only a JSON array: [{"identifier":"","name":""}]`,{modelTier:"quick"}).catch(()=>null); if(Array.isArray(o)) o.forEach(x=>{ const m=String(x?.name||"").match(REF_NAME_RE); if(m&&x.identifier&&!map[m[1].toLowerCase()]) map[m[1].toLowerCase()]=String(x.identifier); }); }
+      S._libCursor=findCursor(pl);
+      if(!S._libCursor||(Object.keys(map).length===before&&page>0)) break;
     }
     S._libCursor=null; S.magIds=map; try{ localStorage.setItem(LIB_KEY,JSON.stringify(map)); }catch{}
     refCache=null;
     const n=Object.keys(map).length;
-    if(n) libStatus(`${n} references linked${folder?` from “${folder.name}”`:""}. They will be attached as @img1, @img2… automatically.`,"ok");
+    const total=ALL_REFS.filter(r=>r.set!=="user"); const missing=total.filter(r=>!map[r.id.toLowerCase()]).map(r=>r.id);
+    if(n) libStatus(`${n} of ${total.length} references linked${folder?` from “${folder.name}”`:""}. They are attached as @img1, @img2… automatically.${missing.length?` Not in Magnific yet: ${missing.slice(0,8).join(", ")}${missing.length>8?` and ${missing.length-8} more`:""}.`:""}`,"ok");
     else libStatus(folder?`Found “${folder.name}” with ${seen} items, but no file names matched (bae_b114_1.jpg, yt04.jpg…). Keep the original file names from the pack, then link again.`:"No “BAE References” folder found. Create it in Magnific, drag the reference pack into it, then press Link library.","bad");
     renderRefs();
   }catch(e){ libStatus(mcpCopy(e),"bad"); }
