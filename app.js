@@ -589,16 +589,18 @@ function findFolder(p){
   else if(typeof p==="string") for(const b of textBlocks(p)){ if(/bae[\s_-]*ref/i.test(b)){ hit={name:"BAE References",ref:textVal(b,["folderReference","projectReference","reference","identifier","id","uuid"]),raw:b.slice(0,400)}; break; } }
   return hit;
 }
+/* An item may carry its id as identifier, creationIdentifier, assetIdentifier, id or uuid */
+function itemId(v){ for(const k of ["identifier","creationIdentifier","assetIdentifier","creation_id","asset_id","id","uuid"]){ if(typeof v[k]==="string"&&v[k].length>=4) return v[k]; if(typeof v[k]==="number") return String(v[k]); } return null; }
 function matchRefs(p,map){
   const put=(name,id)=>{ const m=String(name||"").match(REF_NAME_RE); if(m&&id&&!map[m[1].toLowerCase()]) map[m[1].toLowerCase()]=String(id); };
-  if(p&&typeof p==="object") walk(p,(k,v)=>{ if(!v||typeof v!=="object"||Array.isArray(v)) return; const id=v.identifier||v.creationIdentifier; if(typeof id!=="string") return;
+  if(p&&typeof p==="object") walk(p,(k,v)=>{ if(!v||typeof v!=="object"||Array.isArray(v)) return; const id=itemId(v); if(typeof id!=="string") return;
     let nm=null; for(const kk of Object.keys(v)) if(NAME_KEYS.test(kk)&&typeof v[kk]==="string"&&REF_NAME_RE.test(v[kk])){ nm=v[kk]; break; }
     if(!nm){ walk(v,(k2,v2)=>{ if(!nm&&NAME_KEYS.test(k2)&&typeof v2==="string"&&REF_NAME_RE.test(v2)) nm=v2; }); }
     put(nm,id); });
-  else if(typeof p==="string") for(const b of textBlocks(p)){ const id=textVal(b,["identifier","creationIdentifier"]); const nm=textVal(b,["name","title","fileName","filename","originalName","label"]); put(nm,id); }
+  else if(typeof p==="string") for(const b of textBlocks(p)){ const id=textVal(b,["identifier","creationIdentifier","assetIdentifier","id","uuid"]); const nm=textVal(b,["name","title","fileName","filename","originalName","label"]); put(nm,id); }
   return map;
 }
-function countItems(p){ let n=0; if(p&&typeof p==="object") walk(p,(k,v)=>{ if(v&&typeof v==="object"&&!Array.isArray(v)&&typeof (v.identifier||v.creationIdentifier)==="string") n++; }); else if(typeof p==="string") n=(p.match(/(^|\n)\s*-?\s*identifier\s*:/g)||[]).length; return n; }
+function countItems(p){ let n=0; if(p&&typeof p==="object") walk(p,(k,v)=>{ if(v&&typeof v==="object"&&!Array.isArray(v)&&itemId(v)&&Object.keys(v).length>1) n++; }); else if(typeof p==="string") n=(p.match(/(^|\n)\s*-?\s*(identifier|creationIdentifier|assetIdentifier|id)\s*:/g)||[]).length; return n; }
 function findCursor(p){ let cur=null; if(p&&typeof p==="object") walk(p,(k,v)=>{ if(!cur&&/^(next_?cursor|cursor|next_?page_?token|next_?page|next)$/i.test(k)&&(typeof v==="string"||typeof v==="number")&&v!=="") cur=v; }); else if(typeof p==="string"){ const m=p.match(/next_?(cursor|page_?token|page)\s*:\s*"?([^\s"\n]+)/i); if(m&&m[2]!=="null") cur=m[2]; } return cur; }
 async function linkLibrary(){
   if(S.web||!mcp||!sample) return;
@@ -615,12 +617,26 @@ async function linkLibrary(){
     }
     log("·","library folder",folder||"not found");
     const map={}; let seen=0;
-    for(let page=0;page<6;page++){
+    const tryList=async(tool,goal,data)=>{ try{ const a=await buildArgs(tool,goal,data); const r=await callMag(tool,a.args); return r.payload??r.content; }catch(e){ log("✕",tool+" (library)",{code:e?.code,message:e?.message}); return null; } };
+    const absorb=async pl=>{ if(pl==null) return 0; const before=Object.keys(map).length; matchRefs(pl,map); const cnt=countItems(pl); seen+=cnt;
+      if(Object.keys(map).length===before&&cnt){ const o=await sample.json(`From this Magnific result, return every item's identifier and its name/title/file name. Result:\n${trimJSON(pl,15000)}\n\nReply with only a JSON array: [{"identifier":"","name":""}]`,{modelTier:"quick"}).catch(()=>null); if(Array.isArray(o)) o.forEach(x=>{ const m=String(x?.name||"").match(REF_NAME_RE); if(m&&x.identifier&&!map[m[1].toLowerCase()]) map[m[1].toLowerCase()]=String(x.identifier); }); }
+      return cnt; };
+    /* Uploaded assets can live behind different tools: try each until the folder's items show up */
+    if(folder){
+      const fdata={folderReference:folder.ref,projectReference:folder.ref,folderName:folder.name,includeAssets:true,includeUploads:true,limit:100};
+      for(const [tool,goal] of [
+        ["folders_get",`Get the contents of the folder/project named "${folder.name}" (reference ${JSON.stringify(folder.ref)}): every asset, upload and creation inside it, with identifiers and names. Ask for the maximum number of items.`],
+        ["folders_show",`Show the folder/project named "${folder.name}" (reference ${JSON.stringify(folder.ref)}) with all its assets and uploads, including identifiers and names.`],
+        ["creations_search",`Find every creation, asset and uploaded image inside the folder/project "${folder.name}" (reference ${JSON.stringify(folder.ref)}), including uploads, maximum results, with names.`]]){
+        const pl=await tryList(tool,goal,fdata); const cnt=await absorb(pl);
+        log("·","library via "+tool,{items:cnt,matched:Object.keys(map).length});
+        if(Object.keys(map).length>=ALL_REFS.filter(r=>r.set!=="user").length) break;
+      }
+    }
+    for(let page=0;page<6&&Object.keys(map).length<ALL_REFS.filter(r=>r.set!=="user").length;page++){
       const la=await buildArgs("creations_list",`List the creations and uploaded images ${folder?`inside the folder/project named "${folder.name}" (reference ${JSON.stringify(folder.ref)}) — pass that reference in the folder/project argument`:"in the user's library, newest first, including uploads"}. Return as many items per call as the tool allows (100 or the maximum), including each item's name, title or file name. ${page?`This is page ${page+1}: pass the cursor from Data.`:""}`,{folderReference:folder?.ref||null,folderName:folder?.name||null,page:page+1,cursor:S._libCursor||null,limit:100});
-      const lr=await callMag("creations_list",la.args); const pl=lr.payload??lr.content;
-      const before=Object.keys(map).length; matchRefs(pl,map); seen+=countItems(pl);
-      /* Last resort: let Claude read the names if the shape is unusual */
-      if(Object.keys(map).length===before&&countItems(pl)){ const o=await sample.json(`From this Magnific list of creations, return every item's identifier and its name/title/file name. Result:\n${trimJSON(pl,15000)}\n\nReply with only a JSON array: [{"identifier":"","name":""}]`,{modelTier:"quick"}).catch(()=>null); if(Array.isArray(o)) o.forEach(x=>{ const m=String(x?.name||"").match(REF_NAME_RE); if(m&&x.identifier&&!map[m[1].toLowerCase()]) map[m[1].toLowerCase()]=String(x.identifier); }); }
+      let pl=null; try{ const lr=await callMag("creations_list",la.args); pl=lr.payload??lr.content; }catch(e){ log("✕","creations_list (library)",{code:e?.code,message:e?.message}); break; }
+      const before=Object.keys(map).length; await absorb(pl);
       S._libCursor=findCursor(pl);
       if(!S._libCursor||(Object.keys(map).length===before&&page>0)) break;
     }
