@@ -1257,6 +1257,13 @@ function setMode(m,init){
   ["s1","s2","s3"].forEach(id=>$(id).classList.remove("active","done")); ["pg2","pg3","pg4"].forEach(id=>$(id).classList.remove("active","done"));
   $("s1body").innerHTML=`<div class="empty">${icon?"The icon concept appears here: main object, supporting elements, layering, colour map and angle, checked against the BAE illustration rules.":"The scene breakdown appears here: subject, setting, wardrobe, light, composition, depth and palette, with notes on how it meets the BAE photography principles."}</div>`; $("checks").innerHTML="";
 }
+/* Landing: pick a service, then the studio opens in that mode. The emblem in the header brings it back. */
+(function(){ const L=$("landing"); if(!L) return; document.body.classList.add("landing-on");
+  const enter=m=>{ if(m&&m!==S.mode) setMode(m); L.classList.add("out"); document.body.classList.remove("landing-on"); window.scrollTo(0,0); setTimeout(()=>{ try{ $("brief").focus({preventScroll:true}); }catch{} },350); };
+  L.querySelectorAll("[data-enter]").forEach(b=>b.addEventListener("click",()=>enter(b.dataset.enter)));
+  const wm=document.querySelector(".top .wordmark"); if(wm){ wm.setAttribute("role","button"); wm.tabIndex=0; const back=()=>{ L.classList.remove("out"); document.body.classList.add("landing-on"); };
+    wm.addEventListener("click",back); wm.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); back(); } }); }
+})();
 $("modeSeg").addEventListener("click",e=>{ const b=e.target.closest("button[data-mode]"); if(b&&b.dataset.mode!==S.mode) setMode(b.dataset.mode); });
 $("brief").addEventListener("input",()=>{ if(S.mode==="icon") try{ localStorage.setItem("bae_icon_brief",$("brief").value); }catch{} });
 try{ if(localStorage.getItem("bae_mode")==="icon") setMode("icon",true); }catch{}
