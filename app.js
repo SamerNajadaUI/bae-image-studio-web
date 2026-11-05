@@ -1286,31 +1286,112 @@ const GRADS=[["circle_1","Circle 01","3700 × 3700"],["circle_2","Circle 02","37
   $("openGallery").addEventListener("click",open); $("closeGallery").addEventListener("click",close);
   document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&!G.hidden&&!document.querySelector(".lightbox:not([hidden])")) close(); });
 })();
-/* Animation direction: 1920x1080 stage, words slide in one by one (Arabic right-to-left, English left-to-right),
-   a gradient element rotates slowly behind. Loops: play, hold, fade, replay. */
+/* Animation direction: 1920x1080 stage.
+   V1: words slide in one by one (Arabic right-to-left, English left-to-right) over a slowly rotating gradient element.
+   V2: words rise out of their own masks (after Subframe Motion "Word by word"), the closing line catches a light sheen,
+       over a live BAE silk flow drawn in WebGL (after Subframe Motion "Slipstream", both MIT). Loops: play, hold, exit, replay. */
 const ANIM_COPY={
   ar:["نؤمن أن كل خطوة صغيرة","تصنع فرقًا حقيقيًا في حياتك","لذلك نبتكر لك حلولًا أذكى","أقرب إليك."],
   en:["We believe every small step","makes a real difference, always","so we build smarter solutions","Closer together."]
 };
+/* BAE silk: domain-warped streams, two slow tides (~24 s and ~30 s) breathe their width and place.
+   Palette ramp: Ink → Burgundy → Dark Orange → Orange → Medium Orange → Light Orange. The text side is held darker for contrast. */
+const SILK_FRAG=`precision highp float;
+uniform vec2 u_res; uniform float u_t; uniform float u_side;
+float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(hash(i),hash(i+vec2(1.0,0.0)),f.x),mix(hash(i+vec2(0.0,1.0)),hash(i+1.0),f.x),f.y);}
+float fbm(vec2 p){float s=0.0,a=0.5;for(int i=0;i<4;i++){s+=a*noise(p);p=p*2.03+vec2(1.7,9.2);a*=0.5;}return s;}
+vec3 ramp(float x){
+  vec3 c=mix(vec3(0.098,0.094,0.118),vec3(0.30,0.08,0.15),smoothstep(0.0,0.22,x));
+  c=mix(c,vec3(0.639,0.216,0.333),smoothstep(0.18,0.40,x));
+  c=mix(c,vec3(0.757,0.227,0.137),smoothstep(0.38,0.58,x));
+  c=mix(c,vec3(0.980,0.392,0.157),smoothstep(0.56,0.76,x));
+  c=mix(c,vec3(0.984,0.604,0.459),smoothstep(0.74,0.90,x));
+  return mix(c,vec3(1.0,0.980,0.957),smoothstep(0.90,1.0,x));}
+void main(){
+  vec2 uv=gl_FragCoord.xy/u_res; vec2 p=vec2(uv.x*u_res.x/u_res.y,uv.y);
+  float T=u_t*0.045;
+  float breath=sin(u_t*0.26), swell=sin(u_t*0.21+1.3);
+  vec2 q=vec2(fbm(p*0.9+vec2(0.0,T)),fbm(p*0.9+vec2(5.2,-T)));
+  float f=fbm(p*1.5+2.4*q+vec2(T*0.8,0.0));
+  float s=p.y*1.15-p.x*0.32+0.95*f+0.06*breath;
+  float silk=pow(0.5+0.5*sin(s*8.0),6.0+2.0*swell)*0.6+pow(0.5+0.5*sin(s*21.0+f*5.0),14.0)*0.28;
+  float body=smoothstep(0.25,0.95,f);
+  float x=0.10+0.50*body+silk*(0.35+0.65*body);
+  float side=mix(1.0-uv.x,uv.x,u_side);
+  x*=mix(1.0,0.45,smoothstep(0.25,0.80,side));
+  x*=1.0-0.35*dot(uv-0.5,uv-0.5);
+  vec3 col=ramp(clamp(x,0.0,1.0));
+  col+=(hash(gl_FragCoord.xy)+hash(gl_FragCoord.xy+vec2(17.3,9.1))-1.0)/255.0;
+  gl_FragColor=vec4(col,1.0);}`;
 (function(){ const A=$("anim"); if(!A) return;
-  const st={lang:"ar",shape:"circle_1",timer:null};
-  const stage=$("aStage"), wrap=$("aWrap"), txt=$("aText"), shp=$("aShape"), img=$("aShapeImg");
-  const fit=()=>{ const r=wrap.getBoundingClientRect(); if(!r.width) return; const k=Math.min(r.width/1920,r.height/1080); stage.style.transform=`scale(${k})`; stage.style.left=((r.width-1920*k)/2)+"px"; stage.style.top=((r.height-1080*k)/2)+"px"; };
+  const st={ver:"v1",lang:"ar",shape:"circle_1",timer:null,paused:false};
+  const stage=$("aStage"), wrap=$("aWrap"), txt=$("aText"), shp=$("aShape"), img=$("aShapeImg"), cv=$("aCanvas");
+  const reduce=matchMedia("(prefers-reduced-motion: reduce)");
+  const fit=()=>{ const r=wrap.getBoundingClientRect(); if(!r.width) return; const k=Math.min(r.width/1920,r.height/1080); stage.style.transform=`scale(${k})`; stage.style.left=((r.width-1920*k)/2)+"px"; stage.style.top=((r.height-1080*k)/2)+"px"; sizeCanvas(k); };
   new ResizeObserver(fit).observe(wrap);
-  const build=()=>{ const ar=st.lang==="ar"; txt.dir=ar?"rtl":"ltr"; txt.lang=ar?"ar":"en"; let k=0;
-    /* Arabic words enter from the right and travel left; English words enter from the left and travel right */
-    txt.innerHTML=ANIM_COPY[st.lang].map(line=>`<span class="a-line">${line.split(/\s+/).map(w=>`<span class="a-w" style="--k:${k++};--from:${ar?"90px":"-90px"}">${esc(w)}</span>`).join(" ")}</span>`).join("");
+
+  /* ---- WebGL silk (V2) ---- */
+  let gl=null, prog=null, U={}, raf=0, t0=0, tAcc=8, last=0, glOk=null;
+  function initGL(){
+    if(glOk!==null) return glOk;
+    try{
+      gl=cv.getContext("webgl",{alpha:false,antialias:false,powerPreference:"low-power"});
+      if(!gl) return glOk=false;
+      const sh=(type,src)=>{ const o=gl.createShader(type); gl.shaderSource(o,src); gl.compileShader(o); if(!gl.getShaderParameter(o,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+      prog=gl.createProgram(); gl.attachShader(prog,sh(gl.VERTEX_SHADER,"attribute vec2 a;void main(){gl_Position=vec4(a,0.0,1.0);}")); gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,SILK_FRAG)); gl.linkProgram(prog);
+      if(!gl.getProgramParameter(prog,gl.LINK_STATUS)) throw new Error("link");
+      gl.useProgram(prog); const b=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,b); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);
+      const loc=gl.getAttribLocation(prog,"a"); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
+      U={res:gl.getUniformLocation(prog,"u_res"),t:gl.getUniformLocation(prog,"u_t"),side:gl.getUniformLocation(prog,"u_side")};
+      cv.addEventListener("webglcontextlost",e=>{ e.preventDefault(); glOk=false; cancelAnimationFrame(raf); cv.style.opacity=0; });
+      return glOk=true;
+    }catch(e){ log("✕","silk shader",{message:String(e?.message||e)}); return glOk=false; }
+  }
+  /* Drawing buffer follows the displayed size (DPR at most 2, at most 2.4 MP); the stage scale does the rest */
+  function sizeCanvas(k){ if(!gl) return; const dpr=Math.min(window.devicePixelRatio||1,2); let w=1920*k*dpr, h=1080*k*dpr; const cap=Math.sqrt(2400000/(w*h)); if(cap<1){ w*=cap; h*=cap; } w=Math.max(1,Math.round(w)); h=Math.max(1,Math.round(h)); if(cv.width!==w||cv.height!==h){ cv.width=w; cv.height=h; gl.viewport(0,0,w,h); draw(); } }
+  function draw(){ if(!gl||!glOk) return; gl.uniform2f(U.res,cv.width,cv.height); gl.uniform1f(U.t,tAcc); gl.uniform1f(U.side,st.lang==="ar"?1:0); gl.drawArrays(gl.TRIANGLES,0,6); }
+  const visible=()=>!A.hidden&&st.ver==="v2"&&!document.hidden;
+  function tick(now){ if(!visible()||st.paused||reduce.matches){ raf=0; last=0; return; } if(last) tAcc+=Math.min((now-last)/1000,0.05); last=now; draw(); raf=requestAnimationFrame(tick); }
+  function runSilk(){ cancelAnimationFrame(raf); raf=0; last=0; if(st.ver!=="v2"||!initGL()) return; fit(); draw(); if(visible()&&!st.paused&&!reduce.matches) raf=requestAnimationFrame(tick); }
+  document.addEventListener("visibilitychange",runSilk);
+  reduce.addEventListener?.("change",()=>{ runSilk(); play(); });
+
+  /* ---- text ---- */
+  const build=()=>{ const ar=st.lang==="ar", v2=st.ver==="v2"; txt.dir=ar?"rtl":"ltr"; txt.lang=ar?"ar":"en"; let k=0;
+    txt.setAttribute("aria-label",ANIM_COPY[st.lang].join(" "));
+    txt.innerHTML=ANIM_COPY[st.lang].map(line=>`<span class="a-line" aria-hidden="true">${line.split(/\s+/).map(w=>v2
+      ? `<span class="a-m"><span style="--k:${k++}">${esc(w)}</span></span>`
+      /* V1: Arabic words enter from the right and travel left; English words enter from the left and travel right */
+      : `<span class="a-w" style="--k:${k++};--from:${ar?"90px":"-90px"}">${esc(w)}</span>`).join(" ")}</span>`).join("");
     return k; };
-  const play=()=>{ clearTimeout(st.timer); txt.classList.remove("play","leave"); const n=build(); void txt.offsetWidth; txt.classList.add("play");
-    const total=200+n*110+900;
-    st.timer=setTimeout(()=>{ txt.classList.add("leave"); st.timer=setTimeout(play,700); },total+2600); };
+  const play=()=>{ clearTimeout(st.timer); txt.classList.remove("play","leave","v2play","v2leave"); const n=build(); void txt.offsetWidth;
+    if(reduce.matches){ txt.classList.add(st.ver==="v2"?"v2play":"play"); return; }
+    if(st.ver==="v2"){
+      txt.classList.add("v2play");
+      if(st.paused) return;
+      const settled=250+n*75+720+1400;
+      st.timer=setTimeout(()=>{ txt.classList.remove("v2play"); txt.classList.add("v2leave"); st.timer=setTimeout(play,360+n*28+500); },settled+2400);
+    } else {
+      txt.classList.add("play");
+      if(st.paused) return;
+      const total=200+n*110+900;
+      st.timer=setTimeout(()=>{ txt.classList.add("leave"); st.timer=setTimeout(play,700); },total+2600);
+    } };
   const setShape=id=>{ st.shape=id; shp.hidden=id==="none"; shp.classList.toggle("lozenge",/lozenge/.test(id)); if(id!=="none") img.src=`grad/BAE_gradient_${id}.png`; };
-  A.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{ st.lang=b.dataset.lang; A.querySelectorAll("[data-lang]").forEach(x=>x.setAttribute("aria-pressed",x===b?"true":"false")); play(); });
+  const setVer=v=>{ st.ver=v; stage.classList.toggle("v2",v==="v2"); $("aShapeSeg").hidden=v==="v2";
+    $("aDesc").textContent=v==="v2"?"Each word rises from its own mask, the last line catches the light, over a live BAE silk flow.":"Word by word. Arabic slides right to left, English left to right.";
+    A.querySelectorAll("[data-ver]").forEach(x=>x.setAttribute("aria-pressed",x.dataset.ver===v?"true":"false")); runSilk(); play(); };
+  A.querySelectorAll("[data-ver]").forEach(b=>b.onclick=()=>setVer(b.dataset.ver));
+  A.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{ st.lang=b.dataset.lang; A.querySelectorAll("[data-lang]").forEach(x=>x.setAttribute("aria-pressed",x===b?"true":"false")); draw(); play(); });
   A.querySelectorAll("[data-shape]").forEach(b=>b.onclick=()=>{ setShape(b.dataset.shape); A.querySelectorAll("[data-shape]").forEach(x=>x.setAttribute("aria-pressed",x===b?"true":"false")); });
   $("aReplay").onclick=play;
+  /* Pause stops the loop, the rotation and the silk (WCAG 2.2.2 for motion longer than five seconds) */
+  $("aPause").onclick=()=>{ st.paused=!st.paused; const b=$("aPause"); b.textContent=st.paused?"Play":"Pause"; b.setAttribute("aria-pressed",st.paused?"true":"false");
+    stage.classList.toggle("paused",st.paused); if(st.paused) clearTimeout(st.timer); else play(); runSilk(); };
   $("aFull").onclick=()=>{ try{ if(document.fullscreenElement) document.exitFullscreen(); else wrap.requestFullscreen?.(); }catch{} };
-  const open=()=>{ A.hidden=false; A.scrollTop=0; if(!img.getAttribute("src")) setShape(st.shape); requestAnimationFrame(()=>{ fit(); play(); }); setTimeout(()=>$("closeAnim").focus(),50); };
-  const close=()=>{ A.hidden=true; clearTimeout(st.timer); txt.classList.remove("play"); $("openAnim")?.focus(); };
+  const open=()=>{ A.hidden=false; A.scrollTop=0; if(!img.getAttribute("src")) setShape(st.shape); requestAnimationFrame(()=>{ fit(); runSilk(); play(); }); setTimeout(()=>$("closeAnim").focus(),50); };
+  const close=()=>{ A.hidden=true; clearTimeout(st.timer); cancelAnimationFrame(raf); raf=0; txt.classList.remove("play","v2play"); $("openAnim")?.focus(); };
   $("openAnim").addEventListener("click",open); $("closeAnim").addEventListener("click",close);
   document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&!A.hidden&&!document.fullscreenElement) close(); });
 })();
