@@ -1257,6 +1257,26 @@ function setMode(m,init){
   ["s1","s2","s3"].forEach(id=>$(id).classList.remove("active","done")); ["pg2","pg3","pg4"].forEach(id=>$(id).classList.remove("active","done"));
   $("s1body").innerHTML=`<div class="empty">${icon?"The icon concept appears here: main object, supporting elements, layering, colour map and angle, checked against the BAE illustration rules.":"The scene breakdown appears here: subject, setting, wardrobe, light, composition, depth and palette, with notes on how it meets the BAE photography principles."}</div>`; $("checks").innerHTML="";
 }
+/* Gradient elements: 6 brand shapes, preview + full-res PNG download */
+const GRADS=[["circle_1","Circle 01","3700 × 3700"],["circle_2","Circle 02","3700 × 3700"],["lozenge_h_1","Lozenge horizontal 01","6400 × 3600"],["lozenge_h_2","Lozenge horizontal 02","6400 × 3600"],["lozenge_v_1","Lozenge vertical 01","2600 × 4400"],["lozenge_v_2","Lozenge vertical 02","2600 × 4400"]];
+(function(){ const G=$("gallery"), grid=$("gGrid"); if(!G||!grid) return;
+  const note=t=>{ $("gNote").textContent=t||""; };
+  const save=async(name,blob)=>{ if(downloads){ try{ await downloads.save({filename:name,data:blob}); return; }catch(e){ if(e?.code==="declined") return; if(!/unavailable|not_granted|capability/.test(e?.code||"")) throw e; } }
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); };
+  const file=id=>`grad/BAE_gradient_${id}.png`;
+  grid.innerHTML=GRADS.map(([id,name,size])=>`<div class="g-card"><div class="g-prev" data-full="${file(id)}" data-name="${name}" role="button" tabindex="0" aria-label="View ${name} larger"><img src="grad/BAE_gradient_${id}_preview.webp" alt="${name}" loading="lazy"></div><div class="g-meta"><div><b>${name}</b><small>${size} px · PNG</small></div></div><button class="g-dl" type="button" data-id="${id}">Download PNG</button></div>`).join("");
+  grid.addEventListener("click",async e=>{ const b=e.target.closest(".g-dl"); if(b){ b.disabled=true; const old=b.textContent; b.textContent="Preparing…"; note("");
+      try{ const r=await fetch(file(b.dataset.id)); if(!r.ok) throw new Error("file not found"); await save(`BAE_gradient_${b.dataset.id}.png`,await r.blob()); }
+      catch(err){ note("Couldn't download: "+(err?.message||err?.code)); } finally{ b.disabled=false; b.textContent=old; } return; }
+    const pv=e.target.closest(".g-prev"); if(pv&&typeof openLightbox==="function") openLightbox(pv.querySelector("img").src,pv.dataset.name); });
+  $("dlAllGrad").onclick=async()=>{ const b=$("dlAllGrad"); b.disabled=true; const old=b.textContent; b.textContent="Preparing…"; note("");
+    try{ if(!window.JSZip) throw new Error("zip library didn't load"); const zip=new JSZip(); for(const [id] of GRADS){ const r=await fetch(file(id)); if(r.ok) zip.file(`BAE_gradient_${id}.png`,await r.blob()); } await save("BAE-Gradient-Elements.zip",await zip.generateAsync({type:"blob"})); }
+    catch(err){ note("Couldn't build the zip: "+(err?.message||err?.code)); } finally{ b.disabled=false; b.textContent=old; } };
+  const open=()=>{ G.hidden=false; G.scrollTop=0; setTimeout(()=>$("closeGallery").focus(),50); };
+  const close=()=>{ G.hidden=true; $("openGallery")?.focus(); };
+  $("openGallery").addEventListener("click",open); $("closeGallery").addEventListener("click",close);
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&!G.hidden&&!document.querySelector(".lightbox:not([hidden])")) close(); });
+})();
 /* Landing: pick a service, then the studio opens in that mode. The emblem in the header brings it back. */
 (function(){ const L=$("landing"); if(!L) return; document.body.classList.add("landing-on");
   const enter=m=>{ if(m&&m!==S.mode) setMode(m); L.classList.add("out"); document.body.classList.remove("landing-on"); window.scrollTo(0,0); setTimeout(()=>{ try{ $("brief").focus({preventScroll:true}); }catch{} },350); };
