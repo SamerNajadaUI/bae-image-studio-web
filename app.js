@@ -1286,6 +1286,34 @@ const GRADS=[["circle_1","Circle 01","3700 × 3700"],["circle_2","Circle 02","37
   $("openGallery").addEventListener("click",open); $("closeGallery").addEventListener("click",close);
   document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&!G.hidden&&!document.querySelector(".lightbox:not([hidden])")) close(); });
 })();
+/* Animation direction: 1920x1080 stage, words slide in one by one (Arabic right-to-left, English left-to-right),
+   a gradient element rotates slowly behind. Loops: play, hold, fade, replay. */
+const ANIM_COPY={
+  ar:["نؤمن أن كل خطوة صغيرة","تصنع فرقًا حقيقيًا في حياتك","لذلك نبتكر لك حلولًا أذكى","أقرب إليك."],
+  en:["We believe every small step","makes a real difference, always","so we build smarter solutions","Closer together."]
+};
+(function(){ const A=$("anim"); if(!A) return;
+  const st={lang:"ar",shape:"circle_1",timer:null};
+  const stage=$("aStage"), wrap=$("aWrap"), txt=$("aText"), shp=$("aShape"), img=$("aShapeImg");
+  const fit=()=>{ const r=wrap.getBoundingClientRect(); if(!r.width) return; const k=Math.min(r.width/1920,r.height/1080); stage.style.transform=`scale(${k})`; stage.style.left=((r.width-1920*k)/2)+"px"; stage.style.top=((r.height-1080*k)/2)+"px"; };
+  new ResizeObserver(fit).observe(wrap);
+  const build=()=>{ const ar=st.lang==="ar"; txt.dir=ar?"rtl":"ltr"; txt.lang=ar?"ar":"en"; let k=0;
+    /* Arabic words enter from the right and travel left; English words enter from the left and travel right */
+    txt.innerHTML=ANIM_COPY[st.lang].map(line=>`<span class="a-line">${line.split(/\s+/).map(w=>`<span class="a-w" style="--k:${k++};--from:${ar?"90px":"-90px"}">${esc(w)}</span>`).join(" ")}</span>`).join("");
+    return k; };
+  const play=()=>{ clearTimeout(st.timer); txt.classList.remove("play","leave"); const n=build(); void txt.offsetWidth; txt.classList.add("play");
+    const total=200+n*110+900;
+    st.timer=setTimeout(()=>{ txt.classList.add("leave"); st.timer=setTimeout(play,700); },total+2600); };
+  const setShape=id=>{ st.shape=id; shp.hidden=id==="none"; shp.classList.toggle("lozenge",/lozenge/.test(id)); if(id!=="none") img.src=`grad/BAE_gradient_${id}.png`; };
+  A.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{ st.lang=b.dataset.lang; A.querySelectorAll("[data-lang]").forEach(x=>x.setAttribute("aria-pressed",x===b?"true":"false")); play(); });
+  A.querySelectorAll("[data-shape]").forEach(b=>b.onclick=()=>{ setShape(b.dataset.shape); A.querySelectorAll("[data-shape]").forEach(x=>x.setAttribute("aria-pressed",x===b?"true":"false")); });
+  $("aReplay").onclick=play;
+  $("aFull").onclick=()=>{ try{ if(document.fullscreenElement) document.exitFullscreen(); else wrap.requestFullscreen?.(); }catch{} };
+  const open=()=>{ A.hidden=false; A.scrollTop=0; if(!img.getAttribute("src")) setShape(st.shape); requestAnimationFrame(()=>{ fit(); play(); }); setTimeout(()=>$("closeAnim").focus(),50); };
+  const close=()=>{ A.hidden=true; clearTimeout(st.timer); txt.classList.remove("play"); $("openAnim")?.focus(); };
+  $("openAnim").addEventListener("click",open); $("closeAnim").addEventListener("click",close);
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&!A.hidden&&!document.fullscreenElement) close(); });
+})();
 /* Landing: pick a service, then the studio opens in that mode. The emblem in the header brings it back. */
 (function(){ const L=$("landing"); if(!L) return; document.body.classList.add("landing-on");
   const enter=m=>{ if(m&&m!==S.mode) setMode(m); L.classList.add("out"); document.body.classList.remove("landing-on"); window.scrollTo(0,0); setTimeout(()=>{ try{ $("brief").focus({preventScroll:true}); }catch{} },350); };
