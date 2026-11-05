@@ -228,7 +228,10 @@ function walk(o,fn,depth=0){ if(depth>8||!o||typeof o!=="object") return; for(co
 function readResult(r){
   const p=r?.payload; const out={ids:[],urls:[],links:[],status:"",w:0,h:0,images:[]};
   const isImgUrl=u=>/\.(png|jpe?g|webp)(\?|#|$)/i.test(u)||/[?&](format|fm)=(png|jpe?g|webp)/i.test(u);
-  const addUrl=(u,k="")=>{ if(typeof u!=="string"||!/^https:\/\//.test(u)) return; u=u.replace(/[)\].,;'"]+$/,""); if(isImgUrl(u)||/(url|download|image|preview|original|file|src|href|asset|output|result)/i.test(k)) out.urls.push(u); else out.links.push(u); };
+  /* Page links (webUrl, magnific.com/app/…) are links to open, never the image file itself */
+  const addUrl=(u,k="")=>{ if(typeof u!=="string"||!/^https:\/\//.test(u)) return; u=u.replace(/[)\].,;'"]+$/,"");
+    if(/^(web_?url|page_?url|share_?url|app_?url|link)$/i.test(k)||/magnific\.com\/app\//i.test(u)){ out.links.push(u); if(!out.webUrl) out.webUrl=u; return; }
+    if(isImgUrl(u)||/(download|image|preview|original|file|src|asset|output|result)/i.test(k)||/^url$/i.test(k)) out.urls.push(u); else out.links.push(u); };
   const scanText=t=>{ (String(t).match(/https:\/\/[^\s"'<>)\]]+/g)||[]).forEach(u=>addUrl(u)); const m=String(t).match(/(?:creation[_ ]?)?identifier["'\s:=]+([A-Za-z0-9_-]{6,})/i); if(m) out.ids.push(m[1]); const s=String(t).match(/status["'\s:=]+([a-z_]+)/i); if(s) out.status=out.status||s[1].toLowerCase(); };
   /* Image bytes can arrive as image blocks or as embedded resources; links as resource_link blocks or text */
   for(const b of (r?.content||[])){
@@ -245,6 +248,7 @@ function readResult(r){
       if(/^data:image\/(png|jpe?g|webp);base64,/.test(v)) out.images.push({data:v.split(",")[1],mime:v.slice(5,v.indexOf(";"))});
     }
     if(typeof v==="number"){ if(/^width$/i.test(k)) out.w=Math.max(out.w,v); if(/^height$/i.test(k)) out.h=Math.max(out.h,v); }
+    if(typeof v==="string"&&/^resolution$/i.test(k)&&/^4k$/i.test(v)) out.res4k=true;
   }
   if(p&&typeof p==="object") walk(p,scan);
   else if(typeof p==="string") scanText(p);
@@ -277,6 +281,7 @@ async function connect(silent){
     S.connected=true;
     await loadOptions("nano");
     S.connected=true; setMag("on","Magnific: connected"); $("btnConnect").textContent="Reconnect";
+    if(!Object.keys(S.magIds||{}).length) setTimeout(linkLibrary,0);
   }catch(e){ setMag("off","Magnific: "+(e?.code||"error")); if(!silent) flash($("s3state"),mcpCopy(e),true); }
   finally{ $("btnConnect").disabled=false; syncButtons(); }
 }
@@ -506,7 +511,7 @@ function renderCard(key,st){
   ${outs.length>1?`<div class="thumbs">${outs.map((x,i)=>`<button type="button" data-i="${i}" aria-pressed="${i===(st.sel||0)}" aria-label="Show image ${i+1}">${x.img?`<img src="${x.img}" alt="">`:i+1}</button>`).join("")}</div>`:""}
   <ol class="steps">${STEPS.map((s,i)=>`<li class="${st.steps?.[i]||""}">${s}${st.stepNote?.[i]?` · ${esc(st.stepNote[i])}`:""}</li>`).join("")}</ol>
   ${st.err?`<div class="msg">${esc(st.err)}</div>`:""}${st.refWarn?`<div class="msg info">${esc(st.refWarn)}</div>`:""}
-  <div class="btns">${o?.blob?`<button class="btn small primary" data-act="dl">Download ${/png/.test(o.blob.type)?"PNG":"image"}</button>`:""}${o?.url?`<a class="btn small ${o.blob?"":"primary"}" href="${esc(o.url)}" target="_blank" rel="noopener">Open ${o.long>=3800?"4K ":""}PNG</a><button class="btn small" data-act="copy">Copy link</button>`:""}${st.done||st.err?`<button class="btn small" data-act="regen">Regenerate</button>`:""}</div>
+  <div class="btns">${o?.blob?`<button class="btn small primary" data-act="dl">Download ${/png/.test(o.blob.type)?"PNG":"image"}</button>`:""}${o?.url?`<a class="btn small ${o.blob?"":"primary"}" href="${esc(o.url)}" target="_blank" rel="noopener">Open ${o.long>=3800?"4K ":""}PNG</a><button class="btn small" data-act="copy">Copy link</button>`:""}${o?.webUrl?`<a class="btn small ${o.blob||o.url?"":"primary"}" href="${esc(o.webUrl)}" target="_blank" rel="noopener">Open in Magnific</a>`:""}${st.done||st.err?`<button class="btn small" data-act="regen">Regenerate</button>`:""}</div>
   ${o?.url?`<input type="text" readonly class="linkbox" id="link-${key}" value="${esc(o.url)}" aria-label="Image link">`:""}
   ${o?.links?.length>1?`<details class="links"><summary>All links from Magnific (${o.links.length})</summary>${o.links.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`).join("")}</details>`:""}`;
   el.querySelector('[data-act="dl"]')?.addEventListener("click",()=>save(key,o));
@@ -564,6 +569,55 @@ function refRole(id,meta){
     user:{role:"style",use:"the user's reference for light, wardrobe and camera"}
   })[set]||{role:"style",use:"style reference"};
 }
+/* ---- Magnific reference library: images uploaded once to a Magnific folder named "BAE References" ----
+   Magnific's upload tool only takes public links, and claude.ai pages can't send files to outside servers,
+   so references are attached by their Magnific creation identifiers, matched by file name (bae_b114_1, yt04, r061…). */
+const LIB_KEY="bae_mag_ids_v1";
+try{ S.magIds=JSON.parse(localStorage.getItem(LIB_KEY)||"{}"); }catch{ S.magIds={}; }
+function libStatus(txt,kind){ const el=$("libState"); if(el){ el.textContent=txt; el.className="t12 "+(kind==="ok"?"ok-t":kind==="bad"?"bad-t":"muted"); } }
+function libSummary(){ const n=Object.keys(S.magIds||{}).length; const total=ALL_REFS.filter(r=>r.set!=="user").length; return n?`${n} of ${total} references linked from your Magnific library.`:"Not linked yet. Upload the reference pack to a Magnific folder named “BAE References”, then press Link library."; }
+const REF_NAME_RE=/(bae_b\d{3}_\d|yt\d{2}|r\d{3})/i;
+function findFolder(p){ let hit=null; walk(p,(k,v)=>{ if(hit||!v||typeof v!=="object"||Array.isArray(v)) return; const name=v.name||v.title||v.label; if(typeof name==="string"&&/bae[\s_-]*ref/i.test(name)) hit={name,ref:v.folderReference||v.reference||v.identifier||v.id||v.uuid||null,raw:v}; }); return hit; }
+function matchRefs(p,map){ walk(p,(k,v)=>{ if(!v||typeof v!=="object"||Array.isArray(v)) return; const id=v.identifier||v.creationIdentifier; if(typeof id!=="string") return; let s=""; try{ s=JSON.stringify(v); }catch{} const m=s.match(REF_NAME_RE); if(m&&!map[m[1].toLowerCase()]) map[m[1].toLowerCase()]=id; }); return map; }
+async function linkLibrary(){
+  if(S.web||!mcp||!sample) return;
+  const b=$("btnLinkLib"); b.disabled=true; libStatus("Looking for the “BAE References” folder in Magnific…");
+  try{
+    if(!S.connected) await connect(true);
+    let folder=null;
+    try{ const fa=await buildArgs("folders_list","List all of the user's folders and projects, including their names and references.",{}); const fr=await callMag("folders_list",fa.args); folder=findFolder(fr.payload??fr.content); }
+    catch(e){ log("✕","folders_list",{code:e?.code,message:e?.message}); }
+    const map={}; let seen=0;
+    for(let page=0;page<4;page++){
+      const la=await buildArgs("creations_list",`List the creations (including uploaded images) ${folder?`inside the folder/project named "${folder.name}" (reference ${JSON.stringify(folder.ref)})`:"in the user's library, newest first, including uploads"}. Return as many items per call as the tool allows, with their names, titles or file names. ${page?`This is page ${page+1}: use the cursor/offset from Data to continue.`:""}`,{folderReference:folder?.ref||null,folder:folder?.raw||null,page:page+1,cursor:S._libCursor||null,limit:100});
+      const lr=await callMag("creations_list",la.args); const pl=lr.payload??lr.content;
+      const before=Object.keys(map).length; matchRefs(pl,map); let cnt=0; walk(pl,(k,v)=>{ if(v&&typeof v==="object"&&!Array.isArray(v)&&typeof (v.identifier||v.creationIdentifier)==="string") cnt++; }); seen+=cnt;
+      let cur=null; walk(pl,(k,v)=>{ if(!cur&&/^(next_?cursor|cursor|next_?page_?token|next)$/i.test(k)&&(typeof v==="string"||typeof v==="number")&&v!=="") cur=v; }); S._libCursor=cur;
+      if(!cur||Object.keys(map).length===before&&page>0) break;
+    }
+    S._libCursor=null; S.magIds=map; try{ localStorage.setItem(LIB_KEY,JSON.stringify(map)); }catch{}
+    refCache=null;
+    const n=Object.keys(map).length;
+    if(n) libStatus(`${n} references linked${folder?` from “${folder.name}”`:""}. They will be attached as @img1, @img2… automatically.`,"ok");
+    else libStatus(folder?`Found “${folder.name}” with ${seen} items, but no file names matched (bae_b114_1.jpg, yt04.jpg…). Keep the original file names from the pack, then link again.`:"No “BAE References” folder found. Create it in Magnific, drag the reference pack into it, then press Link library.","bad");
+    renderRefs();
+  }catch(e){ libStatus(mcpCopy(e),"bad"); }
+  finally{ b.disabled=false; }
+}
+/* Reference pack: every built-in reference with its file name, zipped for one drag-and-drop into Magnific */
+async function downloadPack(){
+  const b=$("btnPack"); b.disabled=true; const old=b.textContent; b.textContent="Preparing…";
+  try{
+    if(!window.JSZip) throw new Error("zip library didn't load");
+    const zip=new JSZip(); const refs=ALL_REFS.filter(r=>r.set!=="user");
+    for(const r of refs){ const res=await fetch(r.src); if(res.ok) zip.file(r.id+".jpg",await res.blob()); }
+    const blob=await zip.generateAsync({type:"blob"});
+    if(downloads) await downloads.save({filename:"BAE-References.zip",data:blob});
+    else { const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="BAE-References.zip"; a.click(); }
+    libStatus(`Pack saved (${refs.length} images). In Magnific, create a folder named “BAE References”, drag all images into it, then press Link library.`);
+  }catch(e){ if(e?.code!=="declined") libStatus("Couldn't build the pack: "+(e?.message||e?.code),"bad"); }
+  finally{ b.disabled=false; b.textContent=old; }
+}
 function refPlan(){ const ids=[...(S.upload&&$("useUpAsRef").checked?["user-image"]:[]),...S.picked]; return ids.map((id,i)=>({id,tag:"@img"+(i+1),...refRole(id,refById(id))})); }
 function refLine(list){ return list.length?"Reference images: "+list.map(r=>`${r.tag} = ${r.use}`).join("; ")+". Use them for those qualities only; never copy their people, logos or orange clothing.":""; }
 async function uploadRefs(){
@@ -573,6 +627,10 @@ async function uploadRefs(){
   (await refBlobs()).forEach(r=>items.push(r));
   const list=[], errors=[];
   for(const it of items){
+    /* Preferred: the image already lives in the user's Magnific library (BAE References folder) */
+    const magId=S.magIds?.[String(it.id).toLowerCase()];
+    if(magId){ const meta=refById(it.id)||{}; list.push({ref:it.id,id:magId,url:null,...refRole(it.id,meta)}); continue; }
+    if(!S.allowDirectUpload){ errors.push(`${it.id}: not in your Magnific "BAE References" folder yet`); continue; }
     try{
       const plan=await buildArgs("creations_upload_image",`Upload one JPEG image named ${it.id}.jpg to the user's Magnific creations so it can be used as a reference image (@img) in image generation. The image bytes MUST go in: put the placeholder string "__FILE__" (raw base64) as the value of the property that carries the image content, or "__FILE_DATAURL__" if that property expects a data: URL.`,{filename:it.id+".jpg",mime_type:"image/jpeg",content:"__FILE__"});
       let pargs=plan.args;
@@ -619,8 +677,13 @@ async function waitFor(ids,label){
 }
 async function preview(id){
   if(!id) return {image:null,urls:[],w:0,h:0};
-  try{ const a=await buildArgs("creations_show","Show this creation so its image can be previewed.",{identifier:id}); const r=await callMag("creations_show",a.args); const x=readResult(r); return {image:x.images[0]||null,urls:x.urls,w:x.w,h:x.h}; }
-  catch{ return {image:null,urls:[],w:0,h:0}; }
+  /* creations_read returns the finished image itself; creations_show is only a widget in Magnific's own UI */
+  let urls=[],w=0,h=0;
+  for(const [tool,goal] of [["creations_read","Read this finished image creation so its image content is returned, at the largest size the tool allows."],["creations_show","Show this creation so its image can be previewed."]]){
+    try{ const a=await buildArgs(tool,goal,{identifier:id}); const r=await callMag(tool,a.args); const x=readResult(r); urls.push(...x.urls); w=Math.max(w,x.w); h=Math.max(h,x.h); if(x.images.length) return {image:x.images[0],urls,w,h}; }
+    catch(e){ log("✕",tool+" skipped",{code:e?.code}); }
+  }
+  return {image:null,urls,w,h};
 }
 async function generate(keys){
   if(S.web) return generateWeb();
@@ -667,7 +730,9 @@ REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this o
     const r=await callMag("images_generate",plan.args);
     let rr=readResult(r); if(!rr.ids.length&&!rr.urls.length&&!rr.images.length) rr=await extractWithClaude(r,"the creation identifiers of the images being generated");
     const genIds=rr.ids.slice();
-    if(!(rr.urls.length||rr.images.length)){ if(!genIds.length) throw {code:"tool_error",message:"Magnific didn't return a creation to wait for."}; rr=await waitFor(genIds,"4K image generation"); }
+    const webUrls=[...(rr.webUrl?[rr.webUrl]:[]),...rr.links.filter(u=>/magnific\.com\/app\//i.test(u))];
+    if(!rr.images.length&&!DONE.test(rr.status)){ if(!genIds.length) throw {code:"tool_error",message:"Magnific didn't return a creation to wait for."}; c.ph="Rendering in Magnific…"; up(); rr=await waitFor(genIds,"4K image generation"); }
+    c.webUrls=[...new Set([...webUrls,...(rr.webUrl?[rr.webUrl]:[])])];
     const ids=rr.ids.length?rr.ids:genIds;
     const n=Math.max(1,Math.min(count,Math.max(ids.length,rr.images.length,rr.urls.length)));
     const asked4k=!!P.res_4k||/4k|3840|4096/i.test(JSON.stringify(plan.args));
@@ -679,6 +744,9 @@ REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this o
       if(shot){ o.img=`data:${shot.mime};base64,${shot.data}`; o.blob=b64Blob(shot.data,shot.mime); }
       /* Size: trust Magnific's reported dimensions, then the requested 4K, then the preview's own pixels */
       o.long=pw||(n===1?Math.max(rr.w,rr.h):0)||(asked4k?(plan.expected_long_side_px||3840):0)||(o.img?await longSide(o.img):0)||plan.expected_long_side_px||0;
+      /* Magnific reports resolution "4k" for a native 4K render: never pay for an upscale then */
+      if(rr.res4k||asked4k&&/4k/i.test(JSON.stringify(plan.args))) o.long=Math.max(o.long,3840);
+      o.webUrl=c.webUrls?.[i]||c.webUrls?.[0]||null;
       c.outs.push(o);
     }
     c.steps[1]="ok"; c.stepNote[1]=`${n} image${n>1?"s":""}${mode?` · ${$(m.mode).selectedOptions[0]?.textContent.replace(" · best quality","")}`:""}`; c.steps[2]="run"; up();
@@ -717,13 +785,14 @@ async function completeFiles(o,lastRR){
   const take=x=>{ if(!o.url&&x.urls[0]) o.url=x.urls[0]; o.links=[...new Set([...(o.links||[]),...x.urls,...x.links])]; if(!o.img&&x.images[0]){ o.img=`data:${x.images[0].mime};base64,${x.images[0].data}`; o.blob=b64Blob(x.images[0].data,x.images[0].mime); } const L=Math.max(x.w,x.h); if(L>o.long) o.long=L; };
   if(o.url&&o.img) return;
   if(o.id){
-    for(const [tool,goal] of [["creations_get","Get this creation's full details, including its final full-resolution image file URL and dimensions."],["creations_register_download","Register a download of this creation at its original full resolution as PNG and return the download URL."]]){
+    for(const [tool,goal] of [["creations_get","Get this creation's full details, including its final full-resolution image file URL and dimensions."],["creations_read","Read this finished image creation so its image content is returned, at the largest size the tool allows."]]){
       if(o.url&&o.img) break;
       try{ const a=await buildArgs(tool,goal,{identifier:o.id,format:"png"}); const r=await callMag(tool,a.args); let x=readResult(r); if(!x.urls.length&&!x.images.length&&!x.links.length) x=await extractWithClaude(r,"the full-resolution image file URL"); take(x); }
       catch(e){ log("✕",tool+" skipped",{code:e?.code}); }
     }
   }
-  if(!o.url&&lastRR){ if(lastRR.links?.length) o.links=[...new Set([...(o.links||[]),...lastRR.links])]; if(o.links?.length) o.url=o.links[0]; }
+  if(!o.url&&lastRR){ if(lastRR.links?.length) o.links=[...new Set([...(o.links||[]),...lastRR.links])]; const file=(o.links||[]).find(u=>!/magnific\.com\/app\//i.test(u)); if(file) o.url=file; }
+  if(!o.webUrl) o.webUrl=(o.links||[]).find(u=>/magnific\.com\/app\//i.test(u))||null;
 }
 function b64Blob(b64,mime){ const bin=atob(b64); const u=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return new Blob([u],{type:mime}); }
 function longSide(src){ return new Promise(r=>{ const im=new Image(); im.onload=()=>r(Math.max(im.naturalWidth,im.naturalHeight)); im.onerror=()=>r(0); im.src=src; }); }
@@ -912,7 +981,7 @@ loadUserRefs();
 
 async function bootWeb(){
   S.web=true; downloads=null; mcp={web:true}; sample=makeAnthropicSample(); sampleImages={maxCount:8};
-  $("keysCard").hidden=false; $("heroSub").textContent="Nano Banana 2.1 · native 4K · Google Gemini API";
+  $("keysCard").hidden=false; $("libBox").hidden=true; $("heroSub").textContent="Nano Banana 2.1 · native 4K · Google Gemini API";
   $("mNanoName").textContent="Nano Banana 2.1 · Google Gemini API"; $("btnConnect").textContent="API keys";
   $("btnConnect").onclick=openKeys;
   /* Built-in library images exist only in the private build; fall back to "Your references" when they are missing */
@@ -926,6 +995,9 @@ async function bootWeb(){
 function webStatus(){ setClaude(getKey("anthropic")?"on":"wait",getKey("anthropic")?"Claude: key added":"Claude: optional key"); if(!getKey("gemini")) setMag("off","Google: add API key"); }
 $("btnSaveKeys").onclick=()=>{ setKey("gemini",$("keyGemini").value); setKey("anthropic",$("keyAnthropic").value); S.connected=false; webStatus(); $("keysMsg").textContent="Saved on this device."; checkGemini(false); };
 $("btnForgetKeys").onclick=()=>{ setKey("gemini",""); setKey("anthropic",""); $("keyGemini").value=""; $("keyAnthropic").value=""; S.connected=false; webStatus(); $("keysMsg").textContent="Keys removed from this device."; };
+
+$("btnLinkLib").onclick=linkLibrary; $("btnPack").onclick=downloadPack;
+libStatus(libSummary(),Object.keys(S.magIds||{}).length?"ok":"");
 
 function openLightbox(src){ if(!src) return; $("lbImg").src=src; $("lightbox").hidden=false; $("lbClose").focus(); }
 function closeLightbox(){ $("lightbox").hidden=true; $("lbImg").removeAttribute("src"); }

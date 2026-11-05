@@ -165,6 +165,10 @@ kbd{font-family:var(--font);font-size:12px;border:1px solid var(--stone);border-
 .ref[aria-pressed="true"]{outline:3px solid var(--orange-dark);outline-offset:-3px}
 .ref[aria-pressed="true"]::after{content:attr(data-n);position:absolute;top:5px;inset-inline-end:5px;width:20px;height:20px;border-radius:50%;background:var(--orange-dark);color:var(--white);font-size:12px;display:grid;place-items:center}
 .ref .tag{position:absolute;inset-inline-start:5px;bottom:5px;font-size:12px;letter-spacing:.01em;background:rgba(25,24,30,.72);color:var(--white);padding:2px 6px;border-radius:6px;transform:scale(.85);transform-origin:left bottom}
+.libbox{display:flex;flex-direction:column;gap:8px;background:var(--orange-light);border-radius:var(--r-in);padding:12px 14px}
+.libsteps{margin:0;padding-inline-start:18px;display:flex;flex-direction:column;gap:4px;line-height:1.35}
+.libsteps b{color:var(--ink)}
+.ok-t{color:var(--teal-dark)} .bad-t{color:var(--burgundy)}
 .count{font-size:12px;letter-spacing:.01em;color:var(--ink-light);font-variant-numeric:tabular-nums;white-space:nowrap}
 
 /* rules */
@@ -359,6 +363,12 @@ details.log summary{cursor:pointer}
 
     <div class="card">
       <div class="card-h"><div class="ttl"><h2 class="t18">References</h2><span class="t12 light">Light, wardrobe and camera to follow</span></div><span class="count" id="refCount">0 / 6</span></div>
+      <div class="libbox" id="libBox">
+        <div class="t16">Magnific library</div>
+        <p id="libState" class="t12 muted">Not linked yet.</p>
+        <ol class="t12 muted libsteps"><li>Download the reference pack.</li><li>In Magnific, create a folder named <b>BAE References</b> and drag all the images into it. Keep the file names.</li><li>Press <b>Link library</b>. References are then attached as @img1, @img2… automatically.</li></ol>
+        <div class="btns"><button class="btn small" type="button" id="btnPack">Download reference pack</button><button class="btn small primary" type="button" id="btnLinkLib">Link library</button></div>
+      </div>
       <div class="picked" id="picked" aria-label="Selected references"></div>
       <div class="seg" id="refTabs"><button type="button" data-tab="bae" aria-pressed="false">BAE guideline</button><button type="button" data-tab="yt" aria-pressed="true">Youth campaign</button><button type="button" data-tab="mj" aria-pressed="false">Mari Juliano</button><button type="button" data-tab="user" aria-pressed="false">Your references</button></div>
       <p class="t12 muted" id="refHint" style="line-height:1.35"></p>
@@ -443,6 +453,7 @@ details.log summary{cursor:pointer}
 
 <div class="lightbox" id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Image preview"><img id="lbImg" alt="Generated image, full view"><button type="button" id="lbClose">Close</button></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="app.js"></script>
 
 </body>
