@@ -329,7 +329,7 @@ function pickModels(list){
   gpt.forEach(m=>{ const o=document.createElement("option"); o.value=m.id; o.textContent=m.name+(g25.length?" · locked":" · 2.5 not found, newest GPT"); gs.appendChild(o); });
   gs.disabled=true; log("·","icon model locked",{gpt:gpt.map(m=>m.name)});
   if(gpt[0]) S.gptName=gpt[0].name;
-  $("mNanoName").textContent=S.mode==="icon"?(S.gptName||"GPT 2.5")+" · via Magnific":(S.nanoName||"Nano Banana 2.1")+" · via Magnific";
+  $("mNanoName").textContent=S.mode==="icon"?`${S.gptName||"GPT 2.5"} + ${S.nanoName||"Nano Banana 2.1"} · via Magnific`:(S.nanoName||"Nano Banana 2.1")+" · via Magnific";
 }
 
 /* ---------------- UI: brief, segs, upload, refs ---------------- */
@@ -526,11 +526,14 @@ function enforce(p){
 }
 
 /* ---------------- STEP 3: generate ---------------- */
-const MODELS={ nano:{el:"rNano",sel:"selNano",mode:"modeNano",prompt:"pNano",label:"Nano Banana 2.1"}, icon:{el:"rNano",sel:"selIcon",mode:"modeIcon",prompt:"pNano",label:"GPT 2.5 icon"} };
+const MODELS={ nano:{el:"rNano",sel:"selNano",mode:"modeNano",prompt:"pNano",label:"Nano Banana 2.1"}, icon:{el:"rNano",sel:"selIcon",mode:"modeIcon",prompt:"pNano",label:"GPT 2.5"}, iconNano:{el:"rNano2",sel:"selNano",mode:"modeNano",prompt:"pNano",label:"Nano Banana 2.1"} };
 const genKey=()=>S.mode==="icon"?"icon":"nano";
+/* Icons render with both models side by side; photography with Nano Banana 2.1 */
+const genKeys=()=>S.mode==="icon"?["icon","iconNano"]:["nano"];
+const isIconKey=k=>k==="icon"||k==="iconNano";
 function negativeNow(){ if(S.mode==="icon") return ICON_NEG; return [S.negative||"logos, text, watermark, signage, oversaturated, HDR, extra fingers",CLIENT_NEG,COMPOSITION_NEG,S.setting==="Studio"?STUDIO_NEG:"",S.look==="Bold"?LOOK_BOLD_NEG:""].filter(Boolean).join(", "); }
 const STEPS=["Upload references","Render in 4K","4K check","Ready"];
-function aspectVal(){ if(S.mode==="icon") return "1:1"; const v=$("aspect").value; if(v==="custom"){ const w=parseInt($("cw").value,10)||0,h=parseInt($("ch").value,10)||0; return w&&h?{width:w,height:h}:"auto"; } return v; }
+function aspectVal(){ if(S.mode==="icon") return "16:9"; const v=$("aspect").value; if(v==="custom"){ const w=parseInt($("cw").value,10)||0,h=parseInt($("ch").value,10)||0; return w&&h?{width:w,height:h}:"auto"; } return v; }
 function aspectText(){ const a=aspectVal(); return typeof a==="string"?a:`${a.width}×${a.height}px`; }
 function ratioCSS(){ const a=aspectVal(); if(a==="auto") return "4 / 3"; if(typeof a==="object") return `${a.width} / ${a.height}`; const [w,h]=a.split(":").map(Number); return `${w} / ${h}`; }
 function renderCard(key,st){
@@ -538,12 +541,12 @@ function renderCard(key,st){
   const outs=st.outs||[]; const o=outs[st.sel||0];
   const res=o&&o.long?(o.long>=3800?`4K · ${o.long}px`:`${o.long}px`):"";
   el.innerHTML=`<div class="head"><b>${esc(m.label)}</b><span class="count">${esc(name)}</span></div>
-  <div class="frame ${st.busy?"busy":""}${key==="icon"?" iconframe":""}" style="aspect-ratio:${ratioCSS()}">${o?.img?`<img src="${o.img}" alt="Generated image ${(st.sel||0)+1} from ${esc(m.label)}">`:`${!o&&!st.busy?`<div class="ph-mosaic" aria-hidden="true">${S.picked.slice(0,3).map(id=>`<img src="${refById(id)?.src}" alt="">`).join("")}</div>`:""}<span class="ph-txt">${esc(o?"Magnific sent a link but not the image itself, and claude.ai blocks outside images inside pages. Open the PNG below to view or save it.":(st.ph||"Your image appears here"))}</span>`}${res?`<span class="badge">${esc(res)}</span>`:""}${st.busy?`<span class="elapsed" id="elapsed-${key}">${fmtTime(st.t0)}</span>`:""}</div>
+  <div class="frame ${st.busy?"busy":""}${isIconKey(key)?" iconframe":""}" style="aspect-ratio:${ratioCSS()}">${o?.img?`<img src="${o.img}" alt="Generated image ${(st.sel||0)+1} from ${esc(m.label)}">`:`${!o&&!st.busy?`<div class="ph-mosaic" aria-hidden="true">${S.picked.slice(0,3).map(id=>`<img src="${refById(id)?.src}" alt="">`).join("")}</div>`:""}<span class="ph-txt">${esc(o?"Magnific sent a link but not the image itself, and claude.ai blocks outside images inside pages. Open the PNG below to view or save it.":(st.ph||"Your image appears here"))}</span>`}${res?`<span class="badge">${esc(res)}</span>`:""}${st.busy?`<span class="elapsed" id="elapsed-${key}">${fmtTime(st.t0)}</span>`:""}</div>
   ${outs.length>1?`<div class="thumbs">${outs.map((x,i)=>`<button type="button" data-i="${i}" aria-pressed="${i===(st.sel||0)}" aria-label="Show image ${i+1}">${x.img?`<img src="${x.img}" alt="">`:i+1}</button>`).join("")}</div>`:""}
   <ol class="steps">${STEPS.map((s,i)=>`<li class="${st.steps?.[i]||""}">${s}${st.stepNote?.[i]?` · ${esc(st.stepNote[i])}`:""}</li>`).join("")}</ol>
   ${st.err?`<div class="msg">${esc(st.err)}</div>`:""}${st.refWarn?`<div class="msg info">${esc(st.refWarn)}</div>`:""}
   <div class="btns">${o?.blob?`<button class="btn small primary" data-act="dl">Download ${/png/.test(o.blob.type)?"PNG":"image"}</button>`:""}${o?.url?`<a class="btn small ${o.blob?"":"primary"}" href="${esc(o.url)}" target="_blank" rel="noopener">Open ${o.long>=3800?"4K ":""}PNG</a><button class="btn small" data-act="copy">Copy link</button>`:""}${o?.webUrl?`<a class="btn small ${o.blob||o.url?"":"primary"}" href="${esc(o.webUrl)}" target="_blank" rel="noopener">Open in Magnific</a>`:""}${st.done||st.err?`<button class="btn small" data-act="regen">Regenerate</button>`:""}</div>
-  ${key==="icon"&&o?.blob?`<div class="btns exports"><span class="t12 muted">Export PNG on white:</span>${[96,144,192,256,1024].map(s=>`<button class="btn small" data-exp="${s}" title="${({96:"S · dashboards, tooltips",144:"M · spot, onboarding, empty states",192:"L · modals, marketing",256:"XL · hero moments",1024:"Master"})[s]}">${({96:"S 96",144:"M 144",192:"L 192",256:"XL 256",1024:"1024"})[s]}</button>`).join("")}</div>`:""}
+  ${isIconKey(key)&&o?.blob?`<div class="btns exports"><span class="t12 muted">Export PNG on white:</span>${[96,144,192,256,1024,"wide"].map(s=>`<button class="btn small" data-exp="${s}" title="${({96:"S · square, dashboards, tooltips",144:"M · square, spot, onboarding",192:"L · square, modals, marketing",256:"XL · square, hero moments",1024:"Square master",wide:"Full 16:9 frame"})[s]}">${({96:"S 96",144:"M 144",192:"L 192",256:"XL 256",1024:"1024",wide:"16:9 full"})[s]}</button>`).join("")}</div>`:""}
   ${o?.url?`<input type="text" readonly class="linkbox" id="link-${key}" value="${esc(o.url)}" aria-label="Image link">`:""}
   ${o?.links?.length>1?`<details class="links"><summary>All links from Magnific (${o.links.length})</summary>${o.links.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`).join("")}</details>`:""}`;
   el.querySelector('[data-act="dl"]')?.addEventListener("click",()=>save(key,o));
@@ -551,13 +554,13 @@ function renderCard(key,st){
   el.querySelector('[data-act="regen"]')?.addEventListener("click",()=>generate([key]));
   el.querySelectorAll(".thumbs button").forEach(b=>b.addEventListener("click",()=>{ st.sel=+b.dataset.i; renderCard(key,st); }));
   el.querySelector(".frame > img")?.addEventListener("click",()=>openLightbox(o.img));
-  el.querySelectorAll("[data-exp]").forEach(b=>b.addEventListener("click",()=>exportIcon(o,+b.dataset.exp)));
+  el.querySelectorAll("[data-exp]").forEach(b=>b.addEventListener("click",()=>exportIcon(o,b.dataset.exp==="wide"?"wide":+b.dataset.exp,MODELS[key].label)));
 }
 const cards={nano:{},icon:{}};
-function idle(){ const k=genKey(); if(!cards[k].steps) cards[k]={ph:S.mode==="icon"?"Your icon appears here on white, 1:1. Describe the icon above and press Create icon.":"Your 4K image appears here. Write a brief above and press Create image.",steps:[]}; renderCard(k,cards[k]); }
+function idle(){ for(const k of genKeys()){ if(!cards[k]) cards[k]={}; if(!cards[k].steps) cards[k]={ph:S.mode==="icon"?`${MODELS[k].label}: your icon appears here on white, 16:9. Describe the icon above and press Create icon.`:"Your 4K image appears here. Write a brief above and press Create image.",steps:[]}; renderCard(k,cards[k]); } }
 function fmtTime(t0){ if(!t0) return "0:00"; const s=Math.max(0,Math.round((Date.now()-t0)/1000)); return Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); }
 idle();
-function onAspect(){ $("customWrap").hidden=S.mode==="icon"||$("aspect").value!=="custom"; $("aspectPill").textContent=S.mode==="icon"?"1:1 · locked":aspectText(); renderCard(genKey(),cards[genKey()]); }
+function onAspect(){ $("customWrap").hidden=S.mode==="icon"||$("aspect").value!=="custom"; $("aspectPill").textContent=S.mode==="icon"?"16:9 · locked":aspectText(); for(const k of genKeys()) if(cards[k]) renderCard(k,cards[k]); }
 ["aspect","cw","ch"].forEach(id=>$(id).addEventListener(id==="aspect"?"change":"input",onAspect)); onAspect();
 function setCount(n){ n=Math.max(1,Math.min(4,n)); $("count").value=n; $("countOut").textContent=n; }
 $("cMinus").onclick=()=>setCount(+$("count").value-1); $("cPlus").onclick=()=>setCount(+$("count").value+1);
@@ -589,7 +592,7 @@ Reply with only JSON: {"modes":[{"value":"exact value","label":"short label","pa
 }
 $("selNano").addEventListener("change",()=>loadOptions("nano"));
 
-$("btnGen").onclick=()=>generate([genKey()]);
+$("btnGen").onclick=()=>generate(genKeys());
 let refCache=null;
 /* What each reference is used for; the order here is the @img1, @img2… order sent to Magnific */
 function refRole(id,meta){
@@ -802,7 +805,7 @@ async function runModel(key,refs){
     const opt=(modelId&&S.opts[modelId])||{raw:await modelDetails(modelId),parsed:{}}; const P=opt.parsed||{};
     const modeParam=(P.modes||[]).find(x=>String(x.value)===String(mode))?.param||null;
     const plan=await buildArgs("images_generate",
-      `Generate exactly ${count} ${S.mode==="icon"?"3D icon illustration image(s), square 1:1, on a pure white background,":"photorealistic image(s)"} with model "${modelId||m.label}". Use the prompt verbatim.
+      `Generate exactly ${count} ${S.mode==="icon"?"3D icon illustration image(s), 16:9 widescreen, on a pure white background,":"photorealistic image(s)"} with model "${modelId||m.label}". Use the prompt verbatim.
 Resolution: 4K. Use the exact 4K value from the model settings${P.res_4k?` ("${P.res_4k}")`:""}; if 4K is not offered, use the largest value${P.max_res?` ("${P.max_res}")`:""}.
 Quality: the highest available${P.best_quality?` ("${P.best_quality}"${P.quality_param?` on "${P.quality_param}"`:""})`:""}.
 ${mode?`Mode: "${mode}"${modeParam?` on setting "${modeParam}"`:""}.`:"Mode: model default."}
@@ -836,7 +839,7 @@ REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this o
     /* 4K check: Magnific upscale only for an output that came back under 4K */
     let ups=0;
     for(const o of c.outs){
-      if(o.long>=3800||key==="icon") continue;
+      if(o.long>=3800||isIconKey(key)) continue;
       if(S.upModes===null){ try{ const mr=await callMag("images_upscale_modes_list",{}); S.upModes=mr.payload??mr.content; }catch{ S.upModes=""; } }
       const factor=o.long?Math.max(2,Math.min(16,Math.pow(2,Math.ceil(Math.log2(3840/o.long))))):2;
       const ua=await buildArgs("images_upscale",`Upscale this photograph ${factor}x so the long side is at least 3840 px (4K) for ${$("channel").value}. Photographic realism: preserve faces, skin texture and fabric faithfully, keep creativity/hallucination at the minimum, no stylisation.`,
@@ -849,7 +852,7 @@ REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this o
       if(shot){ o.img=`data:${shot.mime};base64,${shot.data}`; o.blob=b64Blob(shot.data,shot.mime); }
       o.id=ux.ids[0]||o.id; o.url=ux.urls[0]||o.url; o.long=uw||(o.long?o.long*factor:3840); ups++; up();
     }
-    c.steps[2]="ok"; c.stepNote[2]=key==="icon"?"not needed: icons export up to 1024 px":ups?`${ups} upscaled with Magnific`:"native 4K";
+    c.steps[2]="ok"; c.stepNote[2]=isIconKey(key)?"not needed for icons":ups?`${ups} upscaled with Magnific`:"native 4K";
     /* Make sure every image has a PNG link, and bytes for the preview where Magnific provides them */
     c.steps[3]="run"; c.stepNote[3]="getting PNG links"; up();
     for(const o of c.outs){ await completeFiles(o,rr); up(); }
@@ -857,7 +860,7 @@ REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this o
     c.steps[3]=got?"ok":"err"; c.stepNote[3]=got?`${got} file${got>1?"s":""}`:"no file link returned";
     if(!got) c.err="Magnific finished but sent no image file or link. Open your Magnific creations, or send the Connector log to Claude.";
     c.busy=false; c.done=true; up();
-    if(key==="icon"){ for(const o of c.outs) await whitenOut(o); up(); }
+    if(isIconKey(key)){ for(const o of c.outs) await whitenOut(o); up(); }
     c.outs.forEach(o=>{ if(o.url||o.img) addHistory(o); });
   }catch(e){
     c.busy=false; const i=c.steps.findIndex(s=>s==="run"); if(i>=0) c.steps[i]="err";
@@ -898,7 +901,7 @@ async function createAll(){
   /* Without an Anthropic key the web version writes the prompt from the brief and the locked rules */
   if(S.web&&!getKey("anthropic")){
     const b=$("btnCreate"); b.disabled=true; b.textContent="Creating…";
-    try{ $("pNano").value=enforce(localPrompt()); stage(1,"done"); stage(2,"done"); flash($("s1state"),"Skipped: no Anthropic key, so the prompt was built from your brief and the locked rules."); syncButtons(); await generate([genKey()]); }
+    try{ $("pNano").value=enforce(localPrompt()); stage(1,"done"); stage(2,"done"); flash($("s1state"),"Skipped: no Anthropic key, so the prompt was built from your brief and the locked rules."); syncButtons(); await generate(genKeys()); }
     finally{ b.disabled=false; b.textContent="Create image"; }
     return;
   }
@@ -909,7 +912,7 @@ async function createAll(){
     await describe();
     if(!$("pNano").value.trim()) return;
     if(!mcp){ flash($("s3state"),"Magnific isn't reachable in this view. Open the page in claude.ai.",true); return; }
-    await generate([genKey()]);
+    await generate(genKeys());
   }finally{ b.disabled=false; b.textContent="Create image"; }
 }
 $("brief").addEventListener("keydown",e=>{ if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){ e.preventDefault(); createAll(); } });
@@ -1097,11 +1100,12 @@ Colour: ONLY the illustration palette — Burgundy #A33755, Medium Burgundy #B95
 Composition: ONE focal point per frame; one main object plus at most one or two supporting elements, overlapping for depth, not decoration; universally understood objects; centred with generous breathing room (10×10 grid with a 1X exclusion margin).
 Mode: light-mode treatment, built for a white background.
 Never: text, letters, numbers, logos or the BAE symbol (coin or card faces stay clean or carry a simple abstract emboss); overcrowding or decorative bits (sparkles, confetti, motion lines); mixing styles (no flat vector, line icon, cartoon or photo); illustration used as texture.`;
-const ICON_LOCK="Material lock: glassmorphism + BAE gradient — at least one frosted, semi-transparent glass element (background blur, the gradient form behind showing through softly, thin light edge highlight, soft sheen) layered in front of at least one solid BAE gradient form (Orange #FA6428 to Burgundy #A33755, satin). Icon lock: one premium 3D icon in the Bank al Etihad illustration style, centred and isolated on a pure flat white #FFFFFF background that fills the entire square 1:1 canvas edge to edge; no floor or ground plane, no cast shadow on the background, no backdrop gradient, no vignette, no frame or border; the icon fills about 60–70% of the canvas with even white margin on all sides; light-mode treatment; only Burgundy, Medium Burgundy, Light Burgundy, Orange, Dark Orange, Soft Orange and Light Orange; no text, letters, numbers or logos.";
+const ICON_LOCK="Material lock: glassmorphism + BAE gradient — at least one frosted, semi-transparent glass element (background blur, the gradient form behind showing through softly, thin light edge highlight, soft sheen) layered in front of at least one solid BAE gradient form (Orange #FA6428 to Burgundy #A33755, satin). Icon lock: one premium 3D icon in the Bank al Etihad illustration style, centred and isolated on a pure flat white #FFFFFF background that fills the entire 16:9 widescreen canvas edge to edge; no floor or ground plane, no cast shadow on the background, no backdrop gradient, no vignette, no frame or border; the icon sits in the exact centre and fills about 60–70% of the canvas HEIGHT, with even white space above and below and wide, equal white space left and right; light-mode treatment; only Burgundy, Medium Burgundy, Light Burgundy, Orange, Dark Orange, Soft Orange and Light Orange; no text, letters, numbers or logos.";
 const ICON_NEG="crystal-clear glass, chrome, mirror reflections, hard refraction, rainbow caustics, coloured glass outside the palette, opaque glass, all-glass icon with no gradient form, all-solid icon with no glass, coloured background, grey background, off-white background, beige background, gradient background, floor, ground plane, cast shadow on background, drop shadow, vignette, frame, border, text, letters, numbers, logo, watermark, brand symbol, photograph, people's faces, flat 2D vector, line icon, outline icon, clip art, cartoon, emoji, sticker, blue, green, purple, teal, yellow gold, chrome metal, clutter, multiple separate icons, sparkles, confetti, motion lines";
 function enforceIcon(p){
   let t=String(p||"").trim().replace(/\n*Material lock:[^\n]*/g,"").replace(/\n*Icon lock:[^\n]*/g,"").replace(/\n*Reference images[^\n]*/g,"");
-  if(!/^premium 3d/i.test(t)) t="Premium 3D glassmorphism brand icon illustration, square 1:1, isolated on a pure white background. "+t;
+  t=t.replace(/square 1:1/gi,"16:9 widescreen");
+  if(!/^premium 3d/i.test(t)) t="Premium 3D glassmorphism brand icon illustration, 16:9 widescreen, centred and isolated on a pure white background. "+t;
   /* Card stacks are locked: three cards, top frosted glass, middle and bottom BAE gradient */
   if(/\bcards?\b|بطاق/i.test($("brief").value+" "+t)&&/stack|layer|three|3|مكدس|ثلاث|cards\b/i.test($("brief").value+" "+t)&&!/Card stack lock:/.test(t))
     t+="\nCard stack lock: exactly three identical rounded cards stacked flat in isometric view with even gaps; the TOP card is frosted glassmorphism glass (see-through, background blur showing the gradient card below, thin light edge highlight, soft sheen, simple chip); the MIDDLE and BOTTOM cards are solid BAE gradient, Orange #FA6428 flowing into Burgundy #A33755; no text, numbers or logos.";
@@ -1130,7 +1134,7 @@ Reply in English with only JSON:
 async function writeIconPrompt(){
   stage(2,"active"); flash($("s2state"),"Writing the icon prompt…"); $("btnPrompt").disabled=true;
   try{
-    const o=await sample.json(`Write one production prompt for GPT 2.5 (image model) to render this Bank al Etihad icon.
+    const o=await sample.json(`Write one production prompt, used for both GPT 2.5 and Google Nano Banana 2.1, to render this Bank al Etihad icon in a 16:9 widescreen frame (icon centred, wide even white space left and right).
 ${ICON_RULES}
 
 Icon concept: ${JSON.stringify(S.analysis||{request:$("brief").value})}
@@ -1162,12 +1166,24 @@ async function whitenOut(o){
   }catch(e){ log("✕","white lock skipped",{message:String(e?.message||e)}); }
 }
 /* Exports at the BAE illustration sizes (S 96 · M 144 · L 192 · XL 256), on white */
-async function exportIcon(o,size){
+/* Square exports trim the 16:9 frame to the icon itself and keep a 1X exclusion margin (1/10 per side, 10×10 grid) */
+function iconBox(bmp){
+  const W=bmp.width,H=bmp.height,k=Math.min(1,800/Math.max(W,H)),w=Math.round(W*k),h=Math.round(H*k);
+  const c=document.createElement("canvas"); c.width=w; c.height=h; const x=c.getContext("2d"); x.drawImage(bmp,0,0,w,h);
+  const p=x.getImageData(0,0,w,h).data; let x0=w,y0=h,x1=-1,y1=-1;
+  for(let y=0;y<h;y++) for(let X=0;X<w;X++){ const i=(y*w+X)*4; if(p[i]<246||p[i+1]<246||p[i+2]<246){ if(X<x0)x0=X; if(X>x1)x1=X; if(y<y0)y0=y; if(y>y1)y1=y; } }
+  if(x1<0) return {x:0,y:0,w:W,h:H};
+  return {x:x0/k,y:y0/k,w:(x1-x0+1)/k,h:(y1-y0+1)/k};
+}
+async function exportIcon(o,size,modelLabel){
   try{
-    const bmp=await createImageBitmap(o.blob); const c=document.createElement("canvas"); c.width=c.height=size; const x=c.getContext("2d");
-    x.fillStyle="#FFFFFF"; x.fillRect(0,0,size,size); x.imageSmoothingQuality="high";
-    const k=Math.min(size/bmp.width,size/bmp.height), w=bmp.width*k, h=bmp.height*k; x.drawImage(bmp,(size-w)/2,(size-h)/2,w,h);
-    const blob=await new Promise(r=>c.toBlob(r,"image/png")); const name=`BAE_icon_${({96:"S",144:"M",192:"L",256:"XL",1024:"master"})[size]}_${size}.png`;
+    const bmp=await createImageBitmap(o.blob); const wide=size==="wide";
+    const c=document.createElement("canvas"); if(wide){ c.width=bmp.width; c.height=bmp.height; } else c.width=c.height=size; const x=c.getContext("2d");
+    x.fillStyle="#FFFFFF"; x.fillRect(0,0,c.width,c.height); x.imageSmoothingQuality="high";
+    if(wide) x.drawImage(bmp,0,0);
+    else { const b=iconBox(bmp), inner=size*0.8, k=Math.min(inner/b.w,inner/b.h), w=b.w*k, h=b.h*k; x.drawImage(bmp,b.x,b.y,b.w,b.h,(size-w)/2,(size-h)/2,w,h); }
+    const blob=await new Promise(r=>c.toBlob(r,"image/png")); const tag=String(modelLabel||"").replace(/\s+/g,"-");
+    const name=wide?`BAE_icon_${tag}_16x9.png`:`BAE_icon_${tag}_${({96:"S",144:"M",192:"L",256:"XL",1024:"master"})[size]}_${size}.png`;
     if(downloads&&!S.web) await downloads.save({filename:name,data:blob}); else { const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click(); }
   }catch(e){ if(e?.code!=="declined") flash($("s3state"),"Couldn't export that size: "+(e?.message||e?.code),true); }
 }
@@ -1182,12 +1198,13 @@ function setMode(m,init){
   document.querySelectorAll("#modeSeg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.mode===m?"true":"false"));
   const icon=m==="icon";
   $("heroTitle").textContent=icon?"Turn an idea into a BAE icon.":"Turn a brief into an on-brand 4K photograph.";
-  $("heroLede").textContent=icon?"Describe the icon. Claude designs it in the BAE illustration system (soft layered depth, translucent orange-to-burgundy gradients, one focal point) and GPT 2.5 renders it square, on pure white.":"Write what the photo should show. Claude reads it against the BAE photography rules and your references, writes the prompt, and Nano Banana 2.1 renders it in 4K.";
-  if(!S.web) $("heroSub").textContent=icon?"GPT 2.5 · 1:1 · white background · via Magnific":"Nano Banana 2.1 · native 4K · via Magnific";
+  $("heroLede").textContent=icon?"Describe the icon. Claude designs it in the BAE illustration system (glassmorphism over the orange-to-burgundy gradient, one focal point), and GPT 2.5 and Nano Banana 2.1 each render it in 16:9 on pure white so you can pick the best.":"Write what the photo should show. Claude reads it against the BAE photography rules and your references, writes the prompt, and Nano Banana 2.1 renders it in 4K.";
+  if(!S.web) $("heroSub").textContent=icon?"GPT 2.5 + Nano Banana 2.1 · 16:9 · white background · via Magnific":"Nano Banana 2.1 · native 4K · via Magnific";
   $("briefLbl").textContent=icon?"Icon idea":"Brief";
   $("btnCreate").textContent=icon?"Create icon":"Create image";
   $("presets").innerHTML=(icon?ICON_PRESETS:PHOTO_PRESETS).map(([l,b])=>`<button type="button" data-b="${esc(b)}">${esc(l)}</button>`).join("");
-  if(!S.web) $("mNanoName").textContent=icon?(S.gptName||"GPT 2.5")+" · via Magnific":(S.nanoName||"Nano Banana 2.1")+" · via Magnific";
+  if(!S.web) $("mNanoName").textContent=icon?`${S.gptName||"GPT 2.5"} + ${S.nanoName||"Nano Banana 2.1"} · via Magnific`:(S.nanoName||"Nano Banana 2.1")+" · via Magnific";
+  $("results").classList.toggle("one",!icon); $("rNano2").hidden=!icon;
   $("pNano").value=PROMPT_STASH[m]||""; $("pNano").placeholder=icon?"The icon prompt is written after the concept. You can edit it before generating.":"Written after the scene is described. You can edit it before generating.";
   $("promptLbl").textContent=icon?"GPT 2.5 icon prompt":"Nano Banana 2.1 prompt";
   if(icon){ S._photoPicked=S.picked.slice(); S.picked=S._iconPicked||PICK_ICON.slice(); S.refTab="ic"; }

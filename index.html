@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 </head>
 <body>
 <title>BAE Image Studio</title>
@@ -196,8 +196,12 @@ details.dna summary::after{content:"+";font-size:20px;color:var(--ink-light)} de
 .pill{font-size:12px;letter-spacing:.01em;padding:8px 12px;border-radius:999px;background:var(--orange-light);color:var(--ink-med);font-variant-numeric:tabular-nums}
 .pill.strong{background:var(--ink);color:var(--white)}
 .results{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+.results:not(.one){grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:760px){.results:not(.one){grid-template-columns:minmax(0,1fr)}}
 .result{display:flex;flex-direction:column;gap:12px;min-width:0}
-.result .head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.result .head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:nowrap;min-width:0}
+.result .head b{white-space:nowrap}
+.result .head .count{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .result .head b{font-size:18px;letter-spacing:-.02em}
 .frame{position:relative;width:100%;max-width:100%;max-height:72vh;margin-inline:auto;background:var(--stone-light);border-radius:16px;overflow:hidden;display:grid;place-items:center}
 .frame img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
@@ -322,7 +326,7 @@ details.log summary{cursor:pointer}
     </div>
     <div class="card only-icon">
       <div class="card-h"><div class="ttl"><h2 class="t18">Icon system</h2><span class="t12 light">Locked to the BAE illustration rules</span></div></div>
-      <div class="lockrow"><span class="ic" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/></svg></span><div><span class="t16">Square 1:1 on pure white</span><p class="t12 muted" style="margin-top:4px;line-height:1.3">The background is locked to #FFFFFF. After rendering, the page flood-fills the edges to exact white, so no grey, floor or shadow is left.</p></div></div>
+      <div class="lockrow"><span class="ic" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/></svg></span><div><span class="t16">16:9 on pure white</span><p class="t12 muted" style="margin-top:4px;line-height:1.3">The background is locked to #FFFFFF. After rendering, the page flood-fills the edges to exact white, so no grey, floor or shadow is left.</p></div></div>
       <ul class="t12 muted iconrules">
         <li>Glassmorphism + BAE gradient: a frosted, see-through glass element (blur, edge highlight, sheen) layered in front of a solid orange-to-burgundy form.</li><li>Card stacks: three cards, the top one glass, the middle and bottom ones BAE gradient.</li>
         <li>Isometric three-quarter view, soft rounded edges, gentle inner glow.</li>
@@ -343,7 +347,7 @@ details.log summary{cursor:pointer}
 
     <div class="card">
       <div class="card-h"><div class="ttl"><h2 class="t18">Output</h2><span class="t12 light">Size, count and model</span></div></div>
-      <div class="only-icon"><span class="lbl">Aspect ratio</span><span class="pill strong">1:1 · square · locked</span></div>
+      <div class="only-icon"><span class="lbl">Aspect ratio</span><span class="pill strong">16:9 · locked</span></div>
       <div class="only-photo">
         <div><label class="lbl" for="aspect">Aspect ratio</label>
           <select id="aspect">
@@ -374,7 +378,7 @@ details.log summary{cursor:pointer}
       <div class="only-photo"><label class="lbl" for="modeNano">Mode</label><select id="modeNano"><option value="">Default (loads when Magnific connects)</option></select></div>
       <div class="only-photo"><label class="lbl" for="selNano">Model</label><select id="selNano"><option value="">Nano Banana 2.1 (locked)</option></select></div>
       <div class="only-icon"><label class="lbl" for="modeIcon">Mode</label><select id="modeIcon"><option value="">Default (loads when Magnific connects)</option></select></div>
-      <div class="only-icon"><label class="lbl" for="selIcon">Model</label><select id="selIcon"><option value="">GPT 2.5 (locked)</option></select></div>
+      <div class="only-icon"><label class="lbl" for="selIcon">Model</label><select id="selIcon"><option value="">GPT 2.5 (locked)</option></select><span class="t12 light" style="display:block;margin-top:6px">Rendered alongside Nano Banana 2.1</span></div>
       <label class="check-l only-photo"><input type="checkbox" id="copySpace" checked> Leave even, clean space around the centred subject for copy and the gradient shape</label>
     </div>
 
@@ -441,7 +445,7 @@ details.log summary{cursor:pointer}
         <span class="pill strong">Centred</span>
         <span class="pill" id="mNanoName">Nano Banana 2.1 · via Magnific</span>
       </div>
-      <div class="results"><div class="result" id="rNano"></div></div>
+      <div class="results one" id="results"><div class="result" id="rNano"></div><div class="result" id="rNano2" hidden></div></div>
       <p class="note-ai">Per BAE guidelines (p.117), use AI imagery for tactical campaigns, rapid content and concept work. Keep evergreen hero imagery, core portraiture and real customer stories for commissioned photography, and check every output for accuracy and usage rights.</p>
     </article>
 
@@ -458,7 +462,7 @@ details.log summary{cursor:pointer}
         <div class="ttl"><h2 class="t24">Prompt</h2><span class="state" id="s2state">Written for Nano Banana 2.1. You can edit it before generating.</span></div>
         <button class="btn" type="button" id="btnPrompt" disabled>Rewrite prompt</button>
       </div>
-      <div class="locked only-icon"><span class="lbl">Always included</span><code>BAE illustration style</code><code>glassmorphism + BAE gradient</code><code>GPT 2.5</code><code>1:1 square</code><code>pure white #FFFFFF</code><code>no floor or shadow</code><code>illustration palette only</code><code>one focal point</code><code>no text or logo</code><code>light mode</code></div>
+      <div class="locked only-icon"><span class="lbl">Always included</span><code>BAE illustration style</code><code>glassmorphism + BAE gradient</code><code>GPT 2.5 + Nano Banana 2.1</code><code>16:9</code><code>pure white #FFFFFF</code><code>no floor or shadow</code><code>illustration palette only</code><code>one focal point</code><code>no text or logo</code><code>light mode</code></div>
       <div class="locked only-photo"><span class="lbl">Always included</span><code>professional photography</code><code>clean natural light</code><code>4K</code><code>no logos or text</code><code id="lookChip">bold &amp; colourful</code><code>no hijab / traditional dress</code><code>no orange clothing</code><code>retouched skin tone</code><code>iPhone 18</code><code>IKEA-style decor</code><code>centred subject</code><code id="setChip">on-location</code></div>
       <div><div class="mtag"><label for="pNano" id="promptLbl">Nano Banana 2.1 prompt</label></div><textarea class="prompt" id="pNano" placeholder="Written after the scene is described. You can edit it before generating." spellcheck="false"></textarea></div>
       <div class="checks" id="checks"></div>
