@@ -198,7 +198,7 @@ async function boot(){
   syncButtons();
 }
 function setClaude(k,t){ $("dotClaude").className="dot "+k; $("stClaude").textContent=t; }
-function setMag(k,t){ $("dotMag").className="dot "+k; $("stMag").textContent=t; }
+function setMag(k,t){ $("dotMag").className="dot "+k; $("stMag").textContent=t; syncSetup(); }
 
 /* ---------------- Magnific bridge ---------------- */
 async function callMag(tool,input){
@@ -282,6 +282,9 @@ const DONE=/^(completed?|succeeded|success|done|finished|ready)$/; const FAIL=/^
 
 /* ---------------- connect & model discovery ---------------- */
 $("btnConnect").onclick=()=>connect(false);
+$("setupMagBtn").onclick=()=>connect(false);
+$("setupLibBtn").onclick=()=>{ const w=$("libWrap"); w.open=true; w.scrollIntoView({behavior:"smooth",block:"center"}); };
+$("btnBrowse").onclick=()=>{ const b=$("refBrowse"), open=b.hidden; b.hidden=!open; $("btnBrowse").setAttribute("aria-expanded",String(open)); $("btnBrowse").textContent=open?"Hide library":"Browse all"; };
 async function connect(silent){
   if(S.web) return checkGemini(silent);
   if(!mcp) return;
@@ -414,7 +417,8 @@ Catalog:\n${ALL_REFS.map(r=>r.id+(r.studio?" [studio]":"")+": "+r.d).join("\n")}
 };
 async function refBlobs(){ const out=[]; for(const id of S.picked){ const r=refById(id); if(r?.blob){ out.push({id,blob:r.blob}); continue; } try{ const res=await fetch(`refs/${id}.jpg`); if(res.ok) out.push({id,blob:await res.blob()}); }catch{} } return out; }
 
-function flash(el,txt,bad){ el.textContent=txt; el.style.color=bad?"var(--warn)":""; }
+function flash(el,txt,bad){ el.textContent=txt; el.style.color=bad?"var(--warn)":"";
+  if(el&&/^s[123]state$/.test(el.id)){ const m=$("flowMsg"); if(m){ m.textContent=txt; m.classList.toggle("bad",!!bad); } } }
 function stage(n,cls){ const s=$("s"+n); s.classList.remove("active","done"); if(cls) s.classList.add(cls);
   /* top progress: Brief → Describe (s1) → Prompt (s2) → Image (s3) */
   const pg=$("pg"+(n+1)); if(pg){ pg.classList.remove("active","done"); if(cls) pg.classList.add(cls); }
@@ -541,7 +545,7 @@ function renderCard(key,st){
   const outs=st.outs||[]; const o=outs[st.sel||0];
   const res=o&&o.long?(o.long>=3800?`4K · ${o.long}px`:`${o.long}px`):"";
   el.innerHTML=`<div class="head"><b>${esc(m.label)}</b><span class="count">${esc(name)}</span></div>
-  <div class="frame ${st.busy?"busy":""}${isIconKey(key)?" iconframe":""}" style="aspect-ratio:${ratioCSS()}">${o?.img?`<img src="${o.img}" alt="Generated image ${(st.sel||0)+1} from ${esc(m.label)}">`:`${!o&&!st.busy?`<div class="ph-mosaic" aria-hidden="true">${S.picked.slice(0,3).map(id=>`<img src="${refById(id)?.src}" alt="">`).join("")}</div>`:""}<span class="ph-txt">${esc(o?"Magnific sent a link but not the image itself, and claude.ai blocks outside images inside pages. Open the PNG below to view or save it.":(st.ph||"Your image appears here"))}</span>`}${res?`<span class="badge">${esc(res)}</span>`:""}${st.busy?`<span class="elapsed" id="elapsed-${key}">${fmtTime(st.t0)}</span>`:""}</div>
+  <div class="frame ${st.busy?"busy":""}${isIconKey(key)?" iconframe":""}" style="aspect-ratio:${ratioCSS()}">${o?.img?`<img src="${o.img}" alt="Generated image ${(st.sel||0)+1} from ${esc(m.label)}">`:`${!o&&!st.busy?`<div class="ph-empty" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="6" y="10" width="36" height="28" rx="6"/><circle cx="18" cy="21" r="4"/><path d="M8 34l10-9 8 7 6-5 10 8"/></svg></div>`:""}<span class="ph-txt">${esc(o?"Magnific sent a link but not the image itself, and claude.ai blocks outside images inside pages. Open the PNG below to view or save it.":(st.ph||"Your image appears here"))}</span>`}${res?`<span class="badge">${esc(res)}</span>`:""}${st.busy?`<span class="elapsed" id="elapsed-${key}">${fmtTime(st.t0)}</span>`:""}</div>
   ${outs.length>1?`<div class="thumbs">${outs.map((x,i)=>`<button type="button" data-i="${i}" aria-pressed="${i===(st.sel||0)}" aria-label="Show image ${i+1}">${x.img?`<img src="${x.img}" alt="">`:i+1}</button>`).join("")}</div>`:""}
   <ol class="steps">${STEPS.map((s,i)=>`<li class="${st.steps?.[i]||""}">${s}${st.stepNote?.[i]?` · ${esc(st.stepNote[i])}`:""}</li>`).join("")}</ol>
   ${st.err?`<div class="msg">${esc(st.err)}</div>`:""}${st.refWarn?`<div class="msg info">${esc(st.refWarn)}</div>`:""}
@@ -611,7 +615,16 @@ function refRole(id,meta){
    so references are attached by their Magnific creation identifiers, matched by file name (bae_b114_1, yt04, r061…). */
 const LIB_KEY="bae_mag_ids_v1";
 try{ S.magIds=JSON.parse(localStorage.getItem(LIB_KEY)||"{}"); }catch{ S.magIds={}; }
-function libStatus(txt,kind){ const el=$("libState"); if(el){ el.textContent=txt; el.className="t12 "+(kind==="ok"?"ok-t":kind==="bad"?"bad-t":"muted"); } }
+setTimeout(syncSetup,0);
+function libStatus(txt,kind){ const el=$("libState"); if(el){ el.textContent=txt; el.className="t12 "+(kind==="ok"?"ok-t":kind==="bad"?"bad-t":"muted"); } syncSetup(); }
+/* Setup banner: shown only while Magnific isn't connected or the reference library isn't linked */
+function syncSetup(){ const box=$("setup"); if(!box) return;
+  if(S.web){ box.hidden=true; return; }
+  const magOk=$("dotMag").classList.contains("on"), libOk=Object.keys(S.magIds||{}).length>0;
+  $("setupMag").classList.toggle("done",magOk); $("setupLib").classList.toggle("done",libOk);
+  $("setupMagBtn").textContent=magOk?"Connected":"Connect"; $("setupMagBtn").disabled=magOk;
+  $("setupLibBtn").textContent=libOk?"Linked":"Set up"; $("setupLibBtn").disabled=libOk;
+  box.hidden=magOk&&libOk; }
 function libSummary(){ const n=Object.keys(S.magIds||{}).length; const total=ALL_REFS.filter(r=>r.set!=="user").length; return n?`${n} of ${total} references linked from your Magnific library.`:"Not linked yet. Upload the reference pack to a Magnific folder named “BAE References”, then press Link library."; }
 /* Names in the pack: bae_b114_1, yt04, r025 (Magnific may drop the .jpg) */
 /* Magnific can rewrite upload names ("bae b114 1", "Bae-B114-1", "bae_b114_1 (1)"), so each known
@@ -949,7 +962,7 @@ async function createAll(){
   if(!sample){ flash($("s1state"),"Claude is unavailable in this view. Open the page in claude.ai.",true); return; }
   const b=$("btnCreate"); b.disabled=true; b.textContent="Creating…";
   try{
-    $("s1").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"});
+    $("s3").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"});
     await describe();
     if(!$("pNano").value.trim()) return;
     if(!mcp){ flash($("s3state"),"Magnific isn't reachable in this view. Open the page in claude.ai.",true); return; }
@@ -1234,7 +1247,7 @@ const PHOTO_PRESETS=[...document.querySelectorAll("#presets button")].map(b=>[b.
 const PROMPT_STASH={photo:"",icon:""};
 function setMode(m,init){
   if(!init) PROMPT_STASH[S.mode]=$("pNano").value;
-  S.mode=m; try{ localStorage.setItem("bae_mode",m); }catch{}
+  const prev=S.mode; S.mode=m; try{ localStorage.setItem("bae_mode",m); }catch{}
   document.body.classList.toggle("mode-icon",m==="icon");
   document.querySelectorAll("#modeSeg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.mode===m?"true":"false"));
   const icon=m==="icon";
@@ -1248,8 +1261,9 @@ function setMode(m,init){
   $("results").classList.toggle("one",!icon); $("rNano2").hidden=!icon;
   $("pNano").value=PROMPT_STASH[m]||""; $("pNano").placeholder=icon?"The icon prompt is written after the concept. You can edit it before generating.":"Written after the scene is described. You can edit it before generating.";
   $("promptLbl").textContent=icon?"GPT 2.5 icon prompt":"Nano Banana 2.1 prompt";
-  if(icon){ S._photoPicked=S.picked.slice(); S.picked=S._iconPicked||PICK_ICON.slice(); S.refTab="ic"; }
-  else { S._iconPicked=S.picked.slice(); S.picked=S._photoPicked||S.picked.filter(id=>!/^ic_/.test(id)); if(S.refTab==="ic") S.refTab=S.look==="Bold"?"yt":"bae"; }
+  /* keep each service's own picks: only stash the picks of the mode we are actually leaving */
+  if(icon){ if(prev!=="icon") S._photoPicked=S.picked.filter(id=>!/^ic_/.test(id)); S.picked=(S._iconPicked&&S._iconPicked.some(id=>/^ic_/.test(id)))?S._iconPicked:PICK_ICON.slice(); S.refTab="ic"; }
+  else { if(prev==="icon") S._iconPicked=S.picked.slice(); S.picked=(S._photoPicked&&S._photoPicked.length?S._photoPicked:S.picked).filter(id=>!/^ic_/.test(id)); if(!S.picked.length) S.picked=PICK_BOLD.slice(); if(S.refTab==="ic") S.refTab=S.look==="Bold"?"yt":"bae"; }
   S.picked=S.picked.filter(id=>refById(id));
   if(icon){ try{ const saved=localStorage.getItem("bae_icon_brief"); $("brief").value=saved||ICON_PRESETS[0][1]; }catch{ $("brief").value=ICON_PRESETS[0][1]; } }
   else { try{ $("brief").value=localStorage.getItem("bae_brief")||DEFAULT_BRIEF; }catch{} }
@@ -1265,6 +1279,65 @@ function setMode(m,init){
   I.addEventListener("animationend",e=>{ if(e.target===I&&e.animationName==="introOut") done(); });
   I.addEventListener("click",()=>{ document.body.classList.add("intro-skip"); document.querySelectorAll(".landing .l-mark,.landing .l-mid h1,.landing .l-choice,.landing .l-foot").forEach(el=>el.style.animationDelay="0s"); });
   setTimeout(()=>{ if(I.isConnected) done(); },4000);
+})();
+/* Guided tour: spotlight + card, step by step. Opens by itself the first time someone enters the studio,
+   and any time from the Tutorial button. Skip, Esc, ← → work everywhere. */
+(function(){ const T=$("tour"); if(!T) return;
+  const KEY="bae_tour_v1", spot=$("tourSpot"), card=$("tourCard");
+  const icon=()=>S.mode==="icon";
+  const EMB='<svg viewBox="0 0 84.53 82.12" aria-hidden="true">'+(document.querySelector(".wordmark svg")?.innerHTML||"")+'</svg>';
+  const steps=[
+    {t:"Welcome to Studio", p:()=>"On-brand images in a few simple steps. This quick tour takes about a minute.", hero:true},
+    {el:()=>!$("setup").hidden?$("setup"):$("btnConnect"), t:"Connect once", p:()=>!$("setup").hidden?"Connect Magnific so the studio can render, then link your references. You only do this the first time.":"Magnific is connected. If it ever disconnects, press Reconnect here."},
+    {el:()=>$("modeSeg"), t:"Choose what to make", p:()=>"Photography makes 4K photos. Icons makes 3D BAE icons on white. You can switch any time."},
+    {el:()=>$("briefCard"), t:()=>icon()?"Describe the icon":"Describe the photo", p:()=>icon()?"Write the idea in a sentence, in Arabic or English, or tap an example like Cards stack.":"Write what the photo should show, in Arabic or English, or tap an example to start from."},
+    {el:()=>$("optCard"), t:"Pick a few options", p:()=>icon()?"Icons are already locked to 16:9 on pure white with glassmorphism and the BAE gradient. Just choose how many.":"Choose the look, setting, shot and size. Wardrobe, light, iPhone 18 and the centred subject are already locked to the BAE rules."},
+    {el:()=>$("refCard"), t:"References are ready", p:()=>"We pick BAE images that guide the camera and style, never the layout. Press Browse all to change them."},
+    {el:()=>$("btnCreate"), t:()=>icon()?"Create the icon":"Create the image", p:()=>icon()?"One press: Claude designs the icon, and GPT 2.5 and Nano Banana 2.1 both render it. It takes a minute or two.":"One press: Claude reads the brief, writes the prompt, and Nano Banana 2.1 renders it in 4K. It takes a minute or two."},
+    {el:()=>$("s3"), t:"Download it", p:()=>icon()?"Both icons appear side by side. Download the 16:9 PNG or the square S, M, L and XL sizes.":"Your image appears here. Download the 4K PNG, open it in Magnific, or create another."},
+    {el:()=>$("advWrap"), t:"Go deeper, if you like", p:()=>"Edit the prompt, rebuild from a photo, or read the locked rules. You never need this for a good result.", last:true},
+  ];
+  let i=0, raf=0;
+  const val=(v)=>typeof v==="function"?v():v;
+  function place(){
+    const s=steps[i], el=s.el?s.el():null, vw=innerWidth, vh=innerHeight, cw=card.offsetWidth, ch=card.offsetHeight, pad=10, mobile=vw<=620;
+    if(!el){ spot.classList.add("center"); card.style.left=(vw-cw)/2+"px"; card.style.top=Math.max(16,(vh-ch)/2)+"px"; return; }
+    spot.classList.remove("center");
+    const r=el.getBoundingClientRect(), x=Math.max(8,r.left-pad), y=Math.max(8,r.top-pad), w=Math.min(vw-16,r.width+pad*2), h=Math.min(vh-16,r.bottom+pad-y);
+    Object.assign(spot.style,{left:x+"px",top:y+"px",width:w+"px",height:h+"px",borderRadius:(h<70?999:22)+"px"});
+    if(mobile) return; // CSS docks the card to the bottom on phones
+    let top=r.bottom+pad+16, left=Math.min(Math.max(16,r.left),vw-cw-16);
+    if(top+ch>vh-16){ top=r.top-pad-16-ch; }
+    if(top<16){ top=Math.min(vh-ch-16,Math.max(16,r.top+24)); left=r.right+pad+16+cw<vw?r.right+pad+16:Math.max(16,r.left-cw-pad-16); if(left<16) left=vw-cw-16; }
+    card.style.left=left+"px"; card.style.top=top+"px";
+  }
+  function show(n){
+    i=Math.max(0,Math.min(steps.length-1,n)); const s=steps[i];
+    card.classList.add("swap");
+    const el=s.el?s.el():null;
+    if(el){ const r=el.getBoundingClientRect(); if(r.top<80||r.bottom>innerHeight-(innerWidth<=620?260:40)) el.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:innerWidth<=620?"start":"center"}); }
+    setTimeout(()=>{
+      $("tourN").textContent=(i+1)+" / "+steps.length;
+      $("tourTtl").textContent=val(s.t); $("tourTxt").textContent=val(s.p);
+      card.querySelector(".tour-hero")?.remove();
+      if(s.hero) $("tourTtl").insertAdjacentHTML("beforebegin",`<div class="tour-hero">${EMB}</div>`);
+      $("tourDots").innerHTML=steps.map((_,k)=>`<i class="${k===i?"on":""}"></i>`).join("");
+      $("tourBack").hidden=i===0;
+      $("tourNext").textContent=i===0?"Start tour":s.last?(icon()?"Start creating":"Start creating"):"Next";
+      place(); card.classList.remove("swap"); $("tourNext").focus({preventScroll:true});
+    }, el?380:60);
+  }
+  function open(){ T.hidden=false; document.body.style.overflow="hidden"; show(0); addEventListener("resize",onMove); addEventListener("scroll",onMove,true); }
+  function close(){ T.hidden=true; document.body.style.overflow=""; try{ localStorage.setItem(KEY,"1"); }catch{} removeEventListener("resize",onMove); removeEventListener("scroll",onMove,true); setTimeout(()=>$("brief").focus({preventScroll:true}),50); }
+  const onMove=()=>{ cancelAnimationFrame(raf); raf=requestAnimationFrame(place); };
+  $("tourNext").onclick=()=>{ if(steps[i].last){ close(); window.scrollTo({top:0,behavior:"smooth"}); } else show(i+1); };
+  $("tourBack").onclick=()=>show(i-1);
+  $("tourSkip").onclick=close;
+  $("btnTour").onclick=open;
+  T.addEventListener("keydown",e=>{ if(e.key==="Escape"){ e.preventDefault(); close(); } else if(e.key==="ArrowRight") $("tourNext").click(); else if(e.key==="ArrowLeft"&&i>0) show(i-1);
+    else if(e.key==="Tab"){ const f=[...card.querySelectorAll("button:not([hidden])")]; const k=f.indexOf(document.activeElement); if(e.shiftKey&&k<=0){ e.preventDefault(); f[f.length-1].focus(); } else if(!e.shiftKey&&k===f.length-1){ e.preventDefault(); f[0].focus(); } } });
+  /* first visit: start right after the visitor picks Photography or Icons on the landing */
+  document.querySelectorAll("#landing [data-enter=photo],#landing [data-enter=icon]").forEach(b=>b.addEventListener("click",()=>{ let seen=null; try{ seen=localStorage.getItem(KEY); }catch{} if(!seen) setTimeout(open,700); }));
 })();
 /* Gradient elements: 6 brand shapes, preview + full-res PNG download */
 const GRADS=[["circle_1","Circle 01","3700 × 3700"],["circle_2","Circle 02","3700 × 3700"],["lozenge_h_1","Lozenge horizontal 01","6400 × 3600"],["lozenge_h_2","Lozenge horizontal 02","6400 × 3600"],["lozenge_v_1","Lozenge vertical 01","2600 × 4400"],["lozenge_v_2","Lozenge vertical 02","2600 × 4400"]];

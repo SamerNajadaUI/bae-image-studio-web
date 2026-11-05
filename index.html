@@ -148,6 +148,81 @@ body.intro-on .landing .l-foot{animation-delay:2.95s}
 @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
 body.intro-skip .intro{animation-duration:.35s;animation-delay:0s}
 @media (prefers-reduced-motion:reduce){.intro{display:none}body.intro-on .landing *{animation:none!important}}
+
+/* ================= simplified flow (single column) ================= */
+.flow{display:flex;flex-direction:column;gap:16px;max-width:1120px;margin:0 auto 64px}
+.top .progress{display:none}
+.brief-card .progress{margin-top:16px;flex-wrap:wrap}
+.brief-card .progress li{box-shadow:none;background:var(--orange-light)}
+.flow-msg{margin:10px 0 0;min-height:16px;color:var(--ink-med);line-height:1.35}
+.flow-msg.bad{color:var(--warn)}
+.hero-copy{display:flex;flex-direction:column;gap:16px;justify-content:center}
+.hero-copy #heroSub{order:4}
+.setup{max-width:1120px;margin:16px auto 0;background:var(--white);border-radius:var(--r-card);box-shadow:var(--shadow);padding:20px 24px;display:flex;flex-wrap:wrap;align-items:center;gap:16px 32px;border:1px solid color-mix(in srgb,var(--orange) 30%,transparent)}
+.setup[hidden]{display:none}
+.setup-h{display:flex;flex-direction:column;gap:4px;min-width:200px}
+.setup-steps{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:12px 24px;flex:1}
+.setup-steps li{display:flex;align-items:center;gap:12px;flex:1;min-width:260px}
+.setup-steps li>div{display:flex;flex-direction:column;gap:2px;flex:1}
+.setup-steps .sn{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--orange-dark);color:var(--white);font-size:14px;flex:none}
+.setup-steps li.done .sn{background:var(--ink);font-size:0}
+.setup-steps li.done .sn::before{content:"✓";font-size:14px}
+.setup-steps li.done b{color:var(--ink-light)}
+.opts .opt-grid{display:grid;grid-template-columns:repeat(4,minmax(0,auto));gap:16px 24px;align-items:end;justify-content:start}
+.opts .opt-grid.only-icon{grid-template-columns:minmax(0,1fr)}
+@media (max-width:1040px){.opts .opt-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:620px){.opts .opt-grid{grid-template-columns:minmax(0,1fr)}}
+.opts .opt-grid select{min-width:220px}
+.icon-lock{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.icon-lock .pal{margin-inline-start:8px}
+.opt-row{display:flex;flex-wrap:wrap;gap:16px 32px;align-items:flex-end;margin-top:4px}
+details.more{flex:1;min-width:240px}
+details.more>summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:8px;font-size:16px;color:var(--ink-med);padding:10px 0}
+details.more>summary::-webkit-details-marker{display:none}
+details.more>summary::before{content:"+";display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--stone-light);color:var(--ink);font-size:16px}
+details.more[open]>summary::before{content:"–"}
+.more-in{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;padding-top:8px}
+details.lib>summary{flex-wrap:wrap}
+details.lib .libbox{margin-top:4px}
+.ghost{background:transparent}
+.frame .ph-empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--stone)}
+.frame .ph-empty svg{width:48px;height:48px;transform:translateY(-52px)}
+.frame .ph-empty~.ph-txt{transform:translateY(18px)}
+.adv{display:flex;flex-direction:column;gap:12px;margin-top:16px}
+.adv-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;margin:0 4px}
+details.acc{padding:0}
+details.acc>summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 24px}
+details.acc>summary::-webkit-details-marker{display:none}
+details.acc>summary::after{content:"+";flex:none;display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:var(--stone-light);font-size:18px;color:var(--ink);transition:transform .2s ease}
+details.acc[open]>summary::after{content:"–"}
+.acc-t{display:flex;flex-direction:column;gap:4px}
+.acc-in{padding:0 24px 24px;display:flex;flex-direction:column;gap:12px}
+.dna ul{margin:0}
+@media (max-width:620px){details.acc>summary{padding:16px}.acc-in{padding:0 16px 16px}.setup{padding:16px;margin-inline:16px}}
+.tour-btn span{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--orange-dark);color:var(--white);font-size:12px;margin-inline-end:2px}
+
+/* ================= guided tour ================= */
+.tour{position:fixed;inset:0;z-index:150}
+.tour[hidden]{display:none}
+.tour-spot{position:fixed;border-radius:20px;box-shadow:0 0 0 9999px rgba(25,24,30,.55),0 0 0 3px var(--orange),0 0 0 9px color-mix(in srgb,var(--orange) 25%,transparent);transition:left .45s cubic-bezier(.22,1,.36,1),top .45s cubic-bezier(.22,1,.36,1),width .45s cubic-bezier(.22,1,.36,1),height .45s cubic-bezier(.22,1,.36,1),border-radius .45s;pointer-events:none}
+.tour-spot.center{left:50%!important;top:50%!important;width:0!important;height:0!important;box-shadow:0 0 0 9999px rgba(25,24,30,.6)}
+.tour-card{position:fixed;width:min(380px,calc(100vw - 32px));background:var(--white);border-radius:24px;box-shadow:0 24px 64px rgba(25,24,30,.28);padding:24px;display:flex;flex-direction:column;gap:12px;transition:left .45s cubic-bezier(.22,1,.36,1),top .45s cubic-bezier(.22,1,.36,1),opacity .25s ease,transform .25s ease}
+.tour-card.swap{opacity:0;transform:translateY(6px)}
+.tour-card h3{margin:0;font-weight:400}
+.tour-card p{margin:0;line-height:1.45}
+.tour-top{display:flex;justify-content:space-between;align-items:center}
+.tour-n{font-size:12px;color:var(--ink-light);letter-spacing:.04em}
+.tour-skip{all:unset;cursor:pointer;font-size:12px;color:var(--ink-med);text-decoration:underline;text-underline-offset:3px}
+.tour-skip:focus-visible{outline:2px solid var(--orange-dark);outline-offset:3px;border-radius:4px}
+.tour-dots{display:flex;gap:6px}
+.tour-dots i{width:6px;height:6px;border-radius:99px;background:var(--stone);transition:width .3s ease,background .3s ease}
+.tour-dots i.on{width:22px;background:var(--orange-dark)}
+.tour-nav{display:flex;justify-content:space-between;gap:12px;margin-top:4px}
+.tour-nav .btn[hidden]{visibility:hidden;display:inline-flex}
+.tour-hero{display:grid;place-items:center;height:96px;border-radius:16px;background:radial-gradient(60% 90% at 70% 60%,var(--orange) 0%,var(--orange-med) 35%,var(--orange-light) 75%);margin-bottom:4px}
+.tour-hero svg{width:44px;fill:var(--white)}
+@media (max-width:620px){.tour-card{left:16px!important;right:16px;width:auto;top:auto!important;bottom:16px}}
+@media (prefers-reduced-motion:reduce){.tour-spot,.tour-card{transition:none}}
 /* ---------- landing ---------- */
 body.landing-on{overflow:hidden}
 .landing{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;background:var(--orange-light);isolation:isolate;overflow:auto;transition:opacity .4s ease,visibility .4s}
@@ -449,27 +524,34 @@ details.log summary{cursor:pointer}
 <header class="top">
   <div class="inner">
     <div class="wordmark" aria-label="Bank al Etihad Studio"><svg class="emblem" viewBox="0 0 84.53 82.12" role="img" aria-label="Bank al Etihad"><title>Bank al Etihad</title><path fill-rule="nonzero" d="M38.66 27.30C40.80 28.18 42.45 28.19 43.68 27.49C44.94 26.78 45.89 25.48 46.48 24.01C41.22 25.01 40.02 20.74 36.37 21.08C35.25 21.19 33.42 21.99 32.89 24.04C32.45 25.69 32.76 27.54 33.30 28.84C34.53 27.04 36.67 26.47 38.66 27.29"/><path fill-rule="nonzero" d="M37.97 11.05C35.57 10.99 33.41 12.69 32.43 15.23C31.59 17.39 31.48 19.70 31.46 20.54C33.57 17.07 37.75 17.05 40.73 19.40C42.29 20.63 44.36 21.67 46.58 21.31C48.83 20.94 50.39 19.39 51.64 18.02C47.71 17.88 45.34 16.32 43.09 13.84C41.69 12.31 40.22 11.09 37.97 11.04"/><path fill-rule="nonzero" d="M45.28 11.59C47.73 14.57 50.36 15.65 53.52 15.26C55.76 14.98 57.59 14.18 58.85 13.36C56.03 12.54 53.52 10.83 51.74 8.40L48.73 4.31C45.56 0.00 39.60 0.16 36.07 3.94C34.23 5.93 33.39 7.89 32.96 9.97C36.81 6.56 41.99 7.59 45.28 11.59"/><path fill-rule="nonzero" d="M28.12 35.91C30.15 34.80 31.19 33.52 31.40 32.13C31.63 30.70 31.19 29.16 30.41 27.79C27.92 32.50 23.81 30.77 21.81 33.81C21.19 34.75 20.68 36.67 21.96 38.36C22.99 39.73 24.64 40.65 26.00 41.04C25.34 38.96 26.24 36.94 28.12 35.91"/><path fill-rule="nonzero" d="M14.90 26.32C13.37 28.15 13.36 30.88 14.74 33.23C15.92 35.22 17.66 36.75 18.31 37.29C16.90 33.49 19.49 30.23 23.20 29.38C25.14 28.94 27.25 27.98 28.34 26.03C29.46 24.05 29.22 21.87 28.92 20.05C26.35 23.01 23.65 23.88 20.29 24.09C18.22 24.21 16.34 24.59 14.90 26.32"/><path fill-rule="nonzero" d="M19.89 20.97C23.76 20.93 26.25 19.56 27.91 16.86C29.09 14.95 29.60 13.03 29.74 11.53C27.34 13.21 24.42 14.10 21.41 13.97L16.31 13.76C10.94 13.53 7.35 18.26 8.13 23.36C8.54 26.03 9.56 27.90 10.92 29.53C10.64 24.41 14.69 21.03 19.89 20.97"/><path fill-rule="nonzero" d="M28.33 49.47C28.72 47.20 28.36 45.60 27.40 44.56C26.42 43.50 24.93 42.87 23.36 42.62C25.51 47.50 21.59 49.61 22.74 53.07C23.09 54.13 24.28 55.72 26.42 55.79C28.13 55.84 29.88 55.13 31.04 54.32C29.00 53.53 27.96 51.57 28.33 49.47"/><path fill-rule="nonzero" d="M12.53 53.76C13.02 56.09 15.16 57.81 17.87 58.19C20.18 58.52 22.47 58.12 23.30 57.95C19.43 56.68 18.48 52.63 20.12 49.22C20.98 47.44 21.54 45.20 20.69 43.13C19.83 41.03 17.96 39.87 16.34 38.96C17.07 42.80 16.08 45.44 14.15 48.18C12.96 49.87 12.08 51.57 12.54 53.76"/><path fill-rule="nonzero" d="M11.44 46.55C13.81 43.52 14.29 40.73 13.20 37.75C12.44 35.64 11.24 34.05 10.16 33.01C9.98 35.92 8.85 38.74 6.87 41.00L3.52 44.83C0.00 48.85 1.48 54.59 5.98 57.17C8.34 58.52 10.44 58.89 12.58 58.85C8.38 55.87 8.24 50.62 11.43 46.55"/><path fill-rule="nonzero" d="M39.12 57.76C37.58 56.04 36.09 55.33 34.68 55.42C33.23 55.52 31.82 56.29 30.64 57.35C35.82 58.72 35.04 63.08 38.47 64.35C39.52 64.74 41.53 64.81 42.90 63.19C44.01 61.89 44.55 60.09 44.63 58.68C42.73 59.78 40.55 59.36 39.12 57.76"/><path fill-rule="nonzero" d="M32.65 72.71C34.79 73.78 37.47 73.19 39.46 71.33C41.16 69.74 42.28 67.71 42.66 66.96C39.24 69.17 35.47 67.39 33.81 63.98C32.94 62.20 31.53 60.37 29.37 59.74C27.19 59.11 25.10 59.82 23.38 60.52C26.86 62.34 28.31 64.77 29.26 67.97C29.85 69.95 30.64 71.69 32.65 72.70"/><path fill-rule="nonzero" d="M26.29 69.06C25.39 65.33 23.49 63.22 20.47 62.20C18.34 61.49 16.34 61.43 14.84 61.61C17.02 63.57 18.54 66.20 19.09 69.15L20.01 74.14C20.99 79.38 26.42 81.81 31.26 79.92C33.79 78.93 35.39 77.53 36.69 75.84C31.73 77.25 27.51 74.09 26.30 69.06"/><path fill-rule="nonzero" d="M52.38 54.55C50.06 54.67 48.57 55.38 47.77 56.53C46.94 57.72 46.66 59.30 46.76 60.88C51.07 57.71 54.01 61.04 57.15 59.16C58.11 58.58 59.42 57.07 59.00 54.99C58.67 53.32 57.59 51.78 56.53 50.84C56.21 52.99 54.52 54.43 52.38 54.54"/><path fill-rule="nonzero" d="M60.10 68.89C62.28 67.90 63.49 65.44 63.26 62.74C63.07 60.43 62.17 58.30 61.82 57.53C61.43 61.57 57.67 63.39 53.96 62.55C52.02 62.12 49.70 62.07 47.86 63.36C45.99 64.66 45.26 66.73 44.73 68.50C48.34 66.94 51.15 67.31 54.26 68.58C56.18 69.36 58.05 69.83 60.10 68.89"/><path fill-rule="nonzero" d="M53.27 71.56C49.77 69.93 46.92 70.09 44.25 71.80C42.35 73.02 41.05 74.53 40.27 75.81C43.17 75.33 46.19 75.80 48.85 77.21L53.35 79.60C58.08 82.12 63.38 79.41 64.90 74.47C65.71 71.89 65.60 69.76 65.09 67.70C63.10 72.44 57.98 73.74 53.27 71.55"/><path fill-rule="nonzero" d="M58.11 42.24C56.77 44.12 56.39 45.72 56.80 47.07C57.22 48.45 58.29 49.65 59.59 50.55C59.79 45.23 64.24 45.02 64.72 41.41C64.86 40.30 64.49 38.35 62.60 37.37C61.07 36.59 59.19 36.47 57.79 36.70C59.29 38.29 59.36 40.50 58.12 42.24"/><path fill-rule="nonzero" d="M74.21 45.19C74.80 42.88 73.61 40.41 71.34 38.89C69.40 37.60 67.17 36.97 66.34 36.77C69.27 39.59 68.37 43.64 65.39 46.01C63.84 47.24 62.36 49.02 62.22 51.24C62.08 53.51 63.25 55.37 64.32 56.88C65.34 53.10 67.39 51.15 70.32 49.52C72.13 48.51 73.66 47.36 74.21 45.19"/><path fill-rule="nonzero" d="M72.05 52.15C68.59 53.86 66.94 56.17 66.62 59.32C66.39 61.55 66.77 63.50 67.29 64.91C68.72 62.36 70.97 60.30 73.74 59.12L78.43 57.11C83.36 55.01 84.53 49.20 81.60 44.94C80.07 42.71 78.33 41.46 76.39 40.58C78.88 45.07 76.71 49.87 72.05 52.16"/><path fill-rule="nonzero" d="M52.01 30.12C52.65 32.34 53.67 33.62 54.98 34.14C56.33 34.67 57.95 34.59 59.47 34.15C55.40 30.68 58.01 27.09 55.47 24.47C54.69 23.67 52.91 22.74 50.97 23.60C49.40 24.30 48.13 25.69 47.44 26.92C49.63 26.74 51.42 28.06 52.01 30.12"/><path fill-rule="nonzero" d="M64.36 19.44C62.91 17.55 60.22 16.93 57.62 17.75C55.39 18.45 53.51 19.80 52.84 20.31C56.88 19.79 59.50 23.02 59.51 26.81C59.51 28.78 59.99 31.04 61.66 32.54C63.35 34.06 65.54 34.31 67.40 34.42C65.06 31.28 64.81 28.47 65.36 25.17C65.69 23.13 65.74 21.23 64.37 19.45"/><path fill-rule="nonzero" d="M68.49 25.46C67.68 29.22 68.47 31.94 70.75 34.15C72.36 35.72 74.13 36.64 75.56 37.11C74.45 34.41 74.23 31.39 75.02 28.49L76.37 23.60C77.79 18.45 73.95 13.92 68.77 13.54C66.06 13.34 63.99 13.92 62.09 14.88C67.17 15.75 69.59 20.42 68.49 25.46"/></svg><span class="t24">Studio</span></div>
-    <ol class="progress" aria-label="Progress">
-      <li id="pg1" class="done" aria-label="Brief"><span>Brief</span></li><li id="pg2" aria-label="Describe"><span>Describe</span></li><li id="pg3" aria-label="Prompt"><span>Prompt</span></li><li id="pg4" aria-label="Image"><span>Image</span></li>
-    </ol>
     <div class="status" aria-live="polite">
       <span class="chip"><i class="dot" id="dotClaude"></i><span id="stClaude">Claude: checking</span></span>
       <span class="chip"><i class="dot" id="dotMag"></i><span id="stMag">Magnific: not connected</span></span>
       <button class="btn small" id="btnConnect" type="button">Connect Magnific</button>
+      <button class="btn small tour-btn" id="btnTour" type="button"><span aria-hidden="true">?</span> Tutorial</button>
     </div>
   </div>
 </header>
+
+<!-- one-time setup, shown only while something is missing -->
+<section class="setup" id="setup" hidden aria-label="Setup">
+  <div class="setup-h"><b class="t18">Before your first image</b><span class="t12 muted">Two quick steps, once.</span></div>
+  <ol class="setup-steps">
+    <li id="setupMag"><span class="sn">1</span><div><b>Connect Magnific</b><span class="t12 muted">So the studio can render your images.</span></div><button class="btn small primary" type="button" id="setupMagBtn">Connect</button></li>
+    <li id="setupLib"><span class="sn">2</span><div><b>Link your references</b><span class="t12 muted">So the BAE photos guide the camera and style.</span></div><button class="btn small" type="button" id="setupLibBtn">Set up</button></li>
+  </ol>
+</section>
 
 <section class="hero" aria-labelledby="heroTitle">
   <div class="grad" aria-hidden="true"><i class="g1"></i><i class="g2"></i><i class="g3"></i><i class="g4"></i><i class="veil"></i></div>
   <div class="hero-in">
     <div class="hero-copy">
       <div class="seg modeseg" id="modeSeg" role="group" aria-label="What to create"><button type="button" data-mode="photo" aria-pressed="true">Photography</button><button type="button" data-mode="icon" aria-pressed="false">Icons</button></div>
-      <span class="t12 muted" id="heroSub">Nano Banana 2.1 · native 4K · via Magnific</span>
       <h1 class="t40" id="heroTitle">Turn a brief into an on-brand 4K photograph.</h1>
       <p class="t16 muted" id="heroLede">Write what the photo should show. Claude reads it against the BAE photography rules and your references, writes the prompt, and Nano Banana 2.1 renders it in 4K.</p>
+      <span class="t12 muted" id="heroSub">Nano Banana 2.1 · native 4K · via Magnific</span>
     </div>
-    <div class="brief-card">
+    <div class="brief-card" id="briefCard">
       <div class="brief-meta"><label class="t18" for="brief" id="briefLbl">Brief</label><span class="count" id="briefCount"></span></div>
       <textarea id="brief" dir="auto" rows="4" aria-describedby="briefHint"></textarea>
       <div class="presets" id="presets" aria-label="Example briefs">
@@ -480,112 +562,140 @@ details.log summary{cursor:pointer}
       </div>
       <div class="create-row">
         <button class="btn primary" type="button" id="btnCreate">Create image</button>
-        <span class="t12 light" id="briefHint"><kbd>Ctrl</kbd> / <kbd>⌘</kbd> + <kbd>Enter</kbd> runs all three steps</span>
+        <span class="t12 light" id="briefHint"><kbd>Ctrl</kbd> / <kbd>⌘</kbd> + <kbd>Enter</kbd></span>
       </div>
+      <ol class="progress" aria-label="Progress">
+        <li id="pg1" class="done" aria-label="Brief"><span>Brief</span></li><li id="pg2" aria-label="Describe"><span>Describe</span></li><li id="pg3" aria-label="Prompt"><span>Prompt</span></li><li id="pg4" aria-label="Image"><span>Image</span></li>
+      </ol>
+      <p class="flow-msg t12" id="flowMsg" aria-live="polite"></p>
     </div>
   </div>
 </section>
 
-<div class="work">
-  <!-- ============ settings rail ============ -->
-  <aside class="rail" aria-label="Settings">
-    <div class="card" id="keysCard" hidden>
-      <div class="card-h"><div class="ttl"><h2 class="t18">API keys</h2><span class="t12 light">Stored only in this browser</span></div></div>
-      <div><label class="lbl" for="keyGemini">Google Gemini API key · required for Nano Banana 2.1</label><input type="password" id="keyGemini" autocomplete="off" spellcheck="false" placeholder="AIza…">
-        <p class="t12 light" style="margin-top:6px">Get one at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:var(--orange-dark)">aistudio.google.com/apikey</a></p></div>
-      <div><label class="lbl" for="keyAnthropic">Anthropic API key · optional, lets Claude describe and write the prompt</label><input type="password" id="keyAnthropic" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
-        <p class="t12 light" style="margin-top:6px">Get one at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style="color:var(--orange-dark)">console.anthropic.com</a></p></div>
-      <div class="btns"><button class="btn small primary" type="button" id="btnSaveKeys">Save keys</button><button class="btn small" type="button" id="btnForgetKeys">Remove keys</button><span class="t12 light" id="keysMsg" aria-live="polite"></span></div>
-      <p class="t12 muted" style="line-height:1.35">Keys never leave this device except to call Google and Anthropic directly. Image and text usage is billed to the account that owns each key. Use this page only on a computer you trust.</p>
-    </div>
-    <div class="card only-icon">
-      <div class="card-h"><div class="ttl"><h2 class="t18">Icon system</h2><span class="t12 light">Locked to the BAE illustration rules</span></div></div>
-      <div class="lockrow"><span class="ic" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/></svg></span><div><span class="t16">16:9 on pure white</span><p class="t12 muted" style="margin-top:4px;line-height:1.3">The background is locked to #FFFFFF. After rendering, the page flood-fills the edges to exact white, so no grey, floor or shadow is left.</p></div></div>
-      <ul class="t12 muted iconrules">
-        <li>Glassmorphism + BAE gradient: a frosted, see-through glass element (blur, edge highlight, sheen) layered in front of a solid orange-to-burgundy form.</li><li>Card stacks: three cards, the top one glass, the middle and bottom ones BAE gradient.</li>
-        <li>Isometric three-quarter view, soft rounded edges, gentle inner glow.</li>
-        <li>One focal point, up to two supporting elements, generous breathing room.</li>
-        <li>Illustration palette only: Burgundy, Medium and Light Burgundy, Orange, Dark, Soft and Light Orange.</li>
-        <li>No text, numbers, logos or the BAE symbol.</li>
-      </ul>
-      <div class="pal"><i style="background:#A33755" title="Burgundy"></i><i style="background:#B9516E" title="Medium Burgundy"></i><i style="background:#F1C0B6" title="Light Burgundy"></i><i style="background:#FA6428" title="Orange"></i><i style="background:#C13A23" title="Dark Orange"></i><i style="background:#FDCBB4" title="Soft Orange"></i><i style="background:#FFFAF4" title="Light Orange"></i></div>
-    </div>
-
-    <div class="card only-photo">
-      <div class="card-h"><div class="ttl"><h2 class="t18">Look and framing</h2><span class="t12 light">Wardrobe, place and shot</span></div></div>
+<div class="flow">
+  <!-- ============ quick options ============ -->
+  <section class="card opts" id="optCard" aria-labelledby="optTtl">
+    <div class="card-h"><div class="ttl"><h2 class="t24" id="optTtl">Options</h2><span class="state" id="optState">Everything else is already set to the BAE rules</span></div></div>
+    <div class="opt-grid only-photo">
       <div><span class="lbl">Look</span><div class="seg" data-key="look"><button type="button" data-v="Bold" aria-pressed="true">Bold &amp; colourful</button><button type="button" data-v="Calm" aria-pressed="false">Elegant &amp; calm</button></div></div>
       <div><span class="lbl">Setting</span><div class="seg" data-key="setting"><button type="button" data-v="On-location" aria-pressed="true">On-location</button><button type="button" data-v="Studio">Studio</button></div></div>
-      <div><span class="lbl">Shot type</span><div class="seg" data-key="shot"><button type="button" data-v="Extreme close-up">Extreme close-up</button><button type="button" data-v="Medium close-up" aria-pressed="true">Medium close-up</button><button type="button" data-v="Wide shot">Wide shot</button></div></div>
-      <div class="lockrow"><span class="ic" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M8 2v12M2 8h12"/></svg></span><div><span class="t16">Composition locked</span><p class="t12 muted" style="margin-top:4px;line-height:1.3">The person or group always sits in the middle of the frame, never left or right.</p></div></div>
+      <div><span class="lbl">Shot</span><div class="seg" data-key="shot"><button type="button" data-v="Extreme close-up">Close-up</button><button type="button" data-v="Medium close-up" aria-pressed="true">Medium</button><button type="button" data-v="Wide shot">Wide</button></div></div>
+      <div><label class="lbl" for="aspect">Size</label>
+        <select id="aspect">
+          <option value="auto">Auto · model picks</option>
+          <option value="16:9" selected>16:9 · Widescreen</option>
+          <option value="9:16">9:16 · Social story</option>
+          <option value="21:9">21:9 · Ultrawide</option>
+          <option value="3:4">3:4 · Traditional</option>
+          <option value="1:1">1:1 · Square</option>
+          <option value="4:5">4:5 · Social post</option>
+          <option value="5:4">5:4 · Landscape</option>
+          <option value="4:3">4:3 · Classic</option>
+          <option value="2:3">2:3 · Portrait</option>
+          <option value="3:2">3:2 · Standard</option>
+          <option value="10:16">10:16 · Portrait</option>
+          <option value="custom">Custom W × H</option>
+        </select></div>
     </div>
-
-    <div class="card">
-      <div class="card-h"><div class="ttl"><h2 class="t18">Output</h2><span class="t12 light">Size, count and model</span></div></div>
-      <div class="only-icon"><span class="lbl">Aspect ratio</span><span class="pill strong">16:9 · locked</span></div>
-      <div class="only-photo">
-        <div><label class="lbl" for="aspect">Aspect ratio</label>
-          <select id="aspect">
-            <option value="auto">Auto · model picks</option>
-            <option value="16:9" selected>16:9 · Widescreen</option>
-            <option value="9:16">9:16 · Social story</option>
-            <option value="21:9">21:9 · Ultrawide</option>
-            <option value="3:4">3:4 · Traditional</option>
-            <option value="1:1">1:1 · Square</option>
-            <option value="4:5">4:5 · Social post</option>
-            <option value="5:4">5:4 · Landscape</option>
-            <option value="4:3">4:3 · Classic</option>
-            <option value="2:3">2:3 · Portrait</option>
-            <option value="3:2">3:2 · Standard</option>
-            <option value="10:16">10:16 · Portrait</option>
-            <option value="custom">Custom W × H</option>
-          </select></div>
-      </div>
-      <div class="row" id="customWrap" hidden>
-        <div><label class="lbl" for="cw">Width px</label><input type="text" inputmode="numeric" id="cw" value="3840"></div>
-        <div><label class="lbl" for="ch">Height px</label><input type="text" inputmode="numeric" id="ch" value="2160"></div>
-      </div>
-      <div class="row">
-        <div><span class="lbl" id="countLbl">Images</span><div class="stepper" role="group" aria-labelledby="countLbl"><button type="button" id="cMinus" aria-label="Fewer images">−</button><output id="countOut">1</output><button type="button" id="cPlus" aria-label="More images">+</button><input type="hidden" id="count" value="1"></div></div>
-        <div class="only-photo"><label class="lbl" for="channel">Channel</label>
-          <select id="channel"><option>Social</option><option>Website</option><option>OOH</option><option>Print</option><option>App</option></select></div>
-      </div>
-      <div class="only-photo"><label class="lbl" for="modeNano">Mode</label><select id="modeNano"><option value="">Default (loads when Magnific connects)</option></select></div>
-      <div class="only-photo"><label class="lbl" for="selNano">Model</label><select id="selNano"><option value="">Nano Banana 2.1 (locked)</option></select></div>
-      <div class="only-icon"><label class="lbl" for="modeIcon">Mode</label><select id="modeIcon"><option value="">Default (loads when Magnific connects)</option></select></div>
-      <div class="only-icon"><label class="lbl" for="selIcon">Model</label><select id="selIcon"><option value="">GPT 2.5 (locked)</option></select><span class="t12 light" style="display:block;margin-top:6px">Rendered alongside Nano Banana 2.1</span></div>
-      <label class="check-l only-photo"><input type="checkbox" id="copySpace" checked> Leave even, clean space around the centred subject for copy and the gradient shape</label>
+    <div class="opt-grid only-icon">
+      <div class="icon-lock"><span class="pill strong">16:9 · pure white</span><span class="pill">Glassmorphism + BAE gradient</span><span class="pill">GPT 2.5 + Nano Banana 2.1</span>
+        <div class="pal" title="Illustration palette"><i style="background:#A33755" title="Burgundy"></i><i style="background:#B9516E" title="Medium Burgundy"></i><i style="background:#F1C0B6" title="Light Burgundy"></i><i style="background:#FA6428" title="Orange"></i><i style="background:#C13A23" title="Dark Orange"></i><i style="background:#FDCBB4" title="Soft Orange"></i><i style="background:#FFFAF4" title="Light Orange"></i></div></div>
     </div>
-
-    <div class="card">
-      <div class="card-h"><div class="ttl"><h2 class="t18">Image to describe</h2><span class="t12 light">Optional · rebuild a photo or sketch</span></div></div>
-      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose or drop an image to describe">
-        <img id="dropImg" alt="" hidden>
-        <div class="t" id="dropTxt">Drop a photo, sketch or screenshot, or click to choose one. Claude describes it and rebuilds it as a BAE photograph.</div>
-      </div>
-      <input type="file" id="file" accept="image/jpeg,image/png,image/webp" class="sr" tabindex="-1">
-      <label class="check-l"><input type="checkbox" id="useUpAsRef" checked> Also send it to Nano Banana 2.1 as a reference</label>
+    <div class="opt-row">
+      <div><span class="lbl" id="countLbl">How many</span><div class="stepper" role="group" aria-labelledby="countLbl"><button type="button" id="cMinus" aria-label="Fewer images">−</button><output id="countOut">1</output><button type="button" id="cPlus" aria-label="More images">+</button><input type="hidden" id="count" value="1"></div></div>
+      <details class="more" id="moreOpts">
+        <summary>More options</summary>
+        <div class="more-in">
+          <div class="row" id="customWrap" hidden>
+            <div><label class="lbl" for="cw">Width px</label><input type="text" inputmode="numeric" id="cw" value="3840"></div>
+            <div><label class="lbl" for="ch">Height px</label><input type="text" inputmode="numeric" id="ch" value="2160"></div>
+          </div>
+          <div class="only-photo"><label class="lbl" for="channel">Where it's used</label>
+            <select id="channel"><option>Social</option><option>Website</option><option>OOH</option><option>Print</option><option>App</option></select></div>
+          <div class="only-photo"><label class="lbl" for="modeNano">Quality mode</label><select id="modeNano"><option value="">Default (loads when Magnific connects)</option></select></div>
+          <div class="only-photo"><label class="lbl" for="selNano">Model</label><select id="selNano"><option value="">Nano Banana 2.1 (locked)</option></select></div>
+          <div class="only-icon"><label class="lbl" for="modeIcon">Quality mode</label><select id="modeIcon"><option value="">Default (loads when Magnific connects)</option></select></div>
+          <div class="only-icon"><label class="lbl" for="selIcon">Model</label><select id="selIcon"><option value="">GPT 2.5 (locked)</option></select><span class="t12 light" style="display:block;margin-top:6px">Rendered alongside Nano Banana 2.1</span></div>
+          <label class="check-l only-photo"><input type="checkbox" id="copySpace" checked> Leave clean space around the subject for copy</label>
+        </div>
+      </details>
     </div>
+  </section>
 
-    <div class="card">
-      <div class="card-h"><div class="ttl"><h2 class="t18">References</h2><span class="t12 light">Light, wardrobe and camera to follow</span></div><span class="count" id="refCount">0 / 6</span></div>
-      <div class="libbox" id="libBox">
-        <div class="t16">Magnific library</div>
-        <p id="libState" class="t12 muted">Not linked yet.</p>
-        <ol class="t12 muted libsteps"><li>Download the reference pack.</li><li>In Magnific, create a folder named <b>BAE References</b> and drag all the images into it. Keep the file names.</li><li>Press <b>Link library</b>. References are then attached as @img1, @img2… automatically.</li></ol>
-        <div class="btns"><button class="btn small" type="button" id="btnPack">Download reference pack</button><button class="btn small primary" type="button" id="btnLinkLib">Link library</button></div>
-      </div>
-      <div class="picked" id="picked" aria-label="Selected references"></div>
+  <!-- ============ result ============ -->
+  <article class="card" id="s3">
+    <div class="card-h">
+      <div class="ttl"><h2 class="t24" id="s3ttl">Your image</h2><span class="state" id="s3state">Native 4K at the highest quality, ready to download</span></div>
+      <button class="btn small" type="button" id="btnGen" disabled title="Render again from the prompt under Advanced">Render again</button>
+    </div>
+    <div class="genbar">
+      <span class="pill" id="aspectPill">16:9</span>
+      <span class="pill strong">4K</span>
+      <span class="pill" id="mNanoName">Nano Banana 2.1 · via Magnific</span>
+    </div>
+    <div class="results one" id="results"><div class="result" id="rNano"></div><div class="result" id="rNano2" hidden></div></div>
+    <p class="note-ai">AI imagery is for tactical campaigns, rapid content and concepts (BAE guidelines p.117). Check every image before use.</p>
+  </article>
+
+  <!-- ============ references ============ -->
+  <section class="card" id="refCard" aria-labelledby="refTtl">
+    <div class="card-h"><div class="ttl"><h2 class="t24" id="refTtl">References</h2><span class="state">Picked for you. They guide camera, light and style, never the layout.</span></div><span class="count" id="refCount">0 / 6</span></div>
+    <div class="picked" id="picked" aria-label="Selected references"></div>
+    <div class="btns"><button class="btn small" type="button" id="btnAuto">Auto-pick for this brief</button><button class="btn small" type="button" id="btnClearRefs">Clear</button><button class="btn small ghost" type="button" id="btnBrowse" aria-expanded="false" aria-controls="refBrowse">Browse all</button></div>
+    <div id="refBrowse" hidden>
       <div class="seg" id="refTabs"><button type="button" data-tab="ic" class="only-icon" aria-pressed="false">BAE icons</button><button type="button" data-tab="bae" class="only-photo" aria-pressed="false">BAE guideline</button><button type="button" data-tab="yt" class="only-photo" aria-pressed="true">Youth campaign</button><button type="button" data-tab="mj" class="only-photo" aria-pressed="false">Mari Juliano</button><button type="button" data-tab="user" aria-pressed="false">Your references</button></div>
       <p class="t12 muted" id="refHint" style="line-height:1.35"></p>
       <div class="btns" id="addRefWrap" hidden><label class="btn small" for="addRef">Add reference photos</label><input type="file" id="addRef" accept="image/jpeg,image/png,image/webp" multiple class="sr"><button class="btn small" type="button" id="btnDelUserRefs">Remove all of mine</button></div>
       <div class="refs" id="refs"></div>
-      <div class="btns"><button class="btn small" type="button" id="btnAuto">Auto-pick for this brief</button><button class="btn small" type="button" id="btnClearRefs">Clear</button></div>
     </div>
+    <details class="more lib" id="libWrap">
+      <summary>Magnific library <span class="t12 muted" id="libState">Not linked yet.</span></summary>
+      <div class="libbox" id="libBox">
+        <ol class="t12 muted libsteps"><li>Download the reference pack.</li><li>In Magnific, create a project named <b>BAE References</b> and drag all the images into it. Keep the file names.</li><li>Press <b>Link library</b>. References are then attached as @img1, @img2… automatically.</li></ol>
+        <div class="btns"><button class="btn small" type="button" id="btnPack">Download reference pack</button><button class="btn small primary" type="button" id="btnLinkLib">Link library</button></div>
+      </div>
+    </details>
+  </section>
 
-    <div class="card">
-      <details class="dna">
-        <summary><span class="ttl" style="display:flex;flex-direction:column;gap:4px"><span class="t18">Locked rules</span><span class="t12 light">Applied to every prompt</span></span></summary>
-        <ul>
+  <!-- ============ advanced ============ -->
+  <section class="adv" id="advWrap" aria-labelledby="advTtl">
+    <h2 class="t18 adv-h" id="advTtl">Advanced <span class="t12 muted">Optional. Open only if you want to go deeper.</span></h2>
+
+    <details class="card acc" id="accDrop">
+      <summary><span class="acc-t"><b class="t18">Rebuild from an image</b><span class="t12 muted">Drop a photo or sketch to recreate it the BAE way</span></span></summary>
+      <div class="acc-in">
+        <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose or drop an image to describe">
+          <img id="dropImg" alt="" hidden>
+          <div class="t" id="dropTxt">Drop a photo, sketch or screenshot, or click to choose one. Claude describes it and rebuilds it as a BAE photograph.</div>
+        </div>
+        <input type="file" id="file" accept="image/jpeg,image/png,image/webp" class="sr" tabindex="-1">
+        <label class="check-l"><input type="checkbox" id="useUpAsRef" checked> Also send it as a reference</label>
+      </div>
+    </details>
+
+    <details class="card acc" id="accScene">
+      <summary><span class="acc-t"><b class="t18">Scene</b><span class="t12 muted" id="s1state">How Claude reads your brief</span></span></summary>
+      <div class="acc-in" id="s1">
+        <div class="btns"><button class="btn small" type="button" id="btnDescribe">Describe again</button></div>
+        <div id="s1body"><div class="empty">The scene breakdown appears here: subject, setting, wardrobe, light, composition, depth and palette, with notes on how it meets the BAE photography principles.</div></div>
+      </div>
+    </details>
+
+    <details class="card acc" id="accPrompt">
+      <summary><span class="acc-t"><b class="t18">Prompt</b><span class="t12 muted" id="s2state">Edit it, then press Render again</span></span></summary>
+      <div class="acc-in" id="s2">
+        <div class="locked only-icon"><span class="lbl">Always included</span><code>BAE illustration style</code><code>glassmorphism + BAE gradient</code><code>GPT 2.5 + Nano Banana 2.1</code><code>16:9</code><code>pure white #FFFFFF</code><code>no floor or shadow</code><code>illustration palette only</code><code>one focal point</code><code>no text or logo</code><code>light mode</code></div>
+        <div class="locked only-photo"><span class="lbl">Always included</span><code>professional photography</code><code>clean natural light</code><code>4K</code><code>no logos or text</code><code id="lookChip">bold &amp; colourful</code><code>no hijab / traditional dress</code><code>no orange clothing</code><code>retouched skin tone</code><code>iPhone 18</code><code>IKEA-style decor</code><code>centred subject</code><code id="setChip">on-location</code></div>
+        <div><div class="mtag"><label for="pNano" id="promptLbl">Nano Banana 2.1 prompt</label></div><textarea class="prompt" id="pNano" placeholder="Written after the scene is described. You can edit it before generating." spellcheck="false"></textarea></div>
+        <div class="btns"><button class="btn small" type="button" id="btnPrompt" disabled>Rewrite prompt</button></div>
+        <div class="checks" id="checks"></div>
+      </div>
+    </details>
+
+    <details class="card acc">
+      <summary><span class="acc-t"><b class="t18">Locked rules</b><span class="t12 muted">Applied to every image automatically</span></span></summary>
+      <div class="acc-in">
+        <div class="only-photo dna"><ul>
           <li><b>Locked style.</b> Professional photography, clean natural light, native 4K.</li>
           <li><b>Look.</b> Bold &amp; colourful: Gen Z streetwear in saturated colour-block, low-angle wide camera, blue sky, hard sun, friends mid-laugh. Or Elegant &amp; calm: tailored, neutral tones.</li>
           <li><b>Wardrobe.</b> Modern and contemporary. No hijab, no headscarf, no traditional Arab clothing. No orange clothing on anyone.</li>
@@ -595,57 +705,22 @@ details.log summary{cursor:pointer}
           <li><b>Decor.</b> Modern Scandinavian, IKEA style: light oak, white walls, clean lines, no clutter.</li>
           <li><b>Composition lock.</b> The person or group is always centred.</li>
           <li><b>Studio lock.</b> Studio puts the shot on a BAE studio set, whatever place the brief names.</li>
-          <li><b>BAE principles.</b> Depth over flatness, clarity through focus, colour with warmth.</li>
           <li><b>Never.</b> Logos, readable text, watermarks, staged stock poses, heavy filters.</li>
-        </ul>
-        <div class="swatches">
-          <span class="sw"><i style="background:#FA6428"></i>Orange</span><span class="sw"><i style="background:#FDCBB4"></i>Soft</span><span class="sw"><i style="background:#ECE8DF"></i>Light Stone</span><span class="sw"><i style="background:#CCC3B4"></i>Stone</span><span class="sw"><i style="background:#19181E"></i>Ink</span><span class="sw"><i style="background:#A33755"></i>Burgundy</span><span class="sw"><i style="background:#32969B"></i>Teal</span>
-        </div>
-      </details>
-    </div>
-  </aside>
-
-  <!-- ============ workspace ============ -->
-  <section class="main" aria-label="Workspace">
-    <article class="card" id="s3">
-      <div class="card-h">
-        <div class="ttl"><h2 class="t24">Image</h2><span class="state" id="s3state">Native 4K at the highest quality, ready to download</span></div>
-        <button class="btn" type="button" id="btnGen" disabled>Generate from prompt</button>
+        </ul></div>
+        <div class="only-icon dna"><ul class="iconrules">
+          <li><b>16:9 on pure white.</b> The page flood-fills the edges to exact #FFFFFF, so no grey, floor or shadow is left.</li>
+          <li><b>Glassmorphism + BAE gradient.</b> A frosted, see-through glass element in front of a solid orange-to-burgundy form.</li>
+          <li><b>Card stacks.</b> Three cards: the top one glass, the middle and bottom ones BAE gradient.</li>
+          <li><b>Form.</b> Isometric three-quarter view, soft rounded edges, gentle inner glow, one focal point.</li>
+          <li><b>Never.</b> Text, numbers, logos or the BAE symbol.</li>
+        </ul></div>
       </div>
-      <div class="genbar">
-        <span class="pill" id="aspectPill">16:9</span>
-        <span class="pill strong">4K</span>
-        <span class="pill strong">High quality</span>
-        <span class="pill strong">Centred</span>
-        <span class="pill" id="mNanoName">Nano Banana 2.1 · via Magnific</span>
-      </div>
-      <div class="results one" id="results"><div class="result" id="rNano"></div><div class="result" id="rNano2" hidden></div></div>
-      <p class="note-ai">Per BAE guidelines (p.117), use AI imagery for tactical campaigns, rapid content and concept work. Keep evergreen hero imagery, core portraiture and real customer stories for commissioned photography, and check every output for accuracy and usage rights.</p>
-    </article>
+    </details>
 
-    <article class="card" id="s1">
-      <div class="card-h">
-        <div class="ttl"><h2 class="t24">Scene</h2><span class="state" id="s1state">Claude reads the brief, your image and the references</span></div>
-        <button class="btn" type="button" id="btnDescribe">Describe</button>
-      </div>
-      <div id="s1body"><div class="empty">The scene breakdown appears here: subject, setting, wardrobe, light, composition, depth and palette, with notes on how it meets the BAE photography principles.</div></div>
-    </article>
-
-    <article class="card" id="s2">
-      <div class="card-h">
-        <div class="ttl"><h2 class="t24">Prompt</h2><span class="state" id="s2state">Written for Nano Banana 2.1. You can edit it before generating.</span></div>
-        <button class="btn" type="button" id="btnPrompt" disabled>Rewrite prompt</button>
-      </div>
-      <div class="locked only-icon"><span class="lbl">Always included</span><code>BAE illustration style</code><code>glassmorphism + BAE gradient</code><code>GPT 2.5 + Nano Banana 2.1</code><code>16:9</code><code>pure white #FFFFFF</code><code>no floor or shadow</code><code>illustration palette only</code><code>one focal point</code><code>no text or logo</code><code>light mode</code></div>
-      <div class="locked only-photo"><span class="lbl">Always included</span><code>professional photography</code><code>clean natural light</code><code>4K</code><code>no logos or text</code><code id="lookChip">bold &amp; colourful</code><code>no hijab / traditional dress</code><code>no orange clothing</code><code>retouched skin tone</code><code>iPhone 18</code><code>IKEA-style decor</code><code>centred subject</code><code id="setChip">on-location</code></div>
-      <div><div class="mtag"><label for="pNano" id="promptLbl">Nano Banana 2.1 prompt</label></div><textarea class="prompt" id="pNano" placeholder="Written after the scene is described. You can edit it before generating." spellcheck="false"></textarea></div>
-      <div class="checks" id="checks"></div>
-    </article>
-
-    <article class="card" id="histCard">
-      <div class="card-h"><div class="ttl"><h2 class="t24">Recent</h2><span class="state">Your last images on this device, with their links</span></div><button class="btn small" type="button" id="btnClearHist">Clear</button></div>
-      <div class="history" id="history"></div>
-    </article>
+    <details class="card acc" id="histCard">
+      <summary><span class="acc-t"><b class="t18">Recent</b><span class="t12 muted">Your last images on this device</span></span></summary>
+      <div class="acc-in"><div class="btns"><button class="btn small" type="button" id="btnClearHist">Clear</button></div><div class="history" id="history"></div></div>
+    </details>
 
     <details class="log" id="logWrap">
       <summary><span class="t16">Connector log</span> <span class="count" id="logCount"></span></summary>
@@ -653,10 +728,31 @@ details.log summary{cursor:pointer}
       <div class="btns" style="margin-top:8px"><button class="btn small" type="button" id="btnCopyLog">Copy log</button><button class="btn small" type="button" id="btnClearLog">Clear</button></div>
       <div class="logbox" id="log"></div>
     </details>
+
+    <div class="card" id="keysCard" hidden>
+      <div class="card-h"><div class="ttl"><h2 class="t18">API keys</h2><span class="t12 light">Stored only in this browser</span></div></div>
+      <div><label class="lbl" for="keyGemini">Google Gemini API key · required for Nano Banana 2.1</label><input type="password" id="keyGemini" autocomplete="off" spellcheck="false" placeholder="AIza…">
+        <p class="t12 light" style="margin-top:6px">Get one at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:var(--orange-dark)">aistudio.google.com/apikey</a></p></div>
+      <div><label class="lbl" for="keyAnthropic">Anthropic API key · optional, lets Claude describe and write the prompt</label><input type="password" id="keyAnthropic" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
+        <p class="t12 light" style="margin-top:6px">Get one at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style="color:var(--orange-dark)">console.anthropic.com</a></p></div>
+      <div class="btns"><button class="btn small primary" type="button" id="btnSaveKeys">Save keys</button><button class="btn small" type="button" id="btnForgetKeys">Remove keys</button><span class="t12 light" id="keysMsg" aria-live="polite"></span></div>
+      <p class="t12 muted" style="line-height:1.35">Keys never leave this device except to call Google and Anthropic directly. Use this page only on a computer you trust.</p>
+    </div>
   </section>
 </div>
 </div>
 
+<!-- ============ guided tour ============ -->
+<div class="tour" id="tour" hidden>
+  <div class="tour-spot" id="tourSpot" aria-hidden="true"></div>
+  <div class="tour-card" id="tourCard" role="dialog" aria-modal="true" aria-labelledby="tourTtl" aria-describedby="tourTxt">
+    <div class="tour-top"><span class="tour-n" id="tourN">1 / 8</span><button type="button" class="tour-skip" id="tourSkip">Skip tutorial</button></div>
+    <h3 class="t24" id="tourTtl"></h3>
+    <p class="t16 muted" id="tourTxt"></p>
+    <div class="tour-dots" id="tourDots" aria-hidden="true"></div>
+    <div class="tour-nav"><button type="button" class="btn small" id="tourBack">Back</button><button type="button" class="btn small primary" id="tourNext">Next</button></div>
+  </div>
+</div>
 <div class="lightbox" id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Image preview"><img id="lbImg" alt="Generated image, full view"><button type="button" id="lbClose">Close</button></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
