@@ -1257,6 +1257,15 @@ function setMode(m,init){
   ["s1","s2","s3"].forEach(id=>$(id).classList.remove("active","done")); ["pg2","pg3","pg4"].forEach(id=>$(id).classList.remove("active","done"));
   $("s1body").innerHTML=`<div class="empty">${icon?"The icon concept appears here: main object, supporting elements, layering, colour map and angle, checked against the BAE illustration rules.":"The scene breakdown appears here: subject, setting, wardrobe, light, composition, depth and palette, with notes on how it meets the BAE photography principles."}</div>`; $("checks").innerHTML="";
 }
+/* Intro: emblem petals bloom, "Studio" rises, then the landing fades in. Click to skip. Runs on every visit. */
+(function(){ const I=$("intro"); if(!I) return;
+  if(matchMedia("(prefers-reduced-motion: reduce)").matches){ I.remove(); return; }
+  document.body.classList.add("intro-on");
+  const done=()=>{ I.remove(); setTimeout(()=>document.body.classList.remove("intro-on"),1400); };
+  I.addEventListener("animationend",e=>{ if(e.target===I&&e.animationName==="introOut") done(); });
+  I.addEventListener("click",()=>{ document.body.classList.add("intro-skip"); document.querySelectorAll(".landing .l-mark,.landing .l-mid h1,.landing .l-choice,.landing .l-foot").forEach(el=>el.style.animationDelay="0s"); });
+  setTimeout(()=>{ if(I.isConnected) done(); },4000);
+})();
 /* Gradient elements: 6 brand shapes, preview + full-res PNG download */
 const GRADS=[["circle_1","Circle 01","3700 × 3700"],["circle_2","Circle 02","3700 × 3700"],["lozenge_h_1","Lozenge horizontal 01","6400 × 3600"],["lozenge_h_2","Lozenge horizontal 02","6400 × 3600"],["lozenge_v_1","Lozenge vertical 01","2600 × 4400"],["lozenge_v_2","Lozenge vertical 02","2600 × 4400"]];
 (function(){ const G=$("gallery"), grid=$("gGrid"); if(!G||!grid) return;
