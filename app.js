@@ -467,7 +467,7 @@ Requirements:
 - Encode selective focus with one focal anchor${S.look==="Bold"?" (faces sharp)":" and the BAE warm palette"}.
 - State that the attached reference images guide light, colour grading, set style and candid energy only; do not copy their people, clothing, brands or exact scenes.
 - No logos, text, signage, watermarks.
-Format: one flowing descriptive paragraph that reads like a photographer's shot description, refers to references as "the attached reference images", 130-200 words.
+Format: one flowing descriptive paragraph that reads like a photographer's shot description, 130-200 words. Refer to the attached references by their tags, in this order: ${refPlan().map(r=>`${r.tag} (${r.use})`).join("; ")||"none attached"}. Example: "light and colour grade like @img1, wardrobe and low camera angle like @img2".
 Also return a checklist of 6-8 BAE rules with status "pass" or "note" and a 3-6 word label.
 
 Reply with only JSON: {"prompt_nano":"","negative":"comma list of things to avoid","checklist":[{"label":"","status":"pass"}]}`;
@@ -505,7 +505,7 @@ function renderCard(key,st){
   <div class="frame ${st.busy?"busy":""}" style="aspect-ratio:${ratioCSS()}">${o?.img?`<img src="${o.img}" alt="Generated image ${(st.sel||0)+1} from ${esc(m.label)}">`:`${!o&&!st.busy?`<div class="ph-mosaic" aria-hidden="true">${S.picked.slice(0,3).map(id=>`<img src="${refById(id)?.src}" alt="">`).join("")}</div>`:""}<span class="ph-txt">${esc(o?"Magnific sent a link but not the image itself, and claude.ai blocks outside images inside pages. Open the PNG below to view or save it.":(st.ph||"Your image appears here"))}</span>`}${res?`<span class="badge">${esc(res)}</span>`:""}${st.busy?`<span class="elapsed" id="elapsed-${key}">${fmtTime(st.t0)}</span>`:""}</div>
   ${outs.length>1?`<div class="thumbs">${outs.map((x,i)=>`<button type="button" data-i="${i}" aria-pressed="${i===(st.sel||0)}" aria-label="Show image ${i+1}">${x.img?`<img src="${x.img}" alt="">`:i+1}</button>`).join("")}</div>`:""}
   <ol class="steps">${STEPS.map((s,i)=>`<li class="${st.steps?.[i]||""}">${s}${st.stepNote?.[i]?` · ${esc(st.stepNote[i])}`:""}</li>`).join("")}</ol>
-  ${st.err?`<div class="msg">${esc(st.err)}</div>`:""}
+  ${st.err?`<div class="msg">${esc(st.err)}</div>`:""}${st.refWarn?`<div class="msg info">${esc(st.refWarn)}</div>`:""}
   <div class="btns">${o?.blob?`<button class="btn small primary" data-act="dl">Download ${/png/.test(o.blob.type)?"PNG":"image"}</button>`:""}${o?.url?`<a class="btn small ${o.blob?"":"primary"}" href="${esc(o.url)}" target="_blank" rel="noopener">Open ${o.long>=3800?"4K ":""}PNG</a><button class="btn small" data-act="copy">Copy link</button>`:""}${st.done||st.err?`<button class="btn small" data-act="regen">Regenerate</button>`:""}</div>
   ${o?.url?`<input type="text" readonly class="linkbox" id="link-${key}" value="${esc(o.url)}" aria-label="Image link">`:""}
   ${o?.links?.length>1?`<details class="links"><summary>All links from Magnific (${o.links.length})</summary>${o.links.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`).join("")}</details>`:""}`;
@@ -553,26 +553,49 @@ $("selNano").addEventListener("change",()=>loadOptions("nano"));
 
 $("btnGen").onclick=()=>generate(["nano"]);
 let refCache=null;
+/* What each reference is used for; the order here is the @img1, @img2… order sent to Magnific */
+function refRole(id,meta){
+  const set=id==="user-image"?"user-image":meta?.set;
+  return ({
+    "user-image":{role:"reference",use:"the user's own image: content and composition to rebuild"},
+    bae:{role:"style",use:meta?.studio?"BAE studio set, backdrop and soft directional light":"BAE light, depth, focus and colour grade"},
+    yt:{role:"style",use:"wardrobe, colour-block styling, low wide camera angle and energy"},
+    mj:{role:"style",use:"clean natural light and candid energy"},
+    user:{role:"style",use:"the user's reference for light, wardrobe and camera"}
+  })[set]||{role:"style",use:"style reference"};
+}
+function refPlan(){ const ids=[...(S.upload&&$("useUpAsRef").checked?["user-image"]:[]),...S.picked]; return ids.map((id,i)=>({id,tag:"@img"+(i+1),...refRole(id,refById(id))})); }
+function refLine(list){ return list.length?"Reference images: "+list.map(r=>`${r.tag} = ${r.use}`).join("; ")+". Use them for those qualities only; never copy their people, logos or orange clothing.":""; }
 async function uploadRefs(){
   const sig=S.picked.join(",")+"|"+(S.upload&&$("useUpAsRef").checked?S.upload.size:"");
-  if(refCache&&refCache.sig===sig) return refCache.list;
+  if(refCache&&refCache.sig===sig&&!refCache.errors.length) return refCache;
   const items=[]; if(S.upload&&$("useUpAsRef").checked) items.push({id:"user-image",blob:S.upload});
   (await refBlobs()).forEach(r=>items.push(r));
-  const list=[];
+  const list=[], errors=[];
   for(const it of items){
     try{
-      const plan=await buildArgs("creations_upload_image",`Upload one JPEG image named ${it.id}.jpg to the user's Magnific creations so it can be used as a reference image in image generation. Put the placeholder in the property that carries the image content.`,{filename:it.id+".jpg",mime_type:"image/jpeg",content:"__FILE__"});
+      const plan=await buildArgs("creations_upload_image",`Upload one JPEG image named ${it.id}.jpg to the user's Magnific creations so it can be used as a reference image (@img) in image generation. The image bytes MUST go in: put the placeholder string "__FILE__" (raw base64) as the value of the property that carries the image content, or "__FILE_DATAURL__" if that property expects a data: URL.`,{filename:it.id+".jpg",mime_type:"image/jpeg",content:"__FILE__"});
+      let pargs=plan.args;
+      /* Safety net: if Claude left out the placeholder, put it in the schema's content-like property */
+      if(!/__FILE(_DATAURL)?__/.test(JSON.stringify(pargs))){
+        const props=Object.keys(S.schemas.creations_upload_image?.inputSchema?.properties||{});
+        const k=props.find(p=>/base64|content|data|image|file/i.test(p)&&!/url|name|type|mime|folder/i.test(p));
+        if(k) pargs={...pargs,[k]:"__FILE__"}; else throw {code:"tool_error",message:"Couldn't find where creations_upload_image takes the image"};
+      }
       let val;
-      const usesDataUrl=JSON.stringify(plan.args).includes("__FILE_DATAURL__");
+      const usesDataUrl=JSON.stringify(pargs).includes("__FILE_DATAURL__");
       if(S.fileArgs&&!usesDataUrl) val={$file:{data:it.blob,name:it.id+".jpg",type:"image/jpeg"}};
-      else{ const b64=await toB64(it.blob); val=usesDataUrl?"data:image/jpeg;base64,"+b64:b64; }
-      let args=replaceDeep(plan.args,"__FILE__",val); args=replaceDeep(args,"__FILE_DATAURL__",val);
+      else{ const small=it.blob.size>700000?await toJpeg(it.blob,1280):it.blob; const b64=await toB64(small); val=usesDataUrl?"data:image/jpeg;base64,"+b64:b64; }
+      let args=replaceDeep(pargs,"__FILE__",val); args=replaceDeep(args,"__FILE_DATAURL__",val);
       const r=await callMag("creations_upload_image",args);
       let rr=readResult(r); if(!rr.ids.length&&!rr.urls.length) rr=await extractWithClaude(r,"the uploaded creation's identifier and url");
-      list.push({ref:it.id,id:rr.ids[0]||null,url:rr.urls[0]||null});
-    }catch(e){ log("✕","reference "+it.id+" skipped",{code:e?.code}); }
+      if(!rr.ids.length&&!rr.urls.length) throw {code:"tool_error",message:"Magnific accepted the upload but returned no identifier"};
+      const meta=it.id==="user-image"?{set:"user-image"}:(refById(it.id)||{});
+      list.push({ref:it.id,id:rr.ids[0]||null,url:rr.urls[0]||null,...refRole(it.id,meta)});
+    }catch(e){ const why=e?.code==="blocked_by_policy"?"creations_upload_image is Blocked in your Magnific tool permissions":(e?.message||e?.code||"unknown"); errors.push(`${it.id}: ${String(why).slice(0,140)}`); log("✕","reference "+it.id+" not uploaded",{code:e?.code,message:e?.message}); }
   }
-  refCache={sig,list}; return list;
+  list.forEach((x,i)=>x.tag="@img"+(i+1));
+  refCache={sig,list,errors}; return refCache;
 }
 function toB64(blob){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result).split(",")[1]); fr.onerror=rej; fr.readAsDataURL(blob); }); }
 async function modelDetails(id){
@@ -608,9 +631,11 @@ async function generate(keys){
   keys.forEach(k=>{ cards[k]={busy:true,t0,ph:"Uploading references to Magnific…",steps:["run"],stepNote:[]}; renderCard(k,cards[k]); });
   const tick=setInterval(()=>keys.forEach(k=>{ const e=$("elapsed-"+k); if(e) e.textContent=fmtTime(t0); }),1000);
   $("s3").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"});
-  let refs=[];
-  try{ refs=await uploadRefs(); }catch(e){ log("✕","references",e); }
-  keys.forEach(k=>{ const c=cards[k]; c.steps=[refs.length?"ok":"err"]; c.stepNote=[refs.length?`${refs.length} sent`:"none, prompt only"]; renderCard(k,c); });
+  let refs=[], upErr=[], wanted=S.picked.length+(S.upload&&$("useUpAsRef").checked?1:0);
+  try{ const u=await uploadRefs(); refs=u.list; upErr=u.errors; }catch(e){ log("✕","references",e); upErr=[String(e?.message||e?.code||e)]; }
+  keys.forEach(k=>{ const c=cards[k]; c.steps=[!wanted||refs.length===wanted?"ok":"err"];
+    c.stepNote=[!wanted?"none picked":`${refs.length} of ${wanted} attached${refs.length?" as "+refs.map(r=>r.tag).join(", "):""}`];
+    c.refWarn=upErr.length?`References not attached: ${upErr.join(" · ")}. Open the Connector log for details.`:""; renderCard(k,c); });
   flash($("s3state"),"Rendering with Nano Banana 2.1…");
   await Promise.allSettled(keys.map(k=>runModel(k,refs)));
   clearInterval(tick);
@@ -618,7 +643,10 @@ async function generate(keys){
   stage(3,ok?"done":undefined); flash($("s3state"),ok?`Finished in ${fmtTime(t0)}. Download, open the PNG or generate again.`:"Not generated. See the message under the image.",!ok); syncButtons();
 }
 async function runModel(key,refs){
-  const m=MODELS[key]; const c=cards[key]; const modelId=$(m.sel).value||null; if($(m.prompt).value.trim()) $(m.prompt).value=enforce($(m.prompt).value); const prompt=$(m.prompt).value.trim();
+  const m=MODELS[key]; const c=cards[key]; const modelId=$(m.sel).value||null; if($(m.prompt).value.trim()) $(m.prompt).value=enforce($(m.prompt).value);
+  /* Name the attached references in the prompt as @img1, @img2… in upload order */
+  if($(m.prompt).value.trim()) $(m.prompt).value=$(m.prompt).value.replace(/\n*Reference images:[^\n]*/g,"")+(refs.length?"\n"+refLine(refs):"");
+  const prompt=$(m.prompt).value.trim();
   const mode=$(m.mode).value||null; const count=Math.max(1,Math.min(4,+$("count").value||1)); const aspect=aspectVal();
   const up=()=>renderCard(key,c);
   try{
@@ -634,7 +662,7 @@ Quality: the highest available${P.best_quality?` ("${P.best_quality}"${P.quality
 ${mode?`Mode: "${mode}"${modeParam?` on setting "${modeParam}"`:""}.`:"Mode: model default."}
 Aspect ratio: ${typeof aspect==="string"?(aspect==="auto"?"auto (let the model choose)":aspect):`custom ${aspect.width}x${aspect.height} px`}.
 Number of images: ${count}.
-Attach every reference image in Data as style/composition references in the way the schema supports (identifiers or URLs). Fill the negative prompt field if the schema has one. Turn off any prompt auto-enhancement so the brand prompt stays as written.`,
+REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this order, so the first becomes @img1, the second @img2 and so on (the prompt refers to them by those tags). Use the schema's reference field(s) with the uploaded creation identifiers (or URLs if the schema takes URLs). If the schema has separate style / character / general reference slots, put role "style" items in the style slot, "character" items in the character slot and the rest in the general reference list, keeping the order. Do not drop any reference. Fill the negative prompt field if the schema has one. Turn off any prompt auto-enhancement so the brand prompt stays as written.`,
       {model:modelId, model_label:m.label, model_settings:opt.raw, prompt, negative_prompt:negativeNow(), composition:"person centred on the vertical centre line", setting:S.setting, aspect_ratio:aspect, resolution:P.res_4k||"4K", quality:P.best_quality||"high", mode, num_images:count, references:refs},"default");
     const r=await callMag("images_generate",plan.args);
     let rr=readResult(r); if(!rr.ids.length&&!rr.urls.length&&!rr.images.length) rr=await extractWithClaude(r,"the creation identifiers of the images being generated");
@@ -849,7 +877,9 @@ async function generateWeb(){
     const sendRefs=[]; for(const b of refs.slice(0,14)) sendRefs.push(b.size>3e6?await toJpeg(b,1600):b);
     c.steps=["ok","run"]; c.stepNote=[sendRefs.length?`${sendRefs.length} attached`:"none, prompt only"]; c.ph="Rendering in 4K…"; up();
     const count=Math.max(1,Math.min(4,+$("count").value||1)), aspect=geminiAspect();
-    const full=`${prompt}\n\nAvoid: ${negativeNow()}.`;
+    const plan=refPlan().slice(0,sendRefs.length);
+    $(m.prompt).value=$(m.prompt).value.replace(/\n*Reference images:[^\n]*/g,"")+(plan.length?"\n"+refLine(plan):"");
+    const full=`${$(m.prompt).value.trim()}\n\nAvoid: ${negativeNow()}.`;
     const res=await Promise.allSettled(Array.from({length:count},()=>geminiImage({model:S.geminiModel||GEMINI_DEFAULT,prompt:full,images:sendRefs,aspect,size:"4K"})));
     const okR=res.filter(x=>x.status==="fulfilled").map(x=>x.value);
     if(!okR.length) throw res[0].reason;
