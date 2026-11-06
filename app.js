@@ -85,6 +85,35 @@ const ICON_REFS=[
 ].map(([id,d])=>({id,d,src:`refs/${id}.jpg`,set:"ic",studio:false}));
 ALL_REFS.push(...ICON_REFS);
 const PICK_ICON=["ic_savings","ic_cards","ic_investments","ic_fraud_security"];
+/* Characters: identity references (face, hair, build). Named, renamable; naming one in the brief casts them. */
+const CHAR_REFS=[
+ ["ch_wissam","Wissam / وسام","man in his early thirties, dark side-parted hair, short stubble beard, warm brown eyes, athletic build"],
+ ["ch_lina","Lina / لينا","young woman, dark hair slicked back into a low braided ponytail, strong brows, grey-green eyes, slim build"],
+ ["ch_sara","Sara / سارة","woman around thirty, light-blonde hair in a low bun, light freckles, grey-blue eyes, slim build"],
+ ["ch_omar","Omar / عمر","man in his forties, heavy build, short brown swept-back hair, light stubble, grey-blue eyes"]
+].map(([id,name,d])=>({id,defName:name,d:"Character: "+d,look:d,src:`refs/${id}.jpg`,set:"ch",studio:false}));
+ALL_REFS.push(...CHAR_REFS);
+const CHAR_KEY="bae_char_names_v1";
+let CHAR_NAMES={}; try{ CHAR_NAMES=JSON.parse(localStorage.getItem(CHAR_KEY)||"{}"); }catch{}
+const charName=id=>(CHAR_NAMES[id]||refById(id)?.defName||id).trim();
+const charAliases=id=>charName(id).split("/").map(s=>s.trim()).filter(Boolean);
+const charLabel=id=>charAliases(id)[0]||id;
+const isChar=id=>/^ch_/.test(id);
+/* Characters named in the brief, in brief order */
+function castInBrief(){ const b=($("brief")?.value||"").toLowerCase();
+  return CHAR_REFS.map(r=>{ let at=-1; for(const n of charAliases(r.id)){ const k=b.indexOf(n.toLowerCase()); if(k>=0&&(at<0||k<at)) at=k; } return {id:r.id,at}; })
+    .filter(x=>x.at>=0).sort((x,y)=>x.at-y.at).map(x=>x.id); }
+/* Put named characters first in the references (they must reach the model), auto-removing ones the brief no longer names */
+function syncCast(){ if(S.mode==="icon") return;
+  const named=castInBrief(); S._autoCast=S._autoCast||[];
+  S.picked=S.picked.filter(id=>!(S._autoCast.includes(id)&&!named.includes(id)));
+  S._autoCast=S._autoCast.filter(id=>named.includes(id));
+  for(const id of named){ if(!S.picked.includes(id)){ S._autoCast.push(id); S.picked.unshift(id); } }
+  /* characters first, in the order the brief names them, then any tapped ones */
+  const chars=[...named,...S.picked.filter(id=>isChar(id)&&!named.includes(id))], rest=S.picked.filter(id=>!isChar(id));
+  S.picked=[...chars,...rest].slice(0,MAX_REFS); }
+function castText(){ const chars=refPlan().filter(r=>isChar(r.id)); if(!chars.length) return "";
+  return "CAST — these people are fixed characters; keep each one's exact identity (face, facial features, hairline and hairstyle, eye colour, skin tone, build): "+chars.map(r=>`${charLabel(r.id)} = ${r.tag} (${refById(r.id).look})`).join("; ")+". When the brief names a character, or describes a person of the same gender and age who is not otherwise named, that person IS the character. Characters keep their own look even where the generic people description would differ. Their clothing, pose and background in the reference are NOT used: dress them by the look rules for this scene."; }
 const MAX_REFS=6;
 
 /* ---------------- BAE guideline digest given to Claude ---------------- */
@@ -382,7 +411,8 @@ function pickModels(list){
 /* ---------------- UI: brief, segs, upload, refs ---------------- */
 const DEFAULT_BRIEF="Three young Jordanian friends laughing together on a rooftop terrace in modern Abdali, one showing the others her savings goal on her iPhone 18, bright afternoon sun and a clear blue sky behind them.";
 try{ const saved=localStorage.getItem("bae_brief"); $("brief").value=saved&&!/Jabal Amman, morning light through the window|tailored (camel|cream) blazer checks her savings/.test(saved)?saved:DEFAULT_BRIEF; }catch{ $("brief").value=DEFAULT_BRIEF; }
-$("brief").addEventListener("input",()=>{ if(S.mode!=="icon") try{ localStorage.setItem("bae_brief",$("brief").value);}catch{} countBrief(); });
+$("brief").addEventListener("input",()=>{ if(S.mode!=="icon") try{ localStorage.setItem("bae_brief",$("brief").value);}catch{} countBrief();
+  clearTimeout(S._castT); S._castT=setTimeout(()=>{ const before=S.picked.join(); syncCast(); if(S.picked.join()!==before) renderRefs(); },350); });
 function countBrief(){ $("briefCount").textContent=$("brief").value.trim().split(/\s+/).filter(Boolean).length+" words"; }
 countBrief();
 document.querySelectorAll(".seg[data-key]").forEach(seg=>seg.addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return; seg.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b?"true":"false")); S[seg.dataset.key]=b.dataset.v; if(seg.dataset.key==="setting"||seg.dataset.key==="look") onSetting(); }));
@@ -422,10 +452,15 @@ async function toJpeg(blob,max){
 }
 
 function renderRefs(){
-  const box=$("refs"); box.innerHTML="";
+  const box=$("refs"); box.innerHTML=""; box.classList.toggle("chars",S.refTab==="ch");
   ALL_REFS.filter(r=>r.set===S.refTab).forEach(r=>{ const b=document.createElement("button"); b.type="button"; b.className="ref"; b.title=r.d; b.setAttribute("aria-label",r.d);
     const i=S.picked.indexOf(r.id); b.setAttribute("aria-pressed",i>=0?"true":"false"); if(i>=0) b.dataset.n=i+1;
-    b.innerHTML=`<img src="${r.src}" alt="" loading="lazy">${r.studio?'<span class="tag">Studio</span>':r.set==="yt"?'<span class="tag">Youth</span>':r.set==="user"?'<span class="tag">Yours</span>':""}`;
+    b.innerHTML=`<img src="${r.src}" alt="" loading="lazy">${r.studio?'<span class="tag">Studio</span>':r.set==="yt"?'<span class="tag">Youth</span>':r.set==="user"?'<span class="tag">Yours</span>':r.set==="ch"?`<span class="tag ch">${esc(charLabel(r.id))}</span>`:""}`;
+    if(r.set==="ch"){ const w=document.createElement("div"); w.className="ch-card"; w.appendChild(b);
+      const inp=document.createElement("input"); inp.type="text"; inp.className="ch-name"; inp.value=charName(r.id); inp.setAttribute("aria-label","Character name, add other spellings after a slash"); inp.spellcheck=false;
+      inp.onchange=()=>{ const v=inp.value.trim(); if(v) CHAR_NAMES[r.id]=v; else delete CHAR_NAMES[r.id]; try{ localStorage.setItem(CHAR_KEY,JSON.stringify(CHAR_NAMES)); }catch{} syncCast(); renderRefs(); };
+      w.appendChild(inp); b.onclick=()=>{ const j=S.picked.indexOf(r.id); if(j>=0){ S.picked.splice(j,1); S._autoCast=(S._autoCast||[]).filter(x=>x!==r.id); } else if(S.picked.length<MAX_REFS) S.picked.unshift(r.id); renderRefs(); };
+      box.appendChild(w); return; }
     b.onclick=()=>{ const j=S.picked.indexOf(r.id); if(j>=0) S.picked.splice(j,1); else if(S.picked.length<MAX_REFS) S.picked.push(r.id); renderRefs(); };
     box.appendChild(b); });
   const nb=S.picked.filter(id=>refById(id)?.set==="bae").length;
@@ -434,7 +469,7 @@ function renderRefs(){
   const pk=$("picked"); pk.innerHTML="";
   if(!S.picked.length) pk.innerHTML='<span class="none">No references picked. Choose up to 6 below, or use Auto-pick.</span>';
   S.picked.forEach(id=>{ const r=refById(id); if(!r) return; const b=document.createElement("button"); b.type="button"; b.className="pk"; b.title="Remove: "+r.d; b.setAttribute("aria-label","Remove reference: "+r.d);
-    b.innerHTML=`<img src="${r.src}" alt="">`; b.onclick=()=>{ S.picked=S.picked.filter(x=>x!==id); renderRefs(); }; pk.appendChild(b); });
+    b.innerHTML=`<img src="${r.src}" alt="">${isChar(id)?`<span class="pk-name">${esc(charLabel(id))}</span>`:""}`; b.onclick=()=>{ S.picked=S.picked.filter(x=>x!==id); S._autoCast=(S._autoCast||[]).filter(x=>x!==id); renderRefs(); }; pk.appendChild(b); });
 }
 function syncTabs(){ document.querySelectorAll("#refTabs button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.tab===S.refTab?"true":"false"));
   $("addRefWrap").hidden=S.refTab!=="user";
@@ -443,7 +478,8 @@ function syncTabs(){ document.querySelectorAll("#refTabs button").forEach(b=>b.s
     user:"Your own reference photos, kept only on this device. Add licensed images that show the light, wardrobe or camera angle you want.",
     bae:"Photos from the Bank al Etihad guidelines. Picked frames go to Claude for style analysis and to Nano Banana 2.1 as references. Up to 6, from any set. Choosing Studio picks the BAE studio frames for you.",
     yt:"Youth campaign set: bold streetwear, low-angle wide camera, blue sky, hard sun and friends mid-laugh. Used for wardrobe, camera and energy; their logos and orange clothing are never copied.",
-    mj:"Mari Juliano lifestyle set, for clean natural light and candid energy. Mix with the other sets, up to 6 in total."})[S.refTab]; }
+    mj:"Mari Juliano lifestyle set, for clean natural light and candid energy. Mix with the other sets, up to 6 in total.",
+    ch:"Characters keep the same face in every image. Write a name in the brief (e.g. \"a young man like Wissam\") and that character is added automatically, or tap one to cast them. Rename under each photo; add other spellings after a slash."})[S.refTab]; }
 $("refTabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return; S.refTab=b.dataset.tab; syncTabs(); renderRefs(); });
 renderRefs(); syncTabs();
 $("btnClearRefs").onclick=()=>{ S.picked=[]; renderRefs(); };
@@ -454,8 +490,8 @@ $("btnAuto").onclick=async()=>{
     const o=await sample.json(`Pick 4 reference photos whose light, setting and energy best match this brief, for a Bank al Etihad photo. Brief: "${$("brief").value}". Setting: ${S.setting}. Shot: ${S.shot}.
 Look: ${S.look==="Bold"?"BOLD & COLOURFUL — pick at least 2 Youth campaign photos (ids starting \"yt\") for wardrobe and camera angle, plus at least 1 BAE photo":"ELEGANT & CALM — pick at least 2 BAE guideline photos (ids starting \"bae_\")"}.
 Rules: ${S.setting==="Studio"?"Setting is STUDIO: pick only photos marked [studio], then fill with BAE close-up/selective-focus frames.":"Setting is on-location: prefer BAE depth, focus and movement frames plus Mari Juliano frames with clean natural light."} Prefer frames where the person is centred.
-Catalog:\n${ALL_REFS.map(r=>r.id+(r.studio?" [studio]":"")+": "+r.d).join("\n")}\nReply with only a JSON array of 4 ids, e.g. ["yt04","yt06","bae_b108_2","r061"].`,{modelTier:"quick"});
-    if(Array.isArray(o)){ S.picked=o.map(String).filter(id=>refById(id)).slice(0,MAX_REFS); renderRefs(); }
+Catalog:\n${ALL_REFS.filter(r=>r.set!=="ch"&&r.set!=="ic").map(r=>r.id+(r.studio?" [studio]":"")+": "+r.d).join("\n")}\nReply with only a JSON array of 4 ids, e.g. ["yt04","yt06","bae_b108_2","r061"].`,{modelTier:"quick"});
+    if(Array.isArray(o)){ const cast=S.picked.filter(isChar); S.picked=[...cast,...o.map(String).filter(id=>refById(id)&&!isChar(id)&&!/^ic_/.test(id))].slice(0,MAX_REFS); renderRefs(); }
   }catch(e){ flash($("s1state"),sampleCopy(e),true); }
   finally{ b.disabled=false; b.textContent="Auto-pick for this brief"; }
 };
@@ -495,6 +531,7 @@ ${settingRule()}
 ${lookRule()}
 
 Brief (may be Arabic or English): "${$("brief").value}"
+${castText()}
 Setting: ${S.setting}. Shot type: ${S.shot}. Aspect ratio: ${aspectText()}. Channel: ${$("channel").value}. Copy space for gradient shape: ${$("copySpace").checked?"yes":"no"}.
 ${imgNote}
 ${S.upload?"First describe the user's image faithfully (subject, action, setting, framing), then rebuild it as a BAE photograph keeping its idea.":""}
@@ -537,7 +574,8 @@ ${lookRule()}
 
 Scene breakdown: ${JSON.stringify(S.analysis||{brief:$("brief").value})}
 Brief: "${$("brief").value}". Setting: ${S.setting}. Shot: ${S.shot}. Aspect ratio: ${aspectText()}. Output: native 4K, highest quality. Channel: ${$("channel").value}. Copy space for the gradient shape: ${$("copySpace").checked?"yes, keep calm, even space around the centred subject":"no"}.
-Reference images (${S.picked.length}) will be attached as STYLE references. What they show, for YOUR understanding of the photography only — never describe or reuse this content in the prompt: ${S.picked.map(id=>`${refById(id)?.set==="bae"?"BAE guideline":refById(id)?.set==="yt"?"Youth campaign":"Mari Juliano"} — ${refById(id)?.d}`).join("; ")}${S.upload&&$("useUpAsRef").checked?"; plus the user's own image as the first reference for content":""}.
+Reference images (${S.picked.length}) will be attached. Character references carry identity (see CAST). The others are STYLE references; what they show is for YOUR understanding of the photography only — never describe or reuse that content in the prompt: ${S.picked.filter(id=>!isChar(id)).map(id=>`${refById(id)?.set==="bae"?"BAE guideline":refById(id)?.set==="yt"?"Youth campaign":"Mari Juliano"} — ${refById(id)?.d}`).join("; ")}
+${castText()}${S.upload&&$("useUpAsRef").checked?"; plus the user's own image as the first reference for content":""}.
 
 Requirements:
 - Begin with exactly: "Professional photography, clean natural light."
@@ -549,7 +587,7 @@ Requirements:
 - Encode selective focus with one focal anchor${S.look==="Bold"?" (faces sharp)":" and the BAE warm palette"}.
 - REFERENCES ARE STYLE ONLY: you have seen them and understand their photography; carry over only camera height and angle, lens feel, depth of field, light quality, colour grade and the general kind of place. Invent a NEW scene: never write "same place/location/room/street as", "like the reference image", "recreate", "replicate" or anything that copies a reference's location, objects, people, poses, wardrobe or layout, and never describe what a reference shows. Wardrobe comes only from the look rules.
 - No logos, text, signage, watermarks.
-Format: one flowing descriptive paragraph that reads like a photographer's shot description, 130-200 words. Refer to the attached references only by their tags, in this order: ${refPlan().map(r=>r.tag).join(", ")||"none attached"}, and ONLY inside style clauses, for example "camera height and lens feel as in @img1, light and colour grade as in @img2". Never use a tag next to a place, person, object, outfit or layout. The composition is set by this prompt (subject centred).
+Format: one flowing descriptive paragraph that reads like a photographer's shot description, 130-200 words. Refer to the attached references only by their tags, in this order: ${refPlan().map(r=>r.tag).join(", ")||"none attached"}, and style tags ONLY inside style clauses, for example "camera height and lens feel as in @img2, light and colour grade as in @img3". Never use a style tag next to a place, person, object, outfit or layout. Character tags are the one exception: introduce each character once by name and tag, e.g. "Wissam (the man in @img1, same face, hair and build)", then describe his outfit from the look rules. The composition is set by this prompt (subject centred).
 Also return a checklist of 6-8 BAE rules with status "pass" or "note" and a 3-6 word label.
 
 Reply with only JSON: {"prompt_nano":"","negative":"comma list of things to avoid","checklist":[{"label":"","status":"pass"}]}`;
@@ -563,12 +601,14 @@ Reply with only JSON: {"prompt_nano":"","negative":"comma list of things to avoi
 }
 /* Drops sentences that ask the model to copy a reference literally ("same café as @img1", "recreate the reference room"),
    keeping style clauses ("light and colour grade as in @img2") and explicit prohibitions ("do not copy …"). */
+function castTags(){ try{ return refPlan().filter(r=>isChar(r.id)).map(r=>r.tag); }catch{ return []; } }
 function stripLiteralRefs(p){
   const parts=String(p||"").split(/(?<=[.!?])\s+/);
   const keep=parts.filter(s=>{
     const refy=/@img\d|\breference(s| image| photo)?\b/i.test(s);
     if(!refy) return true;
     if(/\b(do not|don't|never|not|no)\b/i.test(s)) return true;
+    if(castTags().some(t=>s.includes(t))||/\b(identity|same face)\b/i.test(s)&&!/\b(place|location|room|street|building)\b/i.test(s)) return true;
     const literal=/\b(same|identical|exact(ly)?|recreat\w*|replicat\w*|cop(y|ies|ying)|reproduc\w*|duplicat\w*|match(ing)? the (place|location|room|scene|setting))\b/i.test(s);
     const content=/\b(place|location|setting|room|scene|street|building|caf[eé]|office|home|kitchen|wall|furniture|sofa|desk|person|people|man|woman|outfit|clothing|wardrobe|pose|layout|composition|background)(?![a-z])/i.test(s);
     return !(literal&&content);
@@ -666,7 +706,8 @@ function refRole(id,meta){
     yt:{role:"image",use:"camera and photography style direction: low wide angle, lens feel, hard sunlight, saturated colour grade and styling energy"},
     mj:{role:"image",use:"photography style direction: clean natural light and colour"},
     user:{role:"image",use:"camera and photography style direction"},
-    ic:{role:"image",use:"BAE illustration style direction: translucent layered material, orange-to-burgundy gradient, soft rounded 3D forms, isometric angle and lighting"}
+    ic:{role:"image",use:"BAE illustration style direction: translucent layered material, orange-to-burgundy gradient, soft rounded 3D forms, isometric angle and lighting"},
+    ch:{role:"image",use:"character identity: "+charLabel(id)}
   })[set]||{role:"image",use:"camera and photography style direction"};
 }
 /* ---- Magnific reference library: images uploaded once to a Magnific folder named "BAE References" ----
@@ -815,8 +856,10 @@ function refPlan(){ const ids=[...(S.upload&&$("useUpAsRef").checked?["user-imag
 /* References steer the camera and the photographic style only, never the composition or the content */
 function refLine(list){
   if(S.mode==="icon") return list.length?"Reference images (BAE illustration style direction ONLY): "+list.map(r=>`${r.tag} = ${r.use}`).join("; ")+". Take only their material, translucency, orange-to-burgundy gradient, softness, isometric angle and lighting. Do NOT copy their objects, composition or any symbol, and do not reproduce any reference as is. The object and composition come only from this prompt.":"";
-  const tags=list.map(r=>r.tag).join(", ");
-  return list.length?`Reference images (photographic style ONLY): ${tags}. Study them only for camera height and angle, lens and focal-length feel, depth of field, light direction and quality, colour grade, and the general kind of place (modern, open, architectural). Recreate NOTHING literal from them: not the location, building, walls, furniture, objects, people, faces, poses, clothing, clothing colours, composition or framing. The scene is a new, different place; content and composition come only from this prompt.`:""; }
+  const key=r=>r.ref||r.id; /* uploaded refs carry the BAE id in .ref and the Magnific id in .id */
+  const chars=list.filter(r=>isChar(key(r))), style=list.filter(r=>!isChar(key(r))), tags=style.map(r=>r.tag).join(", ");
+  const castLine=chars.length?`Character references (identity): ${chars.map(r=>`${r.tag} = ${charLabel(key(r))}`).join(", ")}. Keep each character's exact face, facial features, hairline and hairstyle, eye colour, skin tone and build so they are clearly the same person. Use ONLY their identity: ignore the clothing, grey backdrop, pose and three-panel sheet layout in those images; dress them by the look rules. `:"";
+  return castLine+(!style.length?"":`Reference images (photographic style ONLY): ${tags}. Study them only for camera height and angle, lens and focal-length feel, depth of field, light direction and quality, colour grade, and the general kind of place (modern, open, architectural). Recreate NOTHING literal from them: not the location, building, walls, furniture, objects, people, faces, poses, clothing, clothing colours, composition or framing. The scene is a new, different place; content and composition come only from this prompt.`); }
 async function uploadRefs(){
   const sig=S.picked.join(",")+"|"+(S.upload&&$("useUpAsRef").checked?S.upload.size:"");
   if(refCache&&refCache.sig===sig&&!refCache.errors.length) return refCache;
@@ -908,7 +951,7 @@ async function generate(keys){
 async function runModel(key,refs){
   const m=MODELS[key]; const c=cards[key]; const modelId=$(m.sel).value||null; if($(m.prompt).value.trim()) $(m.prompt).value=enforce($(m.prompt).value);
   /* Name the attached references in the prompt as @img1, @img2… in upload order */
-  if($(m.prompt).value.trim()) $(m.prompt).value=$(m.prompt).value.replace(/\n*Reference images:[^\n]*/g,"")+(refs.length?"\n"+refLine(refs):"");
+  if($(m.prompt).value.trim()) $(m.prompt).value=$(m.prompt).value.replace(/\n*(Character references \(identity\)|Reference images)[^\n]*/g,"")+(refs.length?"\n"+refLine(refs):"");
   const prompt=$(m.prompt).value.trim();
   const mode=$(m.mode).value||null; const count=Math.max(1,Math.min(4,+$("count").value||1)); const aspect=aspectVal();
   const up=()=>renderCard(key,c);
@@ -1011,6 +1054,7 @@ async function save(key,o){
 /* ---------------- one-click flow, presets, history, lightbox ---------------- */
 $("btnCreate").onclick=createAll;
 async function createAll(){
+  if(S.mode!=="icon"){ syncCast(); renderRefs(); }
   if(S.web&&!getKey("gemini")){ openKeys(); flash($("s3state"),"Add your Google Gemini API key under API keys first.",true); return; }
   if(!$("brief").value.trim()&&!S.upload){ $("brief").focus(); flash($("s1state"),"Write a brief or add an image to describe first.",true); return; }
   /* Without an Anthropic key the web version writes the prompt from the brief and the locked rules */
@@ -1150,7 +1194,7 @@ async function generateWeb(){
     c.steps=["ok","run"]; c.stepNote=[sendRefs.length?`${sendRefs.length} attached`:"none, prompt only"]; c.ph="Rendering in 4K…"; up();
     const count=Math.max(1,Math.min(4,+$("count").value||1)), aspect=geminiAspect();
     const plan=refPlan().slice(0,sendRefs.length);
-    $(m.prompt).value=$(m.prompt).value.replace(/\n*Reference images:[^\n]*/g,"")+(plan.length?"\n"+refLine(plan):"");
+    $(m.prompt).value=$(m.prompt).value.replace(/\n*(Character references \(identity\)|Reference images)[^\n]*/g,"")+(plan.length?"\n"+refLine(plan):"");
     const full=`${$(m.prompt).value.trim()}\n\nAvoid: ${negativeNow()}.`;
     const res=await Promise.allSettled(Array.from({length:count},()=>geminiImage({model:S.geminiModel||GEMINI_DEFAULT,prompt:full,images:sendRefs,aspect,size:"4K"})));
     const okR=res.filter(x=>x.status==="fulfilled").map(x=>x.value);

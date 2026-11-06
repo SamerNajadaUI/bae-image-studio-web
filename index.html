@@ -201,6 +201,18 @@ details.acc[open]>summary::after{content:"–"}
 @media (max-width:620px){details.acc>summary{padding:16px}.acc-in{padding:0 16px 16px}.setup{padding:16px;margin-inline:16px}}
 .tour-btn span{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--orange-dark);color:var(--white);font-size:12px;margin-inline-end:2px}
 
+
+/* characters */
+.ch-card{display:flex;flex-direction:column;gap:6px}
+.refs.chars{grid-template-columns:repeat(2,minmax(0,1fr));max-height:none;gap:12px}
+@media (max-width:620px){.refs.chars{grid-template-columns:minmax(0,1fr)}}
+.ch-card .ref{aspect-ratio:16/9;width:100%}
+.ch-card .ref .tag.ch{display:none}
+.ch-name{font:inherit;font-size:12px;padding:6px 10px;border-radius:999px;border:1px solid var(--stone);background:var(--white);color:var(--ink);width:100%;box-sizing:border-box;text-align:center}
+.ch-name:focus-visible{outline:2px solid var(--orange-dark);outline-offset:2px}
+.ref .tag.ch{background:var(--ink);color:var(--white)}
+.pk{position:relative}
+.pk .pk-name{position:absolute;left:4px;right:4px;bottom:4px;font-size:10px;line-height:1.2;padding:2px 4px;border-radius:6px;background:color-mix(in srgb,var(--ink) 75%,transparent);color:var(--white);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* ================= guided tour ================= */
 .tour{position:fixed;inset:0;z-index:150}
 .tour[hidden]{display:none}
@@ -676,7 +688,7 @@ details.log summary{cursor:pointer}
     <div class="picked" id="picked" aria-label="Selected references"></div>
     <div class="btns"><button class="btn small" type="button" id="btnAuto">Auto-pick for this brief</button><button class="btn small" type="button" id="btnClearRefs">Clear</button><button class="btn small ghost" type="button" id="btnBrowse" aria-expanded="false" aria-controls="refBrowse">Browse all</button></div>
     <div id="refBrowse" hidden>
-      <div class="seg" id="refTabs"><button type="button" data-tab="ic" class="only-icon" aria-pressed="false">BAE icons</button><button type="button" data-tab="bae" class="only-photo" aria-pressed="false">BAE guideline</button><button type="button" data-tab="yt" class="only-photo" aria-pressed="true">Youth campaign</button><button type="button" data-tab="mj" class="only-photo" aria-pressed="false">Mari Juliano</button><button type="button" data-tab="user" aria-pressed="false">Your references</button></div>
+      <div class="seg" id="refTabs"><button type="button" data-tab="ic" class="only-icon" aria-pressed="false">BAE icons</button><button type="button" data-tab="ch" class="only-photo" aria-pressed="false">Characters</button><button type="button" data-tab="bae" class="only-photo" aria-pressed="false">BAE guideline</button><button type="button" data-tab="yt" class="only-photo" aria-pressed="true">Youth campaign</button><button type="button" data-tab="mj" class="only-photo" aria-pressed="false">Mari Juliano</button><button type="button" data-tab="user" aria-pressed="false">Your references</button></div>
       <p class="t12 muted" id="refHint" style="line-height:1.35"></p>
       <div class="btns" id="addRefWrap" hidden><label class="btn small" for="addRef">Add reference photos</label><input type="file" id="addRef" accept="image/jpeg,image/png,image/webp" multiple class="sr"><button class="btn small" type="button" id="btnDelUserRefs">Remove all of mine</button></div>
       <div class="refs" id="refs"></div>
