@@ -301,6 +301,29 @@ body.landing-on{overflow:hidden}
 @keyframes mSheen{to{background-position:0 0}}
 @keyframes mOut{from{transform:none;opacity:1}to{transform:translateY(-115%);opacity:0}}
 @media (prefers-reduced-motion:reduce){.a-m>span{transform:none;opacity:1}.a-text.v2play .a-m>span,.a-text.v2leave .a-m>span{animation:none}}
+
+/* ---------- animation direction: AE templates ---------- */
+.t-tools{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.t-sec{display:flex;flex-direction:column;gap:16px;margin-top:8px}
+.t-sec+.t-sec{margin-top:32px}
+.t-sec-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}
+.t-sec-h h3{margin:0;font-weight:400;font-size:24px;letter-spacing:-.01em}
+.t-sec-h span{font-size:12px;color:var(--ink-light)}
+.t-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.t-grid.portrait{grid-template-columns:repeat(4,minmax(0,1fr))}
+.t-grid.solo{grid-template-columns:minmax(0,2fr) minmax(0,1fr)}
+@media (max-width:1100px){.t-grid,.t-grid.portrait{grid-template-columns:repeat(2,minmax(0,1fr))}.t-grid.solo{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:620px){.t-grid,.t-grid.portrait{grid-template-columns:minmax(0,1fr)}}
+.t-card{background:var(--white);border-radius:24px;box-shadow:var(--shadow);padding:12px 12px 16px;display:flex;flex-direction:column;gap:12px}
+.t-vid{position:relative;border-radius:16px;overflow:hidden;background:var(--orange-light);cursor:zoom-in}
+.t-vid video{display:block;width:100%;height:100%;object-fit:cover}
+.t-vid .t-badge{position:absolute;left:10px;bottom:10px;padding:4px 10px;border-radius:999px;font-size:12px;background:color-mix(in srgb,var(--ink) 70%,transparent);color:var(--white);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.t-meta{display:flex;flex-direction:column;gap:4px;padding-inline:4px}
+.t-meta b{font-weight:400;font-size:18px;line-height:1.25}
+.t-meta small{font-size:12px;color:var(--ink-light)}
+.t-card .g-dl{margin-top:auto}
+details.live{margin-top:40px}
+details.live .a-bar{margin-top:4px}
 /* ---------- gradient elements gallery ---------- */
 .gallery{position:fixed;inset:0;z-index:101;background:var(--orange-light);overflow:auto;transition:opacity .35s ease,visibility .35s}
 .gallery[hidden]{display:block!important;opacity:0;visibility:hidden;pointer-events:none}
@@ -490,7 +513,7 @@ details.log summary{cursor:pointer}
         <button class="l-choice" type="button" data-enter="photo"><span class="row"><b>Photography</b><span class="l-arrow" aria-hidden="true">→</span></span><small>4K · Nano Banana 2.1</small></button>
         <button class="l-choice" type="button" data-enter="icon"><span class="row"><b>Icons</b><span class="l-arrow" aria-hidden="true">→</span></span><small>Glassmorphism · GPT 2.5 + Nano Banana 2.1</small></button>
         <button class="l-choice" type="button" id="openGallery"><span class="row"><b>Gradient elements</b><span class="l-arrow" aria-hidden="true">→</span></span><small>6 shapes · high-res PNG</small></button>
-        <button class="l-choice" type="button" id="openAnim"><span class="row"><b>Animation direction</b><span class="l-arrow" aria-hidden="true">→</span></span><small>Text motion · 16:9 Full HD</small></button>
+        <button class="l-choice" type="button" id="openAnim"><span class="row"><b>Animation direction</b><span class="l-arrow" aria-hidden="true">→</span></span><small>After Effects templates · EN + AR</small></button>
       </div>
     </div>
     <div class="l-foot">Bank al Etihad · Creative Studio</div>
@@ -498,18 +521,28 @@ details.log summary{cursor:pointer}
 </section>
 <section class="gallery anim" id="anim" hidden aria-label="Animation direction">
   <div class="g-in">
-    <div class="g-top"><button class="g-back" type="button" id="closeAnim"><i aria-hidden="true">←</i>Home</button></div>
-    <div class="g-head"><h2>Animation direction</h2><p id="aDesc">Word by word. Arabic slides right to left, English left to right.</p></div>
+    <div class="g-top"><button class="g-back" type="button" id="closeAnim"><i aria-hidden="true">←</i>Home</button>
+      <div class="t-tools"><div class="a-seg" role="group" aria-label="Template language"><button type="button" data-tlang="en" aria-pressed="true">English</button><button type="button" data-tlang="ar" aria-pressed="false">عربي</button></div>
+      <button class="g-all" type="button" id="tplAll">Download all (.zip)</button></div></div>
+    <div class="g-head"><h2>Animation direction</h2><p>BAE After Effects templates. Watch the preview, then download the template.</p></div>
+    <div id="tplWrap"></div>
+    <div class="g-note" id="tplNote" aria-live="polite"></div>
+    <details class="card acc live" id="liveWrap">
+      <summary><span class="acc-t"><b class="t18">Live text motion</b><span class="t12 muted">V1 and V2 word-by-word previews, 1920 × 1080</span></span></summary>
+      <div class="acc-in">
+        <p class="t16 muted" id="aDesc" style="margin:0">Word by word. Arabic slides right to left, English left to right.</p>
     <div class="a-bar">
-      <div class="a-seg" role="group" aria-label="Version"><button type="button" data-ver="v1" aria-pressed="true">V1</button><button type="button" data-ver="v2" aria-pressed="false">V2</button></div>
-      <div class="a-seg" role="group" aria-label="Language"><button type="button" data-lang="ar" aria-pressed="true">عربي</button><button type="button" data-lang="en" aria-pressed="false">English</button></div>
-      <div class="a-seg" role="group" aria-label="Shape" id="aShapeSeg"><button type="button" data-shape="circle_1" aria-pressed="true">Circle</button><button type="button" data-shape="lozenge_h_1" aria-pressed="false">Lozenge</button><button type="button" data-shape="none" aria-pressed="false">None</button></div>
-      <button class="a-btn" type="button" id="aReplay">Replay</button>
-      <button class="a-btn" type="button" id="aPause" aria-pressed="false">Pause</button>
-      <button class="a-btn" type="button" id="aFull">Full screen</button>
-      <span class="a-spec">1920 × 1080 · 16:9</span>
-    </div>
-    <div class="a-wrap" id="aWrap"><div class="a-stage" id="aStage"><canvas class="a-canvas" id="aCanvas" width="1920" height="1080" aria-hidden="true"></canvas><div class="a-shape" id="aShape"><img alt="" id="aShapeImg"></div><div class="a-text" id="aText"></div></div></div>
+          <div class="a-seg" role="group" aria-label="Version"><button type="button" data-ver="v1" aria-pressed="true">V1</button><button type="button" data-ver="v2" aria-pressed="false">V2</button></div>
+          <div class="a-seg" role="group" aria-label="Language"><button type="button" data-lang="ar" aria-pressed="true">عربي</button><button type="button" data-lang="en" aria-pressed="false">English</button></div>
+          <div class="a-seg" role="group" aria-label="Shape" id="aShapeSeg"><button type="button" data-shape="circle_1" aria-pressed="true">Circle</button><button type="button" data-shape="lozenge_h_1" aria-pressed="false">Lozenge</button><button type="button" data-shape="none" aria-pressed="false">None</button></div>
+          <button class="a-btn" type="button" id="aReplay">Replay</button>
+          <button class="a-btn" type="button" id="aPause" aria-pressed="false">Pause</button>
+          <button class="a-btn" type="button" id="aFull">Full screen</button>
+          <span class="a-spec">1920 × 1080 · 16:9</span>
+        </div>
+        <div class="a-wrap" id="aWrap"><div class="a-stage" id="aStage"><canvas class="a-canvas" id="aCanvas" width="1920" height="1080" aria-hidden="true"></canvas><div class="a-shape" id="aShape"><img alt="" id="aShapeImg"></div><div class="a-text" id="aText"></div></div></div>
+      </div>
+    </details>
   </div>
 </section>
 <section class="gallery" id="gallery" hidden aria-label="Gradient elements">

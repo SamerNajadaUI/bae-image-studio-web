@@ -1399,6 +1399,52 @@ const GRADS=[["circle_1","Circle 01","3700 × 3700"],["circle_2","Circle 02","37
   $("openGallery").addEventListener("click",open); $("closeGallery").addEventListener("click",close);
   document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&!G.hidden&&!document.querySelector(".lightbox:not([hidden])")) close(); });
 })();
+/* Animation direction: BAE After Effects templates (EN + AR), each with a looping video preview and a template download */
+const TPL={"cats": [{"key": "rules", "name": "Motion rules", "sub": "Read this first"}, {"key": "loops", "name": "Gradient loops", "sub": "1920 × 1080 · seamless loops"}, {"key": "breakdown", "name": "Gradient breakdown", "sub": "How the BAE gradient is built"}, {"key": "kinetic", "name": "Typography · Kinetic", "sub": "Header and sub-header in and out"}, {"key": "effects", "name": "Typography · Effects", "sub": "Gradient + type, 1080 × 1350 post"}, {"key": "frames", "name": "Frame gradients", "sub": "1200 ms frame reveals, 1080 × 1350"}], "items": [{"id": "en-read-me-motion-rules", "lang": "en", "cat": "rules", "title": "Motion rules", "file": "00 - READ ME - Motion Rules", "w": 1920, "h": 1080, "dur": 10}, {"id": "en-bae-gradient-6s-loop", "lang": "en", "cat": "loops", "title": "6s Loop", "file": "BAE Gradient - 6s Loop", "w": 1920, "h": 1080, "dur": 6}, {"id": "en-bae-gradient-8s-loop", "lang": "en", "cat": "loops", "title": "8s Loop", "file": "BAE Gradient - 8s Loop", "w": 1920, "h": 1080, "dur": 8}, {"id": "en-bae-gradient-15s-loop", "lang": "en", "cat": "loops", "title": "15s Loop", "file": "BAE Gradient - 15s Loop", "w": 1920, "h": 1080, "dur": 15}, {"id": "en-bae-gradient-30s-loop", "lang": "en", "cat": "loops", "title": "30s Loop", "file": "BAE Gradient - 30s Loop", "w": 1920, "h": 1080, "dur": 30}, {"id": "en-bae-gradient-breakdown-1-schematic", "lang": "en", "cat": "breakdown", "title": "Breakdown 1 (Schematic)", "file": "BAE Gradient - Breakdown 1 (Schematic)", "w": 1920, "h": 1080, "dur": 30}, {"id": "en-bae-gradient-breakdown-2-final-result", "lang": "en", "cat": "breakdown", "title": "Breakdown 2 (Final Result)", "file": "BAE Gradient - Breakdown 2 (Final Result)", "w": 1920, "h": 1080, "dur": 30}, {"id": "en-bae-type-kinetic-in-out-header-sub-header", "lang": "en", "cat": "kinetic", "title": "Kinetic IN & OUT (Header + Sub-header)", "file": "BAE Type - Kinetic IN & OUT (Header + Sub-header)", "w": 1920, "h": 1080, "dur": 8}, {"id": "en-bae-post-gradient-type-1080x1350", "lang": "en", "cat": "effects", "title": "Gradient + Type (1080x1350)", "file": "BAE Post - Gradient + Type (1080x1350)", "w": 1080, "h": 1350, "dur": 8}, {"id": "en-frame-reveal-1200ms-opacity", "lang": "en", "cat": "frames", "title": "Frame Reveal - 1200ms (Opacity)", "file": "Frame Reveal - 1200ms (Opacity)", "w": 1080, "h": 1350, "dur": 3}, {"id": "en-frame-reveal-1200ms-position", "lang": "en", "cat": "frames", "title": "Frame Reveal - 1200ms (Position)", "file": "Frame Reveal - 1200ms (Position)", "w": 1080, "h": 1350, "dur": 3}, {"id": "ar-read-me-motion-rules", "lang": "ar", "cat": "rules", "title": "Motion rules", "file": "00 - AR - READ ME - Motion Rules", "w": 1920, "h": 1080, "dur": 10}, {"id": "ar-bae-gradient-6s-loop", "lang": "ar", "cat": "loops", "title": "6s Loop", "file": "AR - BAE Gradient - 6s Loop", "w": 1920, "h": 1080, "dur": 6}, {"id": "ar-bae-gradient-8s-loop", "lang": "ar", "cat": "loops", "title": "8s Loop", "file": "AR - BAE Gradient - 8s Loop", "w": 1920, "h": 1080, "dur": 8}, {"id": "ar-bae-gradient-15s-loop", "lang": "ar", "cat": "loops", "title": "15s Loop", "file": "AR - BAE Gradient - 15s Loop", "w": 1920, "h": 1080, "dur": 15}, {"id": "ar-bae-gradient-30s-loop", "lang": "ar", "cat": "loops", "title": "30s Loop", "file": "AR - BAE Gradient - 30s Loop", "w": 1920, "h": 1080, "dur": 30}, {"id": "ar-bae-gradient-breakdown-1-schematic", "lang": "ar", "cat": "breakdown", "title": "Breakdown 1 (Schematic)", "file": "AR - BAE Gradient - Breakdown 1 (Schematic)", "w": 1920, "h": 1080, "dur": 30}, {"id": "ar-bae-gradient-breakdown-2-final-result", "lang": "ar", "cat": "breakdown", "title": "Breakdown 2 (Final Result)", "file": "AR - BAE Gradient - Breakdown 2 (Final Result)", "w": 1920, "h": 1080, "dur": 30}, {"id": "ar-bae-type-kinetic-in-out-header-sub-header", "lang": "ar", "cat": "kinetic", "title": "Kinetic IN & OUT (Header + Sub-header)", "file": "AR - BAE Type - Kinetic IN & OUT (Header + Sub-header)", "w": 1920, "h": 1080, "dur": 8}, {"id": "ar-bae-post-gradient-type-1080x1350", "lang": "ar", "cat": "effects", "title": "Gradient + Type (1080x1350)", "file": "AR - BAE Post - Gradient + Type (1080x1350)", "w": 1080, "h": 1350, "dur": 8}, {"id": "ar-frame-reveal-1200ms-opacity", "lang": "ar", "cat": "frames", "title": "Frame Reveal - 1200ms (Opacity)", "file": "AR - Frame Reveal - 1200ms (Opacity)", "w": 1080, "h": 1350, "dur": 3}, {"id": "ar-frame-reveal-1200ms-position", "lang": "ar", "cat": "frames", "title": "Frame Reveal - 1200ms (Position)", "file": "AR - Frame Reveal - 1200ms (Position)", "w": 1080, "h": 1350, "dur": 3}]};
+(function(){ const W=$("tplWrap"); if(!W) return;
+  let lang="en"; try{ lang=localStorage.getItem("bae_tpl_lang")||"en"; }catch{}
+  const reduce=matchMedia("(prefers-reduced-motion: reduce)");
+  const note=t=>{ $("tplNote").textContent=t||""; };
+  /* each template ships as data (the .aep in base64); the zip is built here, then offered through the download prompt */
+  const addTpl=async(zip,t)=>{ if(!window.JSZip) throw new Error("zip library didn't load"); const r=await fetch(`anim/t/${t.id}.json`); if(!r.ok) throw new Error("template not found");
+    const j=await r.json(); zip.file(`${j.folder}/${j.file}`,j.b64,{base64:true}); };
+  const save=async(name,blob)=>{ if(downloads){ try{ await downloads.save({filename:name,data:blob}); return; }catch(e){ if(e?.code==="declined") return; if(!/unavailable|not_granted|capability/.test(e?.code||"")) throw e; } }
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); };
+  /* play only what is on screen; everything else stays paused on its poster */
+  const io=new IntersectionObserver(es=>es.forEach(e=>{ const v=e.target; if(e.isIntersecting&&!reduce.matches&&!$("anim").hidden){ v.play().catch(()=>{}); } else v.pause(); }),{threshold:.35});
+  function render(){
+    io.disconnect();
+    const list=TPL.items.filter(t=>t.lang===lang), ar=lang==="ar";
+    W.innerHTML=TPL.cats.map(c=>{ const its=list.filter(t=>t.cat===c.key); if(!its.length) return "";
+      const portrait=its[0].h>its[0].w, cls=portrait?"portrait":its.length===1?"solo":"";
+      return `<section class="t-sec" aria-label="${esc(c.name)}"><div class="t-sec-h"><h3>${esc(c.name)}</h3><span>${esc(c.sub)}</span></div><div class="t-grid ${cls}">${its.map(t=>`
+        <article class="t-card"><div class="t-vid" style="aspect-ratio:${t.w}/${t.h}" data-id="${t.id}" role="button" tabindex="0" aria-label="Play ${esc(t.title)} full screen">
+          <video src="anim/v/${t.id}.mp4" poster="anim/p/${t.id}.jpg" muted loop playsinline preload="metadata" aria-hidden="true"></video><span class="t-badge">${t.dur} s</span></div>
+          <div class="t-meta" ${ar?'dir="ltr"':""}><b>${esc(t.title)}</b><small>${t.w} × ${t.h} · ${t.dur} s · ${ar?"Arabic":"English"} · After Effects</small></div>
+          <button class="g-dl" type="button" data-dl="${t.id}">Download template</button></article>`).join("")}</div></section>`; }).join("");
+    W.querySelectorAll("video").forEach(v=>io.observe(v));
+    document.querySelectorAll("[data-tlang]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.tlang===lang?"true":"false"));
+    $("tplAll").textContent=`Download all ${ar?"Arabic":"English"} (.zip)`;
+  }
+  W.addEventListener("click",async e=>{
+    const b=e.target.closest("[data-dl]");
+    if(b){ const t=TPL.items.find(x=>x.id===b.dataset.dl); b.disabled=true; const old=b.textContent; b.textContent="Preparing…"; note("");
+      try{ const z=new JSZip(); await addTpl(z,t); await save(`${t.file}.zip`,await z.generateAsync({type:"blob",compression:"DEFLATE"})); }
+      catch(err){ note("Couldn't download: "+(err?.message||err?.code)); } finally{ b.disabled=false; b.textContent=old; } return; }
+    const v=e.target.closest(".t-vid"); if(v){ const el=v.querySelector("video"); try{ el.muted=true; el.play().catch(()=>{}); (el.requestFullscreen||el.webkitEnterFullscreen||el.webkitRequestFullscreen)?.call(el); }catch{} }
+  });
+  W.addEventListener("keydown",e=>{ if((e.key==="Enter"||e.key===" ")&&e.target.classList?.contains("t-vid")){ e.preventDefault(); e.target.click(); } });
+  document.querySelectorAll("[data-tlang]").forEach(b=>b.onclick=()=>{ lang=b.dataset.tlang; try{ localStorage.setItem("bae_tpl_lang",lang); }catch{} render(); });
+  /* one zip with every template of the chosen language, each in its own folder */
+  $("tplAll").onclick=async()=>{ const b=$("tplAll"); b.disabled=true; const old=b.textContent; b.textContent="Preparing…"; note("");
+    try{ if(!window.JSZip) throw new Error("zip library didn't load"); const all=new JSZip();
+      for(const t of TPL.items.filter(x=>x.lang===lang)) await addTpl(all,t);
+      await save(`BAE Animation Direction - ${lang==="ar"?"AR":"EN"}.zip`,await all.generateAsync({type:"blob",compression:"DEFLATE"})); }
+    catch(err){ note("Couldn't build the zip: "+(err?.message||err?.code)); } finally{ b.disabled=false; b.textContent=old; } };
+  render();
+  /* when the page opens or closes, start or stop what is visible */
+  new MutationObserver(()=>{ const hid=$("anim").hidden; W.querySelectorAll("video").forEach(v=>{ if(hid) v.pause(); }); if(!hid){ io.disconnect(); W.querySelectorAll("video").forEach(v=>io.observe(v)); } }).observe($("anim"),{attributes:true,attributeFilter:["hidden"]});
+})();
 /* Animation direction: 1920x1080 stage.
    V1: words slide in one by one (Arabic right-to-left, English left-to-right) over a slowly rotating gradient element.
    V2: words rise out of their own masks (after Subframe Motion "Word by word"), the closing line catches a light sheen,
@@ -1464,7 +1510,8 @@ void main(){
   /* Drawing buffer follows the displayed size (DPR at most 2, at most 2.4 MP); the stage scale does the rest */
   function sizeCanvas(k){ if(!gl) return; const dpr=Math.min(window.devicePixelRatio||1,2); let w=1920*k*dpr, h=1080*k*dpr; const cap=Math.sqrt(2400000/(w*h)); if(cap<1){ w*=cap; h*=cap; } w=Math.max(1,Math.round(w)); h=Math.max(1,Math.round(h)); if(cv.width!==w||cv.height!==h){ cv.width=w; cv.height=h; gl.viewport(0,0,w,h); draw(); } }
   function draw(){ if(!gl||!glOk) return; gl.uniform2f(U.res,cv.width,cv.height); gl.uniform1f(U.t,tAcc); gl.uniform1f(U.side,st.lang==="ar"?1:0); gl.drawArrays(gl.TRIANGLES,0,6); }
-  const visible=()=>!A.hidden&&st.ver==="v2"&&!document.hidden;
+  const liveOpen=()=>!$("liveWrap")||$("liveWrap").open;
+  const visible=()=>!A.hidden&&liveOpen()&&st.ver==="v2"&&!document.hidden;
   function tick(now){ if(!visible()||st.paused||reduce.matches){ raf=0; last=0; return; } if(last) tAcc+=Math.min((now-last)/1000,0.05); last=now; draw(); raf=requestAnimationFrame(tick); }
   function runSilk(){ cancelAnimationFrame(raf); raf=0; last=0; if(st.ver!=="v2"||!initGL()) return; fit(); draw(); if(visible()&&!st.paused&&!reduce.matches) raf=requestAnimationFrame(tick); }
   document.addEventListener("visibilitychange",runSilk);
@@ -1503,7 +1550,8 @@ void main(){
   $("aPause").onclick=()=>{ st.paused=!st.paused; const b=$("aPause"); b.textContent=st.paused?"Play":"Pause"; b.setAttribute("aria-pressed",st.paused?"true":"false");
     stage.classList.toggle("paused",st.paused); if(st.paused) clearTimeout(st.timer); else play(); runSilk(); };
   $("aFull").onclick=()=>{ try{ if(document.fullscreenElement) document.exitFullscreen(); else wrap.requestFullscreen?.(); }catch{} };
-  const open=()=>{ A.hidden=false; A.scrollTop=0; if(!img.getAttribute("src")) setShape(st.shape); requestAnimationFrame(()=>{ fit(); runSilk(); play(); }); setTimeout(()=>$("closeAnim").focus(),50); };
+  const open=()=>{ A.hidden=false; A.scrollTop=0; if(liveOpen()){ if(!img.getAttribute("src")) setShape(st.shape); requestAnimationFrame(()=>{ fit(); runSilk(); play(); }); } setTimeout(()=>$("closeAnim").focus(),50); };
+  $("liveWrap")?.addEventListener("toggle",()=>{ if($("liveWrap").open){ if(!img.getAttribute("src")) setShape(st.shape); requestAnimationFrame(()=>{ fit(); runSilk(); play(); }); } else { clearTimeout(st.timer); cancelAnimationFrame(raf); raf=0; } });
   const close=()=>{ A.hidden=true; clearTimeout(st.timer); cancelAnimationFrame(raf); raf=0; txt.classList.remove("play","v2play"); $("openAnim")?.focus(); };
   $("openAnim").addEventListener("click",open); $("closeAnim").addEventListener("click",close);
   document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&!A.hidden&&!document.fullscreenElement) close(); });
