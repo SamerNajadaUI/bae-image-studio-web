@@ -405,7 +405,7 @@ function pickModels(list){
   gpt.forEach(m=>{ const o=document.createElement("option"); o.value=m.id; o.textContent=m.name+(g25.length?" · locked":" · 2.5 not found, newest GPT"); gs.appendChild(o); });
   gs.disabled=true; log("·","icon model locked",{gpt:gpt.map(m=>m.name)});
   if(gpt[0]) S.gptName=gpt[0].name;
-  $("mNanoName").textContent=S.mode==="icon"?`${S.gptName||"GPT 2.5"} + ${S.nanoName||"Nano Banana 2.1"} · via Magnific`:(S.nanoName||"Nano Banana 2.1")+" · via Magnific";
+  $("mNanoName").textContent=S.mode==="icon"?`${S.gptName||"GPT 2.5"} · via Magnific`:(S.nanoName||"Nano Banana 2.1")+" · via Magnific";
 }
 
 /* ---------------- UI: brief, segs, upload, refs ---------------- */
@@ -631,8 +631,8 @@ function enforce(p){
 /* ---------------- STEP 3: generate ---------------- */
 const MODELS={ nano:{el:"rNano",sel:"selNano",mode:"modeNano",prompt:"pNano",label:"Nano Banana 2.1"}, icon:{el:"rNano",sel:"selIcon",mode:"modeIcon",prompt:"pNano",label:"GPT 2.5"}, iconNano:{el:"rNano2",sel:"selNano",mode:"modeNano",prompt:"pNano",label:"Nano Banana 2.1"} };
 const genKey=()=>S.mode==="icon"?"icon":"nano";
-/* Icons render with both models side by side; photography with Nano Banana 2.1 */
-const genKeys=()=>S.mode==="icon"?["icon","iconNano"]:["nano"];
+/* Icons render with GPT 2.5 only; photography with Nano Banana 2.1 */
+const genKeys=()=>S.mode==="icon"?["icon"]:["nano"];
 const isIconKey=k=>k==="icon"||k==="iconNano";
 function negativeNow(){ if(S.mode==="icon") return ICON_NEG; return [S.negative||"logos, text, watermark, signage, oversaturated, HDR, extra fingers",CLIENT_NEG,COMPOSITION_NEG,S.setting==="Studio"?STUDIO_NEG:"",S.look==="Bold"?LOOK_BOLD_NEG:LOOK_CALM_NEG].filter(Boolean).join(", "); }
 const STEPS=["Upload references","Render in 4K","4K check","Ready"];
@@ -649,7 +649,7 @@ function renderCard(key,st){
   <ol class="steps">${STEPS.map((s,i)=>`<li class="${st.steps?.[i]||""}">${s}${st.stepNote?.[i]?` · ${esc(st.stepNote[i])}`:""}</li>`).join("")}</ol>
   ${st.err?`<div class="msg">${esc(st.err)}</div>`:""}${st.refWarn?`<div class="msg info">${esc(st.refWarn)}</div>`:""}
   <div class="btns">${o?.blob?`<button class="btn small primary" data-act="dl">Download ${/png/.test(o.blob.type)?"PNG":"image"}</button>`:""}${o?.url?`<a class="btn small ${o.blob?"":"primary"}" href="${esc(o.url)}" target="_blank" rel="noopener">Open ${o.long>=3800?"4K ":""}PNG</a><button class="btn small" data-act="copy">Copy link</button>`:""}${o?.webUrl?`<a class="btn small ${o.blob||o.url?"":"primary"}" href="${esc(o.webUrl)}" target="_blank" rel="noopener">Open in Magnific</a>`:""}${st.done||st.err?`<button class="btn small" data-act="regen">Regenerate</button>`:""}</div>
-  ${isIconKey(key)&&o?.blob?`<div class="btns exports"><span class="t12 muted">Export PNG on white:</span>${[96,144,192,256,1024,"wide"].map(s=>`<button class="btn small" data-exp="${s}" title="${({96:"S · square, dashboards, tooltips",144:"M · square, spot, onboarding",192:"L · square, modals, marketing",256:"XL · square, hero moments",1024:"Square master",wide:"Full 16:9 frame"})[s]}">${({96:"S 96",144:"M 144",192:"L 192",256:"XL 256",1024:"1024",wide:"16:9 full"})[s]}</button>`).join("")}</div>`:""}
+  ${isIconKey(key)&&o?.blob?`<div class="btns exports"><span class="t12 muted">Export PNG on Light Stone:</span>${[96,144,192,256,1024,"wide"].map(s=>`<button class="btn small" data-exp="${s}" title="${({96:"S · square, dashboards, tooltips",144:"M · square, spot, onboarding",192:"L · square, modals, marketing",256:"XL · square, hero moments",1024:"Square master",wide:"Full 16:9 frame"})[s]}">${({96:"S 96",144:"M 144",192:"L 192",256:"XL 256",1024:"1024",wide:"16:9 full"})[s]}</button>`).join("")}</div>`:""}
   ${o?.url?`<input type="text" readonly class="linkbox" id="link-${key}" value="${esc(o.url)}" aria-label="Image link">`:""}
   ${o?.links?.length>1?`<details class="links"><summary>All links from Magnific (${o.links.length})</summary>${o.links.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`).join("")}</details>`:""}`;
   el.querySelector('[data-act="dl"]')?.addEventListener("click",()=>save(key,o));
@@ -660,7 +660,7 @@ function renderCard(key,st){
   el.querySelectorAll("[data-exp]").forEach(b=>b.addEventListener("click",()=>exportIcon(o,b.dataset.exp==="wide"?"wide":+b.dataset.exp,MODELS[key].label)));
 }
 const cards={nano:{},icon:{}};
-function idle(){ for(const k of genKeys()){ if(!cards[k]) cards[k]={}; if(!cards[k].steps) cards[k]={ph:S.mode==="icon"?`${MODELS[k].label}: your icon appears here on white, 16:9. Describe the icon above and press Create icon.`:"Your 4K image appears here. Write a brief above and press Create image.",steps:[]}; renderCard(k,cards[k]); } }
+function idle(){ for(const k of genKeys()){ if(!cards[k]) cards[k]={}; if(!cards[k].steps) cards[k]={ph:S.mode==="icon"?`Your icon appears here on Light Stone, 16:9. Describe the icon above and press Create icon.`:"Your 4K image appears here. Write a brief above and press Create image.",steps:[]}; renderCard(k,cards[k]); } }
 function fmtTime(t0){ if(!t0) return "0:00"; const s=Math.max(0,Math.round((Date.now()-t0)/1000)); return Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); }
 idle();
 function onAspect(){ $("customWrap").hidden=S.mode==="icon"||$("aspect").value!=="custom"; $("aspectPill").textContent=S.mode==="icon"?"16:9 · locked":aspectText(); for(const k of genKeys()) if(cards[k]) renderCard(k,cards[k]); }
@@ -962,7 +962,7 @@ async function runModel(key,refs){
     const opt=(modelId&&S.opts[modelId])||{raw:await modelDetails(modelId),parsed:{}}; const P=opt.parsed||{};
     const modeParam=(P.modes||[]).find(x=>String(x.value)===String(mode))?.param||null;
     const plan=await buildArgs("images_generate",
-      `Generate exactly ${count} ${S.mode==="icon"?"3D icon illustration image(s), 16:9 widescreen, on a pure white background,":"photorealistic image(s)"} with model "${modelId||m.label}". Use the prompt verbatim.
+      `Generate exactly ${count} ${S.mode==="icon"?"3D icon illustration image(s), 16:9 widescreen, on a flat Light Stone #ECE8DF background,":"photorealistic image(s)"} with model "${modelId||m.label}". Use the prompt verbatim.
 Resolution: 4K. Use the exact 4K value from the model settings${P.res_4k?` ("${P.res_4k}")`:""}; if 4K is not offered, use the largest value${P.max_res?` ("${P.max_res}")`:""}.
 Quality: the highest available${P.best_quality?` ("${P.best_quality}"${P.quality_param?` on "${P.quality_param}"`:""})`:""}.
 ${mode?`Mode: "${mode}"${modeParam?` on setting "${modeParam}"`:""}.`:"Mode: model default."}
@@ -1245,7 +1245,7 @@ $("btnForgetKeys").onclick=()=>{ setKey("gemini",""); setKey("anthropic",""); $(
 
 /* ===================== ICONS MODE =====================
    BAE illustration system (guidelines pp.91–101), rendered by GPT 2.5 through Magnific,
-   locked to a square 1:1 canvas on pure white. */
+   locked to a 16:9 canvas on Light Stone #ECE8DF. */
 const ICON_RULES=`BANK AL ETIHAD ILLUSTRATION / ICON SYSTEM (Deep Clarity, guidelines pp.91–101)
 Principles: Warmth (leads with humanity), Expressiveness (confident character), Simplicity (every element earns its place).
 Visual style: soft, layered depth. Translucent frosted-glass gradients build form, light passes through, shapes feel suspended rather than placed; edges are soft and dissolve slightly into atmosphere; negative space carries as much weight as the marks. Ethereal but considered: every icon belongs to the same family.
@@ -1257,14 +1257,14 @@ MATERIAL SYSTEM — GLASSMORPHISM + BAE GRADIENT (this is the house style, apply
 Form: premium 3D objects seen from a gentle isometric three-quarter view (about 30° from above, turned about 45°), softly rounded edges and bevels, smooth satin surfaces with a subtle inner glow, simple geometric volumes. Typical motifs in the set: a coin over a stack of coins (savings), three stacked translucent cards (cards), a coin riding a rising curved arrow (investments), a frosted fingerprint tile over a check-mark disc (security), a phone with app tiles and a floating card (app), an isometric building with a glass roof (branches), a location pin over a small building, a light bulb behind a curved wallet (financial literacy), bars and cards fanned (gold), paper-cut figures over a globe (community).
 Colour: ONLY the illustration palette — Burgundy #A33755, Medium Burgundy #B9516E, Light Burgundy #F1C0B6, Orange #FA6428, Dark Orange #C13A23, Soft Orange #FDCBB4, Light Orange #FFFAF4. The warm orange-to-burgundy gradient is the unifying thread: solid forms graded from orange to burgundy, translucent layers in soft orange / light burgundy laid over them. No other hues.
 Composition: ONE focal point per frame; one main object plus at most one or two supporting elements, overlapping for depth, not decoration; universally understood objects; centred with generous breathing room (10×10 grid with a 1X exclusion margin).
-Mode: light-mode treatment, built for a white background.
+Mode: light-mode treatment, built for a Light Stone #ECE8DF background.
 Never: text, letters, numbers, logos or the BAE symbol (coin or card faces stay clean or carry a simple abstract emboss); overcrowding or decorative bits (sparkles, confetti, motion lines); mixing styles (no flat vector, line icon, cartoon or photo); illustration used as texture.`;
-const ICON_LOCK="Material lock: glassmorphism + BAE gradient — at least one frosted, semi-transparent glass element (background blur, the gradient form behind showing through softly, thin light edge highlight, soft sheen) layered in front of at least one solid BAE gradient form (Orange #FA6428 to Burgundy #A33755, satin). Icon lock: one premium 3D icon in the Bank al Etihad illustration style, centred and isolated on a pure flat white #FFFFFF background that fills the entire 16:9 widescreen canvas edge to edge; no floor or ground plane, no cast shadow on the background, no backdrop gradient, no vignette, no frame or border; the icon sits in the exact centre and fills about 60–70% of the canvas HEIGHT, with even white space above and below and wide, equal white space left and right; light-mode treatment; only Burgundy, Medium Burgundy, Light Burgundy, Orange, Dark Orange, Soft Orange and Light Orange; no text, letters, numbers or logos.";
-const ICON_NEG="crystal-clear glass, chrome, mirror reflections, hard refraction, rainbow caustics, coloured glass outside the palette, opaque glass, all-glass icon with no gradient form, all-solid icon with no glass, coloured background, grey background, off-white background, beige background, gradient background, floor, ground plane, cast shadow on background, drop shadow, vignette, frame, border, text, letters, numbers, logo, watermark, brand symbol, photograph, people's faces, flat 2D vector, line icon, outline icon, clip art, cartoon, emoji, sticker, blue, green, purple, teal, yellow gold, chrome metal, clutter, multiple separate icons, sparkles, confetti, motion lines";
+const ICON_LOCK="Material lock: glassmorphism + BAE gradient — at least one frosted, semi-transparent glass element (background blur, the gradient form behind showing through softly, thin light edge highlight, soft sheen) layered in front of at least one solid BAE gradient form (Orange #FA6428 to Burgundy #A33755, satin). Icon lock: one premium 3D icon in the Bank al Etihad illustration style, centred and isolated on a flat, even Light Stone #ECE8DF background (a warm, very light greige) that fills the entire 16:9 widescreen canvas edge to edge; no floor or ground plane, no cast shadow on the background, no backdrop gradient, no vignette, no frame or border; the icon sits in the exact centre and fills about 60–70% of the canvas HEIGHT, with even background space above and below and wide, equal space left and right; light-mode treatment; only Burgundy, Medium Burgundy, Light Burgundy, Orange, Dark Orange, Soft Orange and Light Orange; no text, letters, numbers or logos.";
+const ICON_NEG="crystal-clear glass, chrome, mirror reflections, hard refraction, rainbow caustics, coloured glass outside the palette, opaque glass, all-glass icon with no gradient form, all-solid icon with no glass, pure white background, cool grey background, dark background, coloured background, gradient background, textured background, floor, ground plane, cast shadow on background, drop shadow, vignette, frame, border, text, letters, numbers, logo, watermark, brand symbol, photograph, people's faces, flat 2D vector, line icon, outline icon, clip art, cartoon, emoji, sticker, blue, green, purple, teal, yellow gold, chrome metal, clutter, multiple separate icons, sparkles, confetti, motion lines";
 function enforceIcon(p){
   let t=String(p||"").trim().replace(/\n*Material lock:[^\n]*/g,"").replace(/\n*Icon lock:[^\n]*/g,"").replace(/\n*Reference images[^\n]*/g,"");
   t=t.replace(/square 1:1/gi,"16:9 widescreen");
-  if(!/^premium 3d/i.test(t)) t="Premium 3D glassmorphism brand icon illustration, 16:9 widescreen, centred and isolated on a pure white background. "+t;
+  if(!/^premium 3d/i.test(t)) t="Premium 3D glassmorphism brand icon illustration, 16:9 widescreen, centred and isolated on a flat Light Stone #ECE8DF background. "+t;
   /* Card stacks are locked: three cards, top frosted glass, middle and bottom BAE gradient */
   if(/\bcards?\b|بطاق/i.test($("brief").value+" "+t)&&/stack|layer|three|3|مكدس|ثلاث|cards\b/i.test($("brief").value+" "+t)&&!/Card stack lock:/.test(t))
     t+="\nCard stack lock: exactly three identical rounded cards stacked flat in isometric view with even gaps; the TOP card is frosted glassmorphism glass (see-through, background blur showing the gradient card below, thin light edge highlight, soft sheen, simple chip); the MIDDLE and BOTTOM cards are solid BAE gradient, Orange #FA6428 flowing into Burgundy #A33755; no text, numbers or logos.";
@@ -1293,12 +1293,12 @@ Reply in English with only JSON:
 async function writeIconPrompt(){
   stage(2,"active"); flash($("s2state"),"Writing the icon prompt…"); $("btnPrompt").disabled=true;
   try{
-    const o=await sample.json(`Write one production prompt, used for both GPT 2.5 and Google Nano Banana 2.1, to render this Bank al Etihad icon in a 16:9 widescreen frame (icon centred, wide even white space left and right).
+    const o=await sample.json(`Write one production prompt for GPT 2.5 to render this Bank al Etihad icon in a 16:9 widescreen frame (icon centred, wide even Light Stone space left and right).
 ${ICON_RULES}
 
 Icon concept: ${JSON.stringify(S.analysis||{request:$("brief").value})}
 References attached, in order: ${refPlan().map(r=>`${r.tag} (${r.use})`).join("; ")||"none"}. Mention them only as style direction for material, gradient, translucency, softness, angle and lighting, e.g. "material and gradient like @img1"; never ask to copy their objects or composition.
-Requirements: start with "Premium 3D glassmorphism brand icon illustration"; describe the main object and supporting elements precisely (shapes; which element is frosted glassmorphism glass — semi-transparent, background blur, the gradient form behind showing through softly, thin light edge highlight, soft sheen — and which is solid BAE gradient, Orange #FA6428 into Burgundy #A33755; glass layered in front of the gradient; for a card stack: exactly three cards, top one glass, middle and bottom BAE gradient; soft rounded edges, isometric three-quarter view, soft even studio light with gentle inner glow); centred with generous white margin; pure flat white #FFFFFF background filling the whole square canvas with no floor and no shadow on it; palette colours by name and hex; no text, numbers or logos. 90-150 words, one paragraph.
+Requirements: start with "Premium 3D glassmorphism brand icon illustration"; describe the main object and supporting elements precisely (shapes; which element is frosted glassmorphism glass — semi-transparent, background blur, the gradient form behind showing through softly, thin light edge highlight, soft sheen — and which is solid BAE gradient, Orange #FA6428 into Burgundy #A33755; glass layered in front of the gradient; for a card stack: exactly three cards, top one glass, middle and bottom BAE gradient; soft rounded edges, isometric three-quarter view, soft even studio light with gentle inner glow); centred with generous margin; flat, even Light Stone #ECE8DF background filling the whole 16:9 canvas edge to edge, no floor, no shadow on the background; palette colours by name and hex; no text, numbers or logos. 90-150 words, one paragraph.
 Also return a checklist of 6 short labels about BAE illustration rules with status "pass" or "note".
 Reply with only JSON: {"prompt_icon":"","checklist":[{"label":"","status":"pass"}]}`);
     $("pNano").value=enforceIcon(o.prompt_icon||"");
@@ -1307,30 +1307,37 @@ Reply with only JSON: {"prompt_icon":"","checklist":[{"label":"","status":"pass"
   }catch(e){ stage(2); flash($("s2state"),sampleCopy(e),true); }
   finally{ $("btnPrompt").disabled=!sample; syncButtons(); }
 }
-/* White lock: flood-fill from the edges so the background is exactly #FFFFFF, keeping light tones inside the icon */
+/* Background lock: flood-fill from the edges so the background is exactly Light Stone #ECE8DF.
+   The reference colour is the median of the frame's edge pixels (the model may render white or stone),
+   so light tones inside the icon that don't touch the edge stay as they are. */
+const STONE=[236,232,223];
 async function whitenOut(o){
   if(!o?.img) return;
   try{
     const bmp=await createImageBitmap(await (await fetch(o.img)).blob());
     const W=bmp.width,H=bmp.height; const c=document.createElement("canvas"); c.width=W; c.height=H; const x=c.getContext("2d"); x.drawImage(bmp,0,0);
-    const d=x.getImageData(0,0,W,H), p=d.data, seen=new Uint8Array(W*H), st=new Int32Array(W*H); let sp=0;
-    const near=i=>{ const r=p[i*4],g=p[i*4+1],b=p[i*4+2]; return r>232&&g>232&&b>232&&Math.max(r,g,b)-Math.min(r,g,b)<14; };
+    const d=x.getImageData(0,0,W,H), p=d.data, seen=new Uint8Array(W*H), st=new Int32Array(W*H*2); let sp=0;
+    const edge=[]; for(let X=0;X<W;X+=4){ edge.push(X,(H-1)*W+X); } for(let Y=0;Y<H;Y+=4){ edge.push(Y*W,Y*W+W-1); }
+    const med=k=>{ const v=edge.map(i=>p[i*4+k]).sort((m,n)=>m-n); return v[v.length>>1]; };
+    let R=med(0),G=med(1),B=med(2);
+    if(Math.min(R,G,B)<190||Math.max(R,G,B)-Math.min(R,G,B)>34){ R=STONE[0]; G=STONE[1]; B=STONE[2]; } /* edges aren't a light background: fall back to stone */
+    const near=i=>{ const r=p[i*4],g=p[i*4+1],b=p[i*4+2]; return Math.abs(r-R)<18&&Math.abs(g-G)<18&&Math.abs(b-B)<18; };
     for(let X=0;X<W;X++){ st[sp++]=X; st[sp++]=(H-1)*W+X; } for(let Y=0;Y<H;Y++){ st[sp++]=Y*W; st[sp++]=Y*W+W-1; }
     let changed=0;
-    while(sp){ const i=st[--sp]; if(seen[i]) continue; seen[i]=1; if(!near(i)) continue; p[i*4]=p[i*4+1]=p[i*4+2]=255; p[i*4+3]=255; changed++;
+    while(sp){ const i=st[--sp]; if(seen[i]) continue; seen[i]=1; if(!near(i)) continue; p[i*4]=STONE[0]; p[i*4+1]=STONE[1]; p[i*4+2]=STONE[2]; p[i*4+3]=255; changed++;
       const X=i%W; if(X>0) st[sp++]=i-1; if(X<W-1) st[sp++]=i+1; if(i>=W) st[sp++]=i-W; if(i<W*(H-1)) st[sp++]=i+W; }
     x.putImageData(d,0,0);
     const blob=await new Promise(r=>c.toBlob(r,"image/png")); o.blob=blob; o.img=URL.createObjectURL(blob); o.whitened=Math.round(changed/(W*H)*100);
-    log("·","white background locked",{size:`${W}×${H}`,background_pixels:o.whitened+"%"});
-  }catch(e){ log("✕","white lock skipped",{message:String(e?.message||e)}); }
+    log("·","Light Stone background locked",{size:`${W}×${H}`,background_pixels:o.whitened+"%"});
+  }catch(e){ log("✕","background lock skipped",{message:String(e?.message||e)}); }
 }
-/* Exports at the BAE illustration sizes (S 96 · M 144 · L 192 · XL 256), on white */
+/* Exports at the BAE illustration sizes (S 96 · M 144 · L 192 · XL 256), on Light Stone */
 /* Square exports trim the 16:9 frame to the icon itself and keep a 1X exclusion margin (1/10 per side, 10×10 grid) */
 function iconBox(bmp){
   const W=bmp.width,H=bmp.height,k=Math.min(1,800/Math.max(W,H)),w=Math.round(W*k),h=Math.round(H*k);
   const c=document.createElement("canvas"); c.width=w; c.height=h; const x=c.getContext("2d"); x.drawImage(bmp,0,0,w,h);
   const p=x.getImageData(0,0,w,h).data; let x0=w,y0=h,x1=-1,y1=-1;
-  for(let y=0;y<h;y++) for(let X=0;X<w;X++){ const i=(y*w+X)*4; if(p[i]<246||p[i+1]<246||p[i+2]<246){ if(X<x0)x0=X; if(X>x1)x1=X; if(y<y0)y0=y; if(y>y1)y1=y; } }
+  for(let y=0;y<h;y++) for(let X=0;X<w;X++){ const i=(y*w+X)*4; if(Math.abs(p[i]-STONE[0])>10||Math.abs(p[i+1]-STONE[1])>10||Math.abs(p[i+2]-STONE[2])>10){ if(X<x0)x0=X; if(X>x1)x1=X; if(y<y0)y0=y; if(y>y1)y1=y; } }
   if(x1<0) return {x:0,y:0,w:W,h:H};
   return {x:x0/k,y:y0/k,w:(x1-x0+1)/k,h:(y1-y0+1)/k};
 }
@@ -1338,7 +1345,7 @@ async function exportIcon(o,size,modelLabel){
   try{
     const bmp=await createImageBitmap(o.blob); const wide=size==="wide";
     const c=document.createElement("canvas"); if(wide){ c.width=bmp.width; c.height=bmp.height; } else c.width=c.height=size; const x=c.getContext("2d");
-    x.fillStyle="#FFFFFF"; x.fillRect(0,0,c.width,c.height); x.imageSmoothingQuality="high";
+    x.fillStyle="#ECE8DF"; x.fillRect(0,0,c.width,c.height); x.imageSmoothingQuality="high";
     if(wide) x.drawImage(bmp,0,0);
     else { const b=iconBox(bmp), inner=size*0.8, k=Math.min(inner/b.w,inner/b.h), w=b.w*k, h=b.h*k; x.drawImage(bmp,b.x,b.y,b.w,b.h,(size-w)/2,(size-h)/2,w,h); }
     const blob=await new Promise(r=>c.toBlob(r,"image/png")); const tag=String(modelLabel||"").replace(/\s+/g,"-");
@@ -1357,13 +1364,13 @@ function setMode(m,init){
   document.querySelectorAll("#modeSeg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.mode===m?"true":"false"));
   const icon=m==="icon";
   $("heroTitle").textContent=icon?"Turn an idea into a BAE icon.":"Turn a brief into an on-brand 4K photograph.";
-  $("heroLede").textContent=icon?"Describe the icon. Claude designs it in the BAE illustration system (glassmorphism over the orange-to-burgundy gradient, one focal point), and GPT 2.5 and Nano Banana 2.1 each render it in 16:9 on pure white so you can pick the best.":"Write what the photo should show. Claude reads it against the BAE photography rules and your references, writes the prompt, and Nano Banana 2.1 renders it in 4K.";
-  if(!S.web) $("heroSub").textContent=icon?"GPT 2.5 + Nano Banana 2.1 · 16:9 · white background · via Magnific":"Nano Banana 2.1 · native 4K · via Magnific";
+  $("heroLede").textContent=icon?"Describe the icon. Claude designs it in the BAE illustration system (glassmorphism over the orange-to-burgundy gradient, one focal point), and GPT 2.5 renders it in 16:9 on a Light Stone background.":"Write what the photo should show. Claude reads it against the BAE photography rules and your references, writes the prompt, and Nano Banana 2.1 renders it in 4K.";
+  if(!S.web) $("heroSub").textContent=icon?"GPT 2.5 · 16:9 · Light Stone background · via Magnific":"Nano Banana 2.1 · native 4K · via Magnific";
   $("briefLbl").textContent=icon?"Icon idea":"Brief";
   $("btnCreate").textContent=icon?"Create icon":"Create image";
   $("presets").innerHTML=(icon?ICON_PRESETS:PHOTO_PRESETS).map(([l,b])=>`<button type="button" data-b="${esc(b)}">${esc(l)}</button>`).join("");
-  if(!S.web) $("mNanoName").textContent=icon?`${S.gptName||"GPT 2.5"} + ${S.nanoName||"Nano Banana 2.1"} · via Magnific`:(S.nanoName||"Nano Banana 2.1")+" · via Magnific";
-  $("results").classList.toggle("one",!icon); $("rNano2").hidden=!icon;
+  if(!S.web) $("mNanoName").textContent=icon?`${S.gptName||"GPT 2.5"} · via Magnific`:(S.nanoName||"Nano Banana 2.1")+" · via Magnific";
+  $("results").classList.add("one"); $("rNano2").hidden=true;
   $("pNano").value=PROMPT_STASH[m]||""; $("pNano").placeholder=icon?"The icon prompt is written after the concept. You can edit it before generating.":"Written after the scene is described. You can edit it before generating.";
   $("promptLbl").textContent=icon?"GPT 2.5 icon prompt":"Nano Banana 2.1 prompt";
   /* keep each service's own picks: only stash the picks of the mode we are actually leaving */
@@ -1394,12 +1401,12 @@ function setMode(m,init){
   const steps=[
     {t:"Welcome to Studio", p:()=>"On-brand images in a few simple steps. This quick tour takes about a minute.", hero:true},
     {el:()=>!$("setup").hidden?$("setup"):$("btnConnect"), t:"Connect once", p:()=>!$("setup").hidden?"Connect Magnific so the studio can render, then link your references. You only do this the first time.":"Magnific is connected. If it ever disconnects, press Reconnect here."},
-    {el:()=>$("modeSeg"), t:"Choose what to make", p:()=>"Photography makes 4K photos. Icons makes 3D BAE icons on white. You can switch any time."},
+    {el:()=>$("modeSeg"), t:"Choose what to make", p:()=>"Photography makes 4K photos. Icons makes 3D BAE icons on Light Stone. You can switch any time."},
     {el:()=>$("briefCard"), t:()=>icon()?"Describe the icon":"Describe the photo", p:()=>icon()?"Write the idea in a sentence, in Arabic or English, or tap an example like Cards stack.":"Write what the photo should show, in Arabic or English, or tap an example to start from."},
-    {el:()=>$("optCard"), t:"Pick a few options", p:()=>icon()?"Icons are already locked to 16:9 on pure white with glassmorphism and the BAE gradient. Just choose how many.":"Choose the look, setting, shot and size. Wardrobe, light, iPhone 18 and the centred subject are already locked to the BAE rules."},
+    {el:()=>$("optCard"), t:"Pick a few options", p:()=>icon()?"Icons are already locked to 16:9 on Light Stone with glassmorphism and the BAE gradient. Just choose how many.":"Choose the look, setting, shot and size. Wardrobe, light, iPhone 18 and the centred subject are already locked to the BAE rules."},
     {el:()=>$("refCard"), t:"References are ready", p:()=>"We pick BAE images that guide the camera and style, never the layout. Press Browse all to change them."},
-    {el:()=>$("btnCreate"), t:()=>icon()?"Create the icon":"Create the image", p:()=>icon()?"One press: Claude designs the icon, and GPT 2.5 and Nano Banana 2.1 both render it. It takes a minute or two.":"One press: Claude reads the brief, writes the prompt, and Nano Banana 2.1 renders it in 4K. It takes a minute or two."},
-    {el:()=>$("s3"), t:"Download it", p:()=>icon()?"Both icons appear side by side. Download the 16:9 PNG or the square S, M, L and XL sizes.":"Your image appears here. Download the 4K PNG, open it in Magnific, or create another."},
+    {el:()=>$("btnCreate"), t:()=>icon()?"Create the icon":"Create the image", p:()=>icon()?"One press: Claude designs the icon and GPT 2.5 renders it. It takes a minute or two.":"One press: Claude reads the brief, writes the prompt, and Nano Banana 2.1 renders it in 4K. It takes a minute or two."},
+    {el:()=>$("s3"), t:"Download it", p:()=>icon()?"Your icon appears here. Download the 16:9 PNG or the square S, M, L and XL sizes.":"Your image appears here. Download the 4K PNG, open it in Magnific, or create another."},
     {el:()=>$("advWrap"), t:"Go deeper, if you like", p:()=>"Edit the prompt, rebuild from a photo, or read the locked rules. You never need this for a good result.", last:true},
   ];
   let i=0, raf=0;
