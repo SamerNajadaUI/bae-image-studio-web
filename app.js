@@ -67,8 +67,9 @@ const YOUTH_REFS = [
  ["yt09","Youth: four friends walking across grass at golden hour, low angle, striped camp shirt, lilac fluffy cardigan, floral blouse, wide-leg jeans"]
 ].map(([id,d])=>({id,d,src:`refs/${id}.jpg`,set:"yt",studio:false}));
 ALL_REFS.push(...YOUTH_REFS);
-const PICK_BOLD=["yt04","yt06","yt03","bae_b108_2"];
-const PICK_BOLD_STUDIO=["bae_b114_1","bae_b113_0","yt06","yt05"];
+/* Bold defaults lean on the BAE guideline frames (clean, refined) with one youth frame for camera energy only */
+const PICK_BOLD=["bae_b108_2","bae_b111_2","bae_b106_1","yt04"];
+const PICK_BOLD_STUDIO=["bae_b113_0","bae_b114_1","bae_b114_2"];
 /* BAE illustration set (guidelines p.101, light mode), used as style direction for the Icons mode */
 const ICON_REFS=[
  ["ic_savings","BAE icon: translucent coin over a stack of orange-to-burgundy coins"],
@@ -139,36 +140,40 @@ E. Decor and furniture: modern Scandinavian IKEA-style interiors — light oak/b
 /* LOOK: bold colourful youth streetwear (from the 9 campaign references) or elegant and calm */
 /* Wardrobe colour comes ONLY from the BAE palette (guideline p.18–22). The orange family is never worn (client rule).
    Bold & colourful = the FRESH side of the palette, crisp colour-blocking.  Elegant & calm = the WARM, deep side, tonal and ordered. */
-const BAE_WEAR_FRESH = "Teal #32969B, Dark Teal #196E78, Burgundy #A33755, Medium Burgundy #B9516E (raspberry), Light Burgundy #F1C0B6 (blush pink), Sky Blue #4BBCDF (from the BAE gradient system), with White #FFFFFF, Light Stone #ECE8DF and Ink #19181E as the base";
-const BAE_WEAR_WARM = "Ink #19181E, Medium Ink #4F4E62 (slate), Burgundy #A33755, Medium Burgundy #B9516E, Dark Teal #196E78, Light Burgundy #F1C0B6 (dusty rose), Stone #CCC3B4, Light Stone #ECE8DF, Light Orange #FFFAF4 (ecru) and White #FFFFFF";
+const BAE_WEAR_FRESH = "crisp White #FFFFFF and deep Ink black #19181E as the main layers, Light Stone #ECE8DF and Ecru #FFFAF4 as soft neutrals, and ONE colour piece per person from Burgundy #A33755, Medium Burgundy #B9516E (raspberry), Light Burgundy #F1C0B6 (blush) or Sky Blue #4BBCDF (from the BAE gradient system)";
+const BAE_WEAR_WARM = "Ink #19181E, Medium Ink #4F4E62 (slate), Burgundy #A33755, Medium Burgundy #B9516E, Light Burgundy #F1C0B6 (dusty rose), Stone #CCC3B4, Light Stone #ECE8DF, Light Orange #FFFAF4 (ecru) and White #FFFFFF";
+/* Bank-grade wardrobe, even for young people: refined "old money" minimalism, never streetwear */
+const WARDROBE_BASE = `WARDROBE STANDARD (both looks): premium, refined, "quiet luxury / old money" minimal style that suits a bank, even for young people. Clean tailoring and quality fabrics: crisp poplin or oxford shirts, fine-knit polos and crew-necks (merino, cashmere), relaxed tailored blazers and overshirts, pressed straight-leg or pleated tailored trousers with a clean break, tailored chinos, long wool coats, minimal leather loafers or clean white leather sneakers, a simple watch. Well fitted, neat, pressed, nothing loud. NEVER streetwear: no oversized tees, no graphic or football tees, no baggy or balloon jeans, no tube socks, no chunky sneakers, no hoodies, no bucket hats or beanies, no crop tops, no sweater vests, no crochet.`;
 const LOOK_BOLD = `LOOK — BOLD & COLOURFUL (the youth campaign references guide camera, light and energy only):
-Wardrobe: Gen Z street-style fashion — oversized plain tees, retro football-style tees without crests or text, baggy and wide-leg light-wash denim, denim jackets, colour-block knit sweater vests and fluffy cardigans, camp-collar and striped retro shirts, crop tops with pleated wide trousers, crochet vests, bucket hats and beanies, striped tube socks, chunky retro sneakers, tinted round sunglasses. WARDROBE COLOUR — FRESH BAE PALETTE ONLY: ${BAE_WEAR_FRESH}. Light-wash denim counts as sky blue. Crisp, clean colour-blocking: each outfit pairs one or two of the fresh colours (teal, sky blue, raspberry, blush, burgundy) with a white, light-stone or ink base; each person in the frame leads with a DIFFERENT fresh colour; bright, airy and modern, never muddy. No colour outside this list: no orange, coral, rust, yellow, lime, purple, red or neon.
-Camera: low-angle (worm's-eye) wide-angle 16–24 mm hero shot looking up at the subjects, a big clean blue sky (or bright open background) behind them, bright hard sunlight with crisp shadows and an occasional sun flare, punchy saturated commercial colour grade, deep focus with the faces sharp.
-Energy: friends together, laughing out loud, mid-action and playful (selfies, piggybacks, leaning in cheek to cheek, walking towards camera); slight motion blur allowed on limbs. Props when they fit: skateboards, iced drinks, iPhone 18, backpacks — no logos.`;
+${WARDROBE_BASE}
+WARDROBE COLOUR — CRISP AND FRESH, BAE PALETTE ONLY: ${BAE_WEAR_FRESH}. Build each outfit as clean contrast: white or ink-black tailoring layered OVER one colour piece (e.g. ink blazer over a blush knit, white overshirt over a raspberry polo, ink trousers with a sky-blue oxford shirt and a white knit on the shoulders), or a monochrome white or black outfit with one colour accessory. Each person in the frame takes a DIFFERENT colour piece. Never teal or green, never orange, coral, rust, yellow, lime, purple, red or neon; never more than one colour per person.
+Camera: dynamic and confident — low or dutch angles and wide lenses when the brief asks for them, bright clean light, crisp shadows, clean punchy commercial grade, faces sharp.
+Energy: confident, warm and alive — genuine smiles, natural mid-action moments; never posed stock.`;
 /* ELEGANT & CALM wardrobe, read from the 12 BAE guideline photos (pp.106–114): dark tailoring anchors every frame
    (black blazer, navy coat, dark denim workwear), warm knits as the mid-tone (camel cardigan, chocolate, olive),
    crisp white or ecru as ONE layer, and one colour or pattern accent per person (cobalt, jade, rose, burgundy, teal,
    blue-and-white print, pink/blue madras check, printed silk scarf). Never head-to-toe beige. */
 const LOOK_CALM = `LOOK — ELEGANT & CALM (styling read from the BAE guideline photos pp.106–114; colours ONLY from the BAE palette):
+${WARDROBE_BASE}
 WARDROBE COLOUR — WARM, DEEP BAE PALETTE ONLY: ${BAE_WEAR_WARM}. No colour outside this list: no orange, rust, camel, brown, olive, mustard, cobalt or neon.
 How to dress each person, in this order:
- 1. Deep anchor: ink or slate relaxed tailoring (soft-shouldered blazer, long wool coat, fine-knit, dark denim), OR a deep burgundy or dark teal piece.
- 2. Tonal mid-tone: a second piece in the same family (burgundy with raspberry or dusty rose; dark teal with slate; ink with stone).
+ 1. Deep anchor: ink or slate relaxed tailoring (soft-shouldered blazer, long wool coat, fine-knit, pressed trousers), OR a deep burgundy piece.
+ 2. Tonal mid-tone: a second piece in the same family (burgundy with raspberry or dusty rose; slate with stone; ink with stone).
  3. Light layer: ecru or white (shirt, tee, turtleneck) as ONE layer only, never head to toe.
- 4. One quiet accent at most: dusty rose scarf, burgundy knit, dark-teal bag, simple jewellery or dark sunglasses.
-Warm and ordered: tonal, harmonious, layered, matte textures (wool, knit, linen, silk); relaxed modern fits. In couples and groups each person takes a different family (one burgundy, one dark teal, one ink) so the frame stays balanced, never matching.
+ 4. One quiet accent at most: dusty rose scarf, burgundy knit, burgundy leather bag, simple jewellery or dark sunglasses.
+Warm and ordered: tonal, harmonious, layered, matte textures (wool, knit, linen, silk); relaxed modern fits. In couples and groups each person takes a different family (one burgundy, one slate, one ink) so the frame stays balanced, never matching.
 Choose for the SCENE:
  - Home, family, planning money → knitwear: burgundy or dusty-rose knit over ecru, slate or ink trousers.
- - City, street, business → ink or slate tailoring with an ecru layer, one burgundy or dark-teal accent.
+ - City, street, business, shopping → ink or slate tailoring with an ecru layer, one burgundy accent.
  - Café, friends, social → raspberry or dusty-rose piece against an ink or slate anchor.
- - Work, creative studio, small business → dark-teal or slate shirt, sleeves rolled, stone trousers.
+ - Work, creative studio, small business → slate or white shirt, sleeves rolled, stone trousers.
  - Premium, wealth, investment → ink tailoring, ecru knit, minimal jewellery.
- - Studio portrait → one strong solid: ink blazer, burgundy knit or dark-teal shirt against the plaster set.
+ - Studio portrait → one strong solid: ink blazer, burgundy knit or crisp white shirt against the plaster set.
 Mood and camera: composed, warm and confident; eye-level or gentle angles with selective focus, foreground depth and soft directional natural light.`;
-const LOOK_CALM_NEG = "colours outside the BAE palette, camel, brown, olive, mustard, cobalt, neon colours, all-beige outfit, head-to-toe beige, head-to-toe cream, all-white outfit, monochrome beige styling, sand-coloured outfits, matching couple outfits, matching coats, washed-out pastel wardrobe";
-const LOOK_BOLD_NEG = "colours outside the BAE palette, yellow clothing, lime green, purple, red clothing, neon colours, muddy colours, all-beige outfit, all-neutral outfit, muted dull colours, formal business suit, stiff pose, eye-level flat framing";
+const LOOK_CALM_NEG = "streetwear, oversized t-shirt, baggy jeans, teal clothing, colours outside the BAE palette, camel, brown, olive, mustard, cobalt, neon colours, all-beige outfit, head-to-toe beige, head-to-toe cream, all-white outfit, monochrome beige styling, sand-coloured outfits, matching couple outfits, matching coats, washed-out pastel wardrobe";
+const LOOK_BOLD_NEG = "streetwear, oversized t-shirt, graphic tee, baggy jeans, balloon trousers, tube socks, chunky sneakers, hoodie, teal clothing, green clothing, colours outside the BAE palette, yellow clothing, purple, red clothing, neon colours, more than one colour per outfit, muddy colours, stiff stock pose";
 function lookRule(){ return S.look==="Bold"?LOOK_BOLD+(S.setting==="Studio"?"\nIn the studio, keep the bold wardrobe, low-angle wide camera and saturated grade; the backdrop may be a single seamless colour from the fresh BAE palette (teal, sky blue, blush or light stone) instead of plaster.":""):LOOK_CALM; }
-function lookLine(){ return S.look==="Bold"?"Look lock: BOLD & COLOURFUL — Gen Z streetwear colour-blocked ONLY in the fresh BAE palette (teal #32969B, dark teal #196E78, sky blue #4BBCDF, raspberry #B9516E, blush #F1C0B6, burgundy #A33755) on a white, light-stone or ink base, each person leading with a different fresh colour, no colour outside the palette; low-angle wide-angle 16–24 mm hero shot against a bright open sky or backdrop, hard bright sunlight, clean punchy grade, friends laughing mid-action.":"Look lock: ELEGANT & CALM — tailored wardrobe ONLY in the warm, deep BAE palette (ink #19181E, slate #4F4E62, burgundy #A33755, raspberry #B9516E, dark teal #196E78, dusty rose #F1C0B6, stone #CCC3B4, ecru #FFFAF4): a deep anchor piece, one tonal mid-tone, ecru or white as one layer only, one quiet accent; ordered and harmonious; never head-to-toe stone, beige or cream, never matching outfits; gentle angle and soft natural light."; }
+function lookLine(){ return S.look==="Bold"?"Look lock: BOLD & COLOURFUL — refined old-money minimal wardrobe (tailored trousers, crisp shirts, fine knits, clean blazers, loafers or white leather sneakers; never streetwear), crisp white or ink-black layers over ONE fresh BAE colour piece per person (blush #F1C0B6, raspberry #B9516E, burgundy #A33755 or sky blue #4BBCDF), each person a different colour, never teal or green; bright clean light, confident energy, clean punchy grade.":"Look lock: ELEGANT & CALM — refined old-money tailored wardrobe ONLY in the warm, deep BAE palette (ink #19181E, slate #4F4E62, burgundy #A33755, raspberry #B9516E, dusty rose #F1C0B6, stone #CCC3B4, ecru #FFFAF4), never streetwear, never teal: a deep anchor piece, one tonal mid-tone, ecru or white as one layer only, one quiet accent; ordered and harmonious; never head-to-toe stone, beige or cream, never matching outfits; gentle angle and soft natural light."; }
 const CLIENT_LINE = "Mandatory art direction: modern, contemporary, upscale setting; modern wardrobe that follows the look lock, with no orange clothing on anyone; no hijab, no headscarf, no traditional Arab clothing; professionally retouched skin with an even skin tone and subtle real texture; any phone is a modern iPhone 18 with no visible logo; modern Scandinavian IKEA-style decor.";
 const CLIENT_NEG = "orange clothing, orange shirt, orange jacket, orange dress, orange sweater, rust clothing, terracotta clothing, coral clothing, hijab, headscarf, head covering, niqab, abaya, thobe, dishdasha, keffiyeh, shemagh, kaftan, traditional Arab clothing, old buildings, souk, old town, rustic, dated decor, ornate furniture, clutter, old phone, generic phone, visible logo, blemishes, uneven skin tone, acne, plastic skin, waxy skin";
 /* Composition lock — always on */
@@ -176,11 +181,14 @@ const COMPOSITION_RULE = `COMPOSITION LOCK — MANDATORY: the person (main subje
 const COMPOSITION_LINE = "Composition lock: the person (or the group, as one centred cluster) is centred in the middle of the frame on the vertical centre line, balanced symmetrical framing with equal space left and right; not on the left, not on the right.";
 const COMPOSITION_NEG = "off-centre subject, subject on the left, subject on the right, rule-of-thirds placement, subject cropped at the edge";
 /* Setting lock — Studio overrides any location in the brief */
-const STUDIO_RULE = `SETTING LOCK — STUDIO (overrides any location named in the brief or seen in the references): photographed in a professional photo studio on a minimal, softly architectural BAE set — warm plaster or stone-toned seamless backdrop (light stone #ECE8DF, warm beige, soft terracotta), light oak modern furniture, at most one or two modern props that hint at the brief's story. Soft directional key light from a large softbox that reads as clean natural window light, gentle fill, soft shadow. No real-world location: no café, no street, no shop, no outdoor or city background, no window views. Like the BAE studio references (woman in white shirt, man in brown cardigan at a desk, woman in cream turtleneck).`;
-const STUDIO_LINE = "Setting lock: STUDIO. Shot in a professional studio on a minimal, softly architectural set with a warm plaster or stone-toned seamless backdrop, light oak modern furniture and one or two modern props; soft directional softbox key light that reads as clean natural window light. No real location, no café, no street, no outdoor or city background.";
-const STUDIO_NEG = "outdoor, street, café, restaurant, shop, office building, city background, window view, landscape, real-world location";
+/* A scene must tell its whole story: whoever the action involves is in the frame */
+const STORY_RULE = `STORY LOCK: show everything the action needs so the moment reads instantly. Paying or buying → a cashier or sales associate across the counter (facing the customer, softly in focus, dressed in the same refined style) and the shop's products displayed neatly and minimally behind (folded garments, boxed goods on light-oak shelves). Ordering → a barista or waiter. Meeting or advice → the other person. Never an empty counter, empty shop or missing counterpart. The main subject stays centred; secondary people are smaller or softer.`;
+const STORY_LINE = "Story lock: every person the action needs is in the frame (e.g. a cashier or sales associate across the counter when paying, with neatly displayed products), never an empty counter or empty shop; the main subject stays centred.";
+const STUDIO_RULE = `SETTING LOCK — STUDIO (overrides any location named in the brief or seen in the references): photographed in a professional photo studio on a minimal, softly architectural BAE set — warm plaster or stone-toned seamless backdrop (light stone #ECE8DF, warm beige, soft terracotta), light oak modern furniture. The set is a clean, minimal STAGED VERSION of the brief's place so the story reads instantly: for shopping, a minimal boutique counter with a sales associate and a few neatly folded garments or boxed products on light-oak shelves; for a café, a minimal counter with a barista; for home, a sofa and side table. Every person the action needs is there. Soft directional key light from a large softbox that reads as clean natural window light, gentle fill, soft shadow. No real-world location: no café, no street, no shop, no outdoor or city background, no window views. Like the BAE studio references (woman in white shirt, man in brown cardigan at a desk, woman in cream turtleneck).`;
+const STUDIO_LINE = "Setting lock: STUDIO. Shot in a professional studio on a minimal, softly architectural set with a warm plaster or stone-toned seamless backdrop and light oak modern furniture, dressed as a clean minimal staged version of the brief's place (e.g. a boutique counter with a sales associate and neatly displayed products) with every person the action needs; soft directional softbox key light that reads as clean natural window light. No real location, no café, no street, no outdoor or city background.";
+const STUDIO_NEG = "outdoor, street, city background, window view, landscape, real-world location, empty set, missing cashier";
 const LOCATION_LINE = "Setting lock: on location in a real, modern, upscale place in Amman.";
-function settingRule(){ return S.setting==="Studio"?STUDIO_RULE:(S.look==="Bold"?`SETTING LOCK — ON-LOCATION: a real, modern place in Amman suited to youth energy (modern rooftop terrace, contemporary plaza, new park, skate spot, clean concrete steps), shot so the bright open sky fills the background.`:`SETTING LOCK — ON-LOCATION: a real, modern, upscale place (modern Amman), with depth layers and foreground bokeh.`); }
+function settingRule(){ return S.setting==="Studio"?STUDIO_RULE:(S.look==="Bold"?`SETTING LOCK — ON-LOCATION: the real, modern, upscale place the brief names (in modern Amman), bright and clean; when outdoors, a bright open sky behind the subjects.`:`SETTING LOCK — ON-LOCATION: the real, modern, upscale place the brief names (modern Amman), with depth layers and foreground bokeh.`); }
 const REF_STYLE = CLIENT_RULES + "\n\n" + `REFERENCE PHOTOGRAPHER STYLE (Mari Juliano, lifestyle): bright, clean natural daylight (window light or open sun); crisp, sharp subjects with true-to-life colour; candid, genuine laughter and interaction captured mid-action; tidy, styled but lived-in real homes, cafés and parks; colour-coordinated wardrobe against the set; occasional low angles against open sky and overhead tabletop views. Blend: keep the clean natural light and candid energy, shift the palette to BAE warmth, add BAE depth layers and foreground bokeh, and place it in Jordan.`;
 
 /* ---------------- state ---------------- */
@@ -532,6 +540,8 @@ ${REF_STYLE}
 
 ${COMPOSITION_RULE}
 
+${STORY_RULE}
+
 ${settingRule()}
 
 ${lookRule()}
@@ -574,6 +584,8 @@ ${REF_STYLE}
 
 ${COMPOSITION_RULE}
 
+${STORY_RULE}
+
 ${settingRule()}
 
 ${lookRule()}
@@ -589,7 +601,7 @@ Requirements:
 - Apply every point of the CLIENT ART DIRECTION explicitly in the prompt: modern upscale setting, modern elegant wardrobe, no hijab or traditional Arab clothing, professionally retouched even skin tone, iPhone 18 for any phone, modern IKEA-style decor.
 - State the composition explicitly: the person centred on the vertical centre line, balanced framing, equal space left and right.
 - ${S.setting==="Studio"?"STUDIO: describe the studio set, backdrop and softbox light explicitly; translate any location in the brief into one or two modern props on the set; no real location.":"ON-LOCATION: encode depth layers and foreground bokeh in a modern real place."}
-- ${S.look==="Bold"?"LOOK BOLD & COLOURFUL: choose each person's streetwear for THIS scene and name every piece with its colour, using ONLY the fresh BAE palette (teal, dark teal, sky blue, raspberry, blush, burgundy on a white, light-stone or ink base); give each person a different lead colour; then the low-angle wide-angle 16–24 mm camera looking up, the bright open sky or backdrop, hard bright sunlight and the playful mid-laugh interaction.":"LOOK ELEGANT & CALM: choose each person's outfit for THIS scene and name every piece with its colour, using ONLY the warm, deep BAE palette (ink, slate, burgundy, raspberry, dark teal, dusty rose, stone, ecru): a deep anchor, a tonal mid-tone, ecru or white as one layer, one quiet accent; people in the same frame take different colour families; never head-to-toe stone, beige or cream."}
+- ${S.look==="Bold"?"LOOK BOLD & COLOURFUL: dress each person in refined old-money minimal style for THIS scene (tailored trousers, crisp shirts, fine knits, clean blazers or overshirts, loafers or white leather sneakers; never streetwear) and name every piece with its colour: crisp white or ink-black layers over ONE colour piece from blush, raspberry, burgundy or sky blue, a different colour for each person, never teal or green. Then camera, light and a confident, natural moment.":"LOOK ELEGANT & CALM: choose each person's outfit for THIS scene and name every piece with its colour, using ONLY the warm, deep BAE palette (ink, slate, burgundy, raspberry, dark teal, dusty rose, stone, ecru): a deep anchor, a tonal mid-tone, ecru or white as one layer, one quiet accent; people in the same frame take different colour families; never head-to-toe stone, beige or cream."}
 - Encode selective focus with one focal anchor${S.look==="Bold"?" (faces sharp)":" and the BAE warm palette"}.
 - REFERENCES ARE STYLE ONLY: you have seen them and understand their photography; carry over only camera height and angle, lens feel, depth of field, light quality, colour grade and the general kind of place. Invent a NEW scene: never write "same place/location/room/street as", "like the reference image", "recreate", "replicate" or anything that copies a reference's location, objects, people, poses, wardrobe or layout, and never describe what a reference shows. Wardrobe comes only from the look rules.
 - No logos, text, signage, watermarks.
@@ -631,6 +643,7 @@ function enforce(p){
   t+="\n\n"+CLIENT_LINE+"\n"+lookLine();
   if(!/Composition lock:/.test(t)) t+="\n"+COMPOSITION_LINE;
   t=t.replace(/\n*Setting lock:[^\n]*/g,"")+"\n"+(S.setting==="Studio"?STUDIO_LINE:LOCATION_LINE);
+  t=t.replace(/\n*Story lock:[^\n]*/g,"")+"\n"+STORY_LINE;
   return t;
 }
 
