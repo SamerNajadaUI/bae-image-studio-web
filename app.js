@@ -308,6 +308,12 @@ function fixRefs(args,refs){
   const copy=JSON.parse(JSON.stringify(args||{})); visit(copy);
   return copy;
 }
+function oneImage(args){
+  const KEYS=/^(num_?images|numImages|number_?of_?images|numberOfImages|count|n|quantity|variations|batch_?size|batchSize|samples|num_?outputs|numOutputs|images_?count)$/i;
+  const copy=JSON.parse(JSON.stringify(args||{}));
+  const visit=(o,d=0)=>{ if(!o||typeof o!=="object"||d>6) return; for(const k of Object.keys(o)){ if(KEYS.test(k)&&typeof o[k]==="number") o[k]=1; else if(o[k]&&typeof o[k]==="object"&&!/reference/i.test(k)) visit(o[k],d+1); } };
+  visit(copy); return copy;
+}
 function replaceDeep(o,token,val){
   if(Array.isArray(o)) return o.map(x=>replaceDeep(x,token,val));
   if(o&&typeof o==="object"){ const r={}; for(const k in o) r[k]=replaceDeep(o[k],token,val); return r; }
@@ -962,37 +968,42 @@ async function runModel(key,refs){
     const opt=(modelId&&S.opts[modelId])||{raw:await modelDetails(modelId),parsed:{}}; const P=opt.parsed||{};
     const modeParam=(P.modes||[]).find(x=>String(x.value)===String(mode))?.param||null;
     const plan=await buildArgs("images_generate",
-      `Generate exactly ${count} ${S.mode==="icon"?"3D icon illustration image(s), 16:9 widescreen, on a flat Light Stone #ECE8DF background,":"photorealistic image(s)"} with model "${modelId||m.label}". Use the prompt verbatim.
+      `Generate exactly 1 ${S.mode==="icon"?"3D icon illustration image, 16:9 widescreen, on a flat Light Stone #ECE8DF background,":"photorealistic image"} with model "${modelId||m.label}". Use the prompt verbatim.
 Resolution: 4K. Use the exact 4K value from the model settings${P.res_4k?` ("${P.res_4k}")`:""}; if 4K is not offered, use the largest value${P.max_res?` ("${P.max_res}")`:""}.
 Quality: the highest available${P.best_quality?` ("${P.best_quality}"${P.quality_param?` on "${P.quality_param}"`:""})`:""}.
 ${mode?`Mode: "${mode}"${modeParam?` on setting "${modeParam}"`:""}.`:"Mode: model default."}
 Aspect ratio: ${typeof aspect==="string"?(aspect==="auto"?"auto (let the model choose)":aspect):`custom ${aspect.width}x${aspect.height} px`}.
-Number of images: ${count}.
+Number of images: 1 (the page calls this tool once per image).
 REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this order, so the first becomes @img1, the second @img2 and so on (the prompt refers to them by those tags). Use the schema's reference field(s) with the uploaded creation identifiers (or URLs if the schema takes URLs). Put EVERY reference in the GENERAL image reference list (reference type "image", shown as @img1, @img2… in Magnific), keeping the order. NEVER use the "style" reference type/slot and NEVER the "character" or "product" slot: the style slot must stay empty/default because it changes the rendering type (photo vs illustration vs 3D). Each reference object carries the creation id in the field "identifier" (exactly that name). If the schema needs a type per reference, set it to "image". Do not drop any reference. Fill the negative prompt field if the schema has one. Turn off any prompt auto-enhancement so the brand prompt stays as written.`,
-      {model:modelId, model_label:m.label, model_settings:opt.raw, prompt, negative_prompt:negativeNow(), composition:"person centred on the vertical centre line", setting:S.setting, aspect_ratio:aspect, resolution:P.res_4k||"4K", quality:P.best_quality||"high", mode, num_images:count, references:refs},"default");
-    plan.args=fixRefs(plan.args,refs);
-    const r=await callMag("images_generate",plan.args);
-    let rr=readResult(r); if(!rr.ids.length&&!rr.urls.length&&!rr.images.length) rr=await extractWithClaude(r,"the creation identifiers of the images being generated");
-    const genIds=rr.ids.slice();
-    const webUrls=[...(rr.webUrl?[rr.webUrl]:[]),...rr.links.filter(u=>/magnific\.com\/app\//i.test(u))];
-    if(!rr.images.length&&!DONE.test(rr.status)){ if(!genIds.length) throw {code:"tool_error",message:"Magnific didn't return a creation to wait for."}; c.ph="Rendering in Magnific…"; up(); rr=await waitFor(genIds,"4K image generation"); }
-    c.webUrls=[...new Set([...webUrls,...(rr.webUrl?[rr.webUrl]:[])])];
-    const ids=rr.ids.length?rr.ids:genIds;
-    const n=Math.max(1,Math.min(count,Math.max(ids.length,rr.images.length,rr.urls.length)));
+      {model:modelId, model_label:m.label, model_settings:opt.raw, prompt, negative_prompt:negativeNow(), composition:"person centred on the vertical centre line", setting:S.setting, aspect_ratio:aspect, resolution:P.res_4k||"4K", quality:P.best_quality||"high", mode, num_images:1, references:refs},"default");
+    plan.args=oneImage(fixRefs(plan.args,refs));
     const asked4k=!!P.res_4k||/4k|3840|4096/i.test(JSON.stringify(plan.args));
-    c.outs=[]; c.sel=0;
-    for(let i=0;i<n;i++){
-      const o={id:ids[i]||(n===1?ids[0]:null)||null,url:rr.urls[i]||null,img:null,blob:null,long:0};
-      let shot=rr.images[i]||null; let pw=0;
+    /* One image per Magnific call, all calls in parallel: models that ignore the count still give exactly N images,
+       and each image has its own creation, preview and PNG link */
+    c.outs=Array.from({length:count},()=>({id:null,url:null,img:null,blob:null,long:0,pending:true})); c.sel=0; c.webUrls=[]; up();
+    let done=0;
+    const genOne=async(slot)=>{
+      const r=await callMag("images_generate",plan.args);
+      let rr=readResult(r); if(!rr.ids.length&&!rr.urls.length&&!rr.images.length) rr=await extractWithClaude(r,"the creation identifier of the image being generated");
+      const genId=rr.ids[0]||null; const web=rr.webUrl||rr.links.find(u=>/magnific\.com\/app\//i.test(u))||null;
+      if(!rr.images.length&&!DONE.test(rr.status)){ if(!genId) throw {code:"tool_error",message:"Magnific didn't return a creation to wait for."}; rr=await waitFor([genId],"4K image generation"); }
+      const o=c.outs[slot]; o.id=rr.ids[0]||genId; o.url=rr.urls[0]||null; o.webUrl=rr.webUrl||web; o._rr=rr;
+      let shot=rr.images[0]||null, pw=0;
       if(!shot&&o.id){ const pv=await preview(o.id); shot=pv.image; o.url=o.url||pv.urls[0]||null; pw=Math.max(pv.w,pv.h); }
       if(shot){ o.img=`data:${shot.mime};base64,${shot.data}`; o.blob=b64Blob(shot.data,shot.mime); }
       /* Size: trust Magnific's reported dimensions, then the requested 4K, then the preview's own pixels */
-      o.long=pw||(n===1?Math.max(rr.w,rr.h):0)||(asked4k?(plan.expected_long_side_px||3840):0)||(o.img?await longSide(o.img):0)||plan.expected_long_side_px||0;
-      /* Magnific reports resolution "4k" for a native 4K render: never pay for an upscale then */
+      o.long=pw||Math.max(rr.w,rr.h)||(asked4k?(plan.expected_long_side_px||3840):0)||(o.img?await longSide(o.img):0)||plan.expected_long_side_px||0;
       if(rr.res4k||asked4k&&/4k/i.test(JSON.stringify(plan.args))) o.long=Math.max(o.long,3840);
-      o.webUrl=c.webUrls?.[i]||c.webUrls?.[0]||null;
-      c.outs.push(o);
-    }
+      o.pending=false; done++; c.ph=`Rendering in Magnific… ${done} of ${count} ready`; up();
+    };
+    c.ph=`Rendering ${count} in Magnific…`; up();
+    const res=await Promise.allSettled(c.outs.map((_,k)=>genOne(k)));
+    const failed=res.filter(x=>x.status==="rejected");
+    c.outs=c.outs.filter(o=>!o.pending&&(o.id||o.url||o.img));
+    if(!c.outs.length) throw failed[0]?.reason||{code:"tool_error",message:"Magnific returned no image."};
+    c.webUrls=c.outs.map(o=>o.webUrl).filter(Boolean);
+    const n=c.outs.length;
+    if(failed.length) c.refWarn=(c.refWarn?c.refWarn+" ":"")+`${failed.length} of ${count} images failed in Magnific: ${mcpCopy(failed[0].reason)}`;
     c.steps[1]="ok"; c.stepNote[1]=`${n} image${n>1?"s":""}${mode?` · ${$(m.mode).selectedOptions[0]?.textContent.replace(" · best quality","")}`:""}`; c.steps[2]="run"; up();
     /* 4K check: Magnific upscale only for an output that came back under 4K */
     let ups=0;
@@ -1013,7 +1024,7 @@ REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this o
     c.steps[2]="ok"; c.stepNote[2]=isIconKey(key)?"not needed for icons":ups?`${ups} upscaled with Magnific`:"native 4K";
     /* Make sure every image has a PNG link, and bytes for the preview where Magnific provides them */
     c.steps[3]="run"; c.stepNote[3]="getting PNG links"; up();
-    for(const o of c.outs){ await completeFiles(o,rr); up(); }
+    for(const o of c.outs){ await completeFiles(o,o._rr||{ids:[],urls:[],links:[],images:[]}); up(); }
     const got=c.outs.filter(o=>o.url||o.blob).length;
     c.steps[3]=got?"ok":"err"; c.stepNote[3]=got?`${got} file${got>1?"s":""}`:"no file link returned";
     if(!got) c.err="Magnific finished but sent no image file or link. Open your Magnific creations, or send the Connector log to Claude.";
