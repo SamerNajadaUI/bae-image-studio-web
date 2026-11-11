@@ -2589,8 +2589,18 @@ async function rlBuildSpace(){
         const args=tpl?replaceDeep(replaceDeep(a.args,"__TITLE__",nt.title),"__TEXT__",nt.text):(await buildArgs("spaces_pin_asset","Pin this text planning note to the Space board.",{space:sp.id,title:nt.title,text:nt.text},"quick")).args;
         await callMag("spaces_pin_asset",args); sp.pinned[nt.title]=sig(nt.text); rlFlush(); }
       return `${todo.length} note${todo.length===1?"":"s"} pinned${notes.length>todo.length?` · ${notes.length-todo.length} already there`:""}`; });
-    if(RL.scenes.some(s=>s.frame?.id)) await step("Wire a Seedance 2.5 node for each shot",rlWireSpace,true);
-    await step("Tidy the layout",async()=>{ const a=await buildArgs("spaces_arrange_nodes","Tidy every workflow of the Space Data.space into left-to-right rows.",{space:sp.id}); await callMag("spaces_arrange_nodes",a.args); return ""; },true);
+    if(RL.scenes.length) await step("Wire a Seedance 2.5 node for each shot",rlWireSpace,true);
+    await step("Tidy the layout",async()=>{
+      /* arranging needs the Space's page ids: read them from the Space map first */
+      let pages=[], raw=null;
+      try{ const sa=await buildArgs("spaces_state","Read the map of the Space Data.space (its pages, nodes and connections).",{space:sp.id}); const st=await callMag("spaces_state",sa.args); raw=st.payload??st.content;
+        walk(raw&&typeof raw==="object"?raw:{},(k,v,o)=>{ if(/^page_?ids?$/i.test(k)){ (Array.isArray(v)?v:[v]).forEach(x=>{ if(typeof x==="string"||typeof x==="number") pages.push(String(x)); }); }
+          if(/^pages$/i.test(k)&&Array.isArray(v)) v.forEach(p=>{ const id=p&&(p.id||p.pageId||p.page_id||p.identifier); if(id) pages.push(String(id)); }); });
+        if(!pages.length&&typeof raw==="string"){ const m=raw.match(/page[_ ]?id["'\s:=]+([A-Za-z0-9_-]+)/gi)||[]; m.forEach(x=>pages.push(x.split(/["'\s:=]+/).pop())); }
+      }catch(e){ log("✕","spaces_state for arrange",{code:e?.code}); }
+      pages=[...new Set(pages)];
+      const a=await buildArgs("spaces_arrange_nodes","Tidy every workflow of the Space Data.space into left-to-right rows, on every page listed in Data.pageIds (pass them all). If Data.pageIds is empty, take the page ids from Data.state.",{space:sp.id,pageIds:pages,state:pages.length?null:trimJSON(raw,6000)});
+      await callMag("spaces_arrange_nodes",a.args); return pages.length?`${pages.length} page${pages.length>1?"s":""}`:""; },true);
     sp.status="done"; sp.builtAt=Date.now();
     brSignal("project","delivered",1,{item:`${RL.title} · idea: ${ideaLine(RL.picked)} · ${RL.characters.length} cast, ${RL.locations.length} locations, ${RL.scenes.length} shots, ${RL.scenes.filter(s=>s.status==="done").length} filmed`,note:"The team took this production all the way to a Magnific Space.",key:"delivered"});
   }catch(e){ sp.status="err"; sp.err=mcpCopy(e); }
@@ -2615,9 +2625,9 @@ async function rlWireSpace(){
   const out=await sample.json(`You are wiring a Magnific Space (Space id: ${sp.id}) for a Bank al Etihad reel. The board already holds the images (added from these creations) and pinned notes.
 GOAL — for EACH shot below:
 1. Add ONE video generation node set to the Seedance 2.5 model (find the right node type, its ports and settings with spaces_node_types_search), with the shot's prompt as its prompt, duration ${"<duration_s>"} seconds and aspect ratio ${set.aspect}.
-2. Connect the shot's first-frame image node (the node made from first_frame_creation) into the video node's start / first-frame image input.
+2. If first_frame_creation is set, connect that shot's first-frame image node (the node made from it) into the video node's start / first-frame image input. If it is null, leave the start image empty.
 3. If the node also takes reference images, connect the reference image nodes (made from reference_creations, in order) to them.
-Find the existing image nodes with spaces_state (match them by creation identifier). Describe each tool once before using it. Batch independent calls in the same round. Never run, delete or regenerate anything.
+Find the existing image nodes with spaces_state (match them by creation identifier). If a video node named "Shot <n> · …" already exists for a shot, update it (spaces_patch_node) and fix its connections instead of adding another one. Describe each tool once before using it. Batch independent calls in the same round. Never run, delete or regenerate anything.
 4. VERIFY at the end with spaces_state or spaces_get_nodes: every shot has exactly one Seedance 2.5 video node whose prompt equals the shot's prompt, whose start-frame input is connected to that shot's first-frame node, and whose reference inputs (if any) are connected in order. Name each video node "Shot <n> · <title>". Fix anything missing or wrong, then verify again.
 SHOTS (JSON): ${trimJSON(shots,20000)}
 When finished, reply with only JSON: {"nodes_created":0,"connections":0,"verified_shots":0,"summary":"one short line"}`,{modelTier:"default",tools});
