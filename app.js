@@ -1806,7 +1806,7 @@ function brText(){
   const lessons=BR.sections.find(s=>s.id==="lessons"), rest=BR.sections.filter(s=>s.id!=="lessons");
   const R=BR.research[0];
   return `DIRECTOR'S BRAIN — the team's shared memory. Think with it on every answer. Where the team's lessons disagree with general knowledge, the lessons win.
-${rest.map(s=>`### ${s.title}\n${cut(s.text,9000)}`).join("\n\n")}
+${rest.map(s=>`### ${s.title}\n${cut(s.text,6000)}`).join("\n\n")}
 ${lessons?`### ${lessons.title}\n${cut(lessons.text,5000)}`:""}
 ${R?`### This morning's research (${R.date})\n${cut(R.text,4000)}`:""}`;
 }
@@ -2237,9 +2237,9 @@ function rlPlanSVG(bp){
 function rlBlockingHTML(sc){
   const bp=sc.blueprint, ck=sc.check;
   const zoneName=id=>(bp?.zones||[]).find(z=>z.id===id)?.name||id||"";
-  const pill=sc._checking?`<span class="rl-pill"><span class="spin" aria-hidden="true"></span> Script supervisor is checking…</span>`
+  const pill=sc._checking?`<span class="rl-pill"><span class="spin" aria-hidden="true"></span> Checking… <b data-ck-t="${sc.n}">${Math.round((Date.now()-sc._checking)/1000)}s</b> <button type="button" class="rl-stop" data-rl="stopcheck" data-n="${sc.n}">Stop</button></span>`
     :ck?.dirty?`<span class="rl-pill warn">Edited — check again</span>`
-    :ck?(ck.issues?.length?`<span class="rl-pill ok">Fixed ${ck.issues.length} issue${ck.issues.length>1?"s":""} · ${ck.passed||0} checks</span>`:`<span class="rl-pill ok">✓ ${ck.passed||0} checks passed</span>`)
+    :ck?(ck.issues?.length?`<span class="rl-pill ok">Fixed ${ck.issues.length} · ${ck.passed||0}/8 checks${ck.secs?` · ${ck.secs}s`:""}</span>`:`<span class="rl-pill ok">✓ ${ck.passed||0}/8 checks${ck.secs?` · ${ck.secs}s`:""}</span>`)
     :`<span class="rl-pill">Not checked yet</span>`;
   return `<details class="rl-block"${bp?" open":""}><summary><span>Blocking &amp; continuity</span>${pill}</summary>
     ${bp?`<div class="rl-blockgrid">${rlPlanSVG(bp)}<div class="rl-blocktext" dir="auto">
@@ -2256,53 +2256,77 @@ function rlBlockingHTML(sc){
   </details>`;
 }
 /* The script supervisor: an independent pass that checks every scene against the blueprint, the brain's cinematography and AI-video rules, and fixes the prompts */
+/* Fast script supervisor: instant local checks, then ONE short Claude pass per scene (all scenes in parallel) that returns small text patches instead of rewriting whole prompts */
+const RL_CHECKLIST=`CHECK, in order (fix only what is wrong):
+1 Geography: name the zones (INTERIOR/EXTERIOR, behind/in front of a counter, inside/outside a car); every person is in exactly one zone; door hinge + opening direction; camera zone and which way it looks.
+2 Who is where in EVERY shot; screen sides fixed (180° rule); eyelines match.
+3 One action per shot; timestamps add up to the duration; "Hard cut." between shots.
+4 Props and hands (which hand, screen facing which way); no gibberish text or logos.
+5 Light: one motivated source and direction, same time of day; exterior brighter than interior through a doorway.
+6 Exact head-count, "no other people, no duplicates"; mirrors/reflections avoided or controlled; same faces and wardrobe (zero drift).
+7 Who speaks in which shot; others keep mouths closed.
+8 BAE: modern Amman, BAE wardrobe, no logos.`;
+function rlQuickCheck(sc){
+  const w=[], P=sc.prompt||"", F=sc.frame_prompt||"", bp=sc.blueprint;
+  const ts=[...P.matchAll(/(\d+):(\d{2}(?:\.\d+)?)\s*[–-]\s*(\d+):(\d{2}(?:\.\d+)?)/g)].map(m=>(+m[3])*60+(+m[4]));
+  if(ts.length&&Math.abs(Math.max(...ts)-(+sc.duration_s||0))>0.6) w.push(`Shot timings end at ${Math.max(...ts)}s but the scene is ${sc.duration_s}s.`);
+  for(const t of new Set([...(P.match(/@img\d+/g)||[]),...(F.match(/@img\d+/g)||[])])) if(!rlElByTag(t)) w.push(`${t} isn't in Cast or Locations.`);
+  if(bp&&(bp.zones||[]).length>1){ const zonesUsed=new Set((bp.people||[]).map(p=>p.zone)); if(zonesUsed.size>1&&!/inside|interior/i.test(F+P)&&!/outside|exterior/i.test(F+P)) w.push("The prompts don't say who is inside and who is outside."); }
+  if(!/exactly (one|two|three|four|\d+) (person|people|women|men)|no other people/i.test(P+F)&&(bp?.people||[]).length) w.push("Head-count isn't stated.");
+  return w;
+}
+function rlPatch(text,edits){
+  let t=String(text||""); let n=0;
+  for(const ed of (edits||[])){ const find=String(ed?.find||""), rep=String(ed?.replace||""); if(!rep&&!find) continue;
+    if(rep&&t.includes(rep)) continue;
+    if(find&&t.includes(find)){ t=t.replace(find,rep); n++; }
+    else if(rep){ t=t.replace(/\s*$/,"")+"\n"+rep; n++; } }
+  return {text:t,n};
+}
 async function rlCheckScenes(ns,{quiet}={}){
   if(!RL||!sample) return;
-  const list=RL.scenes.filter(s=>!ns||ns.map(String).includes(String(s.n))); if(!list.length) return;
-  list.forEach(s=>{ s._checking=true; s.checkPending=true; }); rlFlush(); if(!quiet) rlBoard(); else rlBoardSoon(); rlWake(true);
+  const list=RL.scenes.filter(s=>(!ns||ns.map(String).includes(String(s.n)))&&!s._checking); if(!list.length) return Promise.all(RL.scenes.filter(s=>s._checkP).map(s=>s._checkP));
+  let done; const all=new Promise(r=>done=r); list.forEach(s=>{ s._checkP=all; });
+  list.forEach(s=>{ s._checking=Date.now(); s.checkPending=true; s._ctl=new AbortController(); }); rlFlush(); if(!quiet) rlBoard(); else rlBoardSoon(); rlWake(true); rlTick();
   await brLoad();
-  const sec=id=>BR.sections.find(s=>s.id===id)?.text||"";
-  const kb=[sec("cinematography"),sec("ai_video_rules")].filter(Boolean).join("\n\n")||"Use professional film grammar: zones for every person, door logic, 180° rule, one action per shot, motivated light, exact head-count.";
-  const set=rlSet();
-  try{
-    const out=await rlAsk(`You are a meticulous SCRIPT SUPERVISOR and DIRECTOR OF PHOTOGRAPHY reviewing AI-video scenes for a Bank al Etihad reel (${set.aspect}, Seedance 2.5 with a Nano Banana first frame) before any credits are spent. Your job: make every scene physically, spatially and cinematically correct and unambiguous, so the AI cannot misread it.
+  const lessons=(BR.sections.find(s=>s.id==="lessons")?.text||"").slice(0,700), set=rlSet();
+  await Promise.all(list.map(async sc=>{
+    const local=rlQuickCheck(sc), beat=RL.script?.scenes?.[(+sc.n||1)-1]||null;
+    try{
+      const out=await rlAsk(`You are a fast, precise script supervisor for an AI-video scene (${set.aspect}; Nano Banana first frame, then Seedance 2.5). Find what would make the AI misread the scene and fix it with SMALL text edits. Do not rewrite or restyle what is already correct.
+${RL_CHECKLIST}
+Team lessons: ${lessons||"none"}
+Script beat: ${trimJSON(beat,1200)}
+People and places: ${trimJSON([...RL.characters,...RL.locations].map(e=>`${e.tag} ${e.name}`),600)}
+Automatic warnings: ${local.join(" | ")||"none"}
+SCENE ${sc.n} (${sc.duration_s||""} s)
+Blueprint: ${sc.blueprint?trimJSON(sc.blueprint,3500):"MISSING — write one"}
+First-frame prompt:
+${sc.frame_prompt||"(empty)"}
+Seedance prompt:
+${sc.prompt||"(empty)"}
 
-KNOWLEDGE (follow it):
-${kb}
-
-${RL_BAE}
-
-PROJECT:
-- Script: ${trimJSON(RL.script,5000)}
-- Characters: ${trimJSON(RL.characters.map(({tag,name,description,wardrobe})=>({tag,name,description,wardrobe})),3000)}
-- Locations & props: ${trimJSON(RL.locations.map(({tag,name,kind,description})=>({tag,name,kind,description})),2500)}
-- Lessons from the team: ${(BR.sections.find(s=>s.id==="lessons")?.text||"").slice(0,1500)}
-
-SCENES TO CHECK: ${trimJSON(list.map(({n,title,duration_s,refs,blueprint,frame_prompt,prompt})=>({n,title,duration_s,refs,blueprint:blueprint||null,frame_prompt,prompt})),40000)}
-
-FOR EACH SCENE:
-1. Read the script beat and decide the true geography. If the blueprint is missing or wrong, write a correct one. Every person gets one zone; doors get hinge and opening direction; the camera of every shot gets a position, zone, facing, field of view and move; light gets its motivated source; write the axis and the locks.
-2. Run THE CHECK from the AI-video rules in order (geography → who is where in every shot → camera side → one action per shot → props and hands → screen directions and eyelines → light and time → people count and identity → dialogue ownership → timing adds up → brand rules). Count the checks that pass.
-3. Rewrite frame_prompt and prompt ONLY where needed so they state the geography explicitly: name the INTERIOR/EXTERIOR zones, say who is where ("Sara @img1 is INSIDE the apartment…"), where the camera stands and which way it looks, door opening direction, exact head-count, screen sides, light source and direction, one action per shot with timestamps that add up to duration_s. Keep the @img tags exactly. Keep the prompts' structure (GLOBAL STYLE, REFERENCES, SCENE, CHARACTERS, LOCATION, FIRST FRAME & BLOCKING, shots with Hard cut, PHYSICS, LIGHTING, CONSISTENCY, AUDIO). The frame_prompt must describe exactly the blocking of the first moment of shot 1.
-
-Blueprint format: ${RL_BP_SCHEMA}
-
-Reply with only JSON: {"scenes":[{"n":1,"passed":12,"issues":[{"problem":"short, specific","fix":"what you changed"}],"blueprint":{...},"frame_prompt":"full text or null if unchanged","prompt":"full text or null if unchanged"}]}`,{modelTier:"complex",cache:false});
-    for(const r of (out?.scenes||[])){
-      const sc=RL.scenes.find(x=>+x.n===+r.n); if(!sc) continue;
-      if(r.blueprint&&typeof r.blueprint==="object") sc.blueprint=r.blueprint;
-      const fixedF=r.frame_prompt&&r.frame_prompt!==sc.frame_prompt, fixedP=r.prompt&&r.prompt!==sc.prompt;
-      if(fixedF){ sc.frame_prompt=String(r.frame_prompt); if(sc.frame?.id) sc.frame.stale=true; }
-      if(fixedP){ sc.prompt=String(r.prompt); if(sc.clip) sc.stale=true; }
-      sc.check={at:Date.now(),passed:+r.passed||0,issues:Array.isArray(r.issues)?r.issues.slice(0,12):[],dirty:false};
-    }
-    for(const s of list) if(!s.check||s.check.at<Date.now()-5000) s.check={...(s.check||{}),err:"The supervisor didn't return this scene. Press Check again.",dirty:true};
-    list.forEach(s=>delete s.checkPending);
-  }catch(e){ if(rlTransient(e)) list.forEach(s=>{ s.check={...(s.check||{}),err:"Paused: the connection dropped. The check continues when you're back.",dirty:true}; });
-    else list.forEach(s=>{ delete s.checkPending; s.check={...(s.check||{}),err:sampleCopy(e),dirty:true}; }); }
-  finally{ list.forEach(s=>delete s._checking); rlWake(false); rlSave(); rlBoard(); }
+Reply with only JSON:
+{"passed":<number of the 8 checks that pass after your fixes>,"issues":[{"problem":"short","fix":"short"}],"frame_edits":[{"find":"exact text from the first-frame prompt (or empty to append)","replace":"new text"}],"prompt_edits":[{"find":"exact text from the Seedance prompt (or empty to append)","replace":"new text"}],"blueprint":null}
+Return "blueprint" only if it is missing or wrong (format: ${RL_BP_SCHEMA}). Keep @img tags exactly. Empty arrays when nothing is wrong.`,{modelTier:"default",effort:"low",cache:false,signal:sc._ctl.signal});
+      if(out?.blueprint&&typeof out.blueprint==="object") sc.blueprint=out.blueprint;
+      const f=rlPatch(sc.frame_prompt,out?.frame_edits), p=rlPatch(sc.prompt,out?.prompt_edits);
+      if(f.n){ sc.frame_prompt=f.text; if(sc.frame?.id) sc.frame.stale=true; }
+      if(p.n){ sc.prompt=p.text; if(sc.clip) sc.stale=true; }
+      sc.check={at:Date.now(),secs:Math.round((Date.now()-sc._checking)/1000),passed:Math.min(8,+out?.passed||0),issues:Array.isArray(out?.issues)?out.issues.slice(0,10):[],dirty:false};
+      delete sc.checkPending;
+    }catch(e){
+      if(e?.code==="cancelled"){ delete sc.checkPending; sc.check={...(sc.check||{}),err:"Stopped.",dirty:true}; }
+      else if(rlTransient(e)) sc.check={...(sc.check||{}),err:"Paused: the connection dropped. The check continues when you're back.",dirty:true};
+      else { delete sc.checkPending; sc.check={...(sc.check||{}),err:sampleCopy(e),dirty:true}; }
+    }finally{ delete sc._checking; delete sc._ctl; rlSave(); rlBoardSoon(); }
+  }));
+  list.forEach(s=>delete s._checkP); done(); rlWake(false);
 }
-
+/* live seconds on the "checking" pill without redrawing the board */
+let rlTickT=null;
+function rlTick(){ clearInterval(rlTickT); rlTickT=setInterval(()=>{ const busy=RL?.scenes?.filter(s=>s._checking)||[]; if(!busy.length){ clearInterval(rlTickT); return; }
+  document.querySelectorAll("[data-ck-t]").forEach(el=>{ const sc=RL.scenes.find(s=>String(s.n)===el.dataset.ckT); if(sc?._checking) el.textContent=Math.round((Date.now()-sc._checking)/1000)+"s"; }); },1000); }
 /* Rewrite one scene: "Update shot prompt" makes it better with everything the Director knows today; "Ask for edit" applies the user's own change. Every version is kept so it can be undone. */
 async function rlImproveScene(n,instruction){
   const sc=RL.scenes.find(x=>+x.n===+n); if(!sc||!sample||sc._improving) return;
@@ -2329,7 +2353,10 @@ CURRENT SCENE: ${trimJSON({n:sc.n,...before},16000)}
 
 Blueprint format: ${RL_BP_SCHEMA}
 
-Reply with only JSON: {"title":"","duration_s":0,"refs":["@img1"],"blueprint":{...},"frame_prompt":"full text","prompt":"full text","changes":["3–6 short bullets saying what you changed and why, in the user's language"]}`,{modelTier:"complex",cache:false});
+Before answering, run this check on your own result and fix anything that fails:
+${RL_CHECKLIST}
+
+Reply with only JSON: {"title":"","duration_s":0,"refs":["@img1"],"blueprint":{...},"frame_prompt":"full text","prompt":"full text","passed":8,"changes":["3–6 short bullets saying what you changed and why, in the user's language"]}`,{modelTier:"default",effort:"medium",cache:false});
     if(!out||!out.prompt) throw {code:"invalid_json",message:"Claude didn't return a new prompt."};
     sc.history=[{...before,at:Date.now(),why:instruction||"Update shot prompt"},...(sc.history||[])].slice(0,6);
     if(out.title) sc.title=String(out.title);
@@ -2339,10 +2366,10 @@ Reply with only JSON: {"title":"","duration_s":0,"refs":["@img1"],"blueprint":{.
     if(out.frame_prompt&&out.frame_prompt!==sc.frame_prompt){ sc.frame_prompt=String(out.frame_prompt); if(sc.frame?.id) sc.frame.stale=true; }
     if(out.prompt!==sc.prompt){ sc.prompt=String(out.prompt); if(sc.clip) sc.stale=true; }
     sc.lastChange={at:Date.now(),kind:instruction?"edit":"upgrade",ask:instruction||"",changes:Array.isArray(out.changes)?out.changes.slice(0,8).map(String):[]};
-    if(sc.check) sc.check.dirty=true; ok=true; delete sc.improvePending;
+    sc.check={at:Date.now(),passed:Math.min(8,+out.passed||8),issues:[],dirty:false,by:"rewrite"}; ok=true; delete sc.improvePending;
   }catch(e){ if(rlTransient(e)) sc.improveErr="Paused: the connection dropped. It continues when you're back."; else { sc.improveErr=sampleCopy(e); delete sc.improvePending; } }
   finally{ delete sc._improving; rlWake(false); rlSave(); rlBoard(); }
-  if(ok) await rlCheckScenes([sc.n],{quiet:true});
+  if(ok){ const w=rlQuickCheck(sc); if(w.length) await rlCheckScenes([sc.n],{quiet:true}); }
 }
 function rlUndoScene(n){
   const sc=RL.scenes.find(x=>+x.n===+n); const h=sc?.history?.[0]; if(!h) return;
@@ -2360,7 +2387,7 @@ function rlShotBar(sc){
   ${sc.improveErr?`<p class="rl-status bad">${esc(sc.improveErr)}</p>`:""}
   ${sc.lastChange?.changes?.length&&!busy?`<div class="rl-changes"><b>${sc.lastChange.kind==="edit"?"Your edit":sc.lastChange.kind==="undo"?"Undone":"Updated"}</b>${sc.lastChange.ask?` · “${esc(sc.lastChange.ask)}”`:""}<ul>${sc.lastChange.changes.map(c=>`<li dir="auto">${esc(c)}</li>`).join("")}</ul></div>`:""}`;
 }
-async function rlEnsureChecked(sc){ if(!sc.check||sc.check.dirty||!sc.blueprint){ await rlCheckScenes([sc.n],{quiet:true}); } }
+async function rlEnsureChecked(sc){ if(sc._checkP){ await sc._checkP; return; } if(!sc.check||sc.check.dirty||!sc.blueprint){ await rlCheckScenes([sc.n],{quiet:true}); } }
 /* ---------- Magnific: images for cast, locations and first frames ---------- */
 async function rlImage({prompt,aspect,refs=[],label,onQueued}){
   const model=$("selNano").value||null;
@@ -2658,6 +2685,7 @@ async function rlBible(){
     else if(a==="addcancel"){ RL._adding=null; rlBoard(); }
     else if(a==="cast"){ rlAddElement("character",b.dataset.n,"BAE character from the library",b.dataset.n); }
     else if(a==="check") rlCheckScenes([b.dataset.n]);
+    else if(a==="stopcheck"){ e.preventDefault(); const sc=RL.scenes.find(x=>String(x.n)===b.dataset.n); sc?._ctl?.abort(); }
     else if(a==="improve") rlImproveScene(b.dataset.n);
     else if(a==="ask"){ const sc=RL.scenes.find(x=>String(x.n)===b.dataset.n); if(sc){ sc._ask=!sc._ask; rlBoard(); setTimeout(()=>$("rlAsk"+sc.n)?.focus(),20); } }
     else if(a==="askcancel"){ const sc=RL.scenes.find(x=>String(x.n)===b.dataset.n); if(sc){ sc._ask=false; rlBoard(); } }
