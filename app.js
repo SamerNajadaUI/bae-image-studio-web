@@ -1679,22 +1679,17 @@ const RL_STAGES=[["idea","Idea"],["script","Script"],["characters","Cast"],["loc
 const RL_METHOD=`PRODUCTION METHOD (follow it exactly):
 1. IDEA — 3 distinct concepts built to go viral as short-form reels: a scroll-stopping HOOK in the first 1–2 seconds (visual surprise, relatable pain, pattern break), ONE clear emotion, a simple turn, the product moment as the payoff (never a lecture), and a loop-able or punchy ending + BAE end card. Cinematic production value. Each: title, hook, logline, beats, why it will travel, product moment.
 2. SCRIPT — scene by scene with timecodes summing to the target length: action, dialogue (who, language, exact line), on-screen text, sound. Short lines; dialogue sparse and natural.
-3. CHARACTERS — assets come first. One reference sheet per character, generated as an image: "Character reference sheet, two panels side by side on a seamless light stone backdrop: left full body front view, right close-up of the face" + exact face, age, hair, build, skin, wardrobe. Photoreal skin: natural texture and visible pores, lightly retouched even tone (BAE), no plastic or CGI sheen.
-4. LOCATIONS & PROPS — each location as an EMPTY establishing image (no people), the most important image because the video inherits its light and texture: "<place>, empty, <time of day>, <light>, anamorphic lens, shallow depth of field, fine film grain". Props/products as a product sheet: "front, back and top views". For an app moment, an iPhone 18 prop with the phone screen kept for a clean UI composite (screen glow, no readable text) unless the user supplies the UI.
-5. DIRECTING — one Seedance 2.5 prompt per scene (4–15 s each). Structure, in this order, as plain labelled blocks:
-   GLOBAL STYLE: format, look, grade, film texture, frame rate, "photorealistic — no 3D render, no game engine".
-   REFERENCES: one line per tag: "@img1 defines <name>'s face, hair and build. Do not use the image background or panel layout." / "@img3 defines the location: architecture, materials and light."
-   SCENE: one-line logline.
-   CHARACTERS / LOCATION: who is where, wardrobe (from the sheet), props.
-   FIRST FRAME & BLOCKING: exact start positions, screen sides (never swap sides), eyelines.
-   Shot 1 (0:00–0:02): shot size, lens as horizontal FOV in degrees (e.g. 18°, 35°, 47°, 63°), camera height, move (dolly-in, push-in, pull-back, orbit, walking follow, backpedal, handheld 6–10 cm shake, whip-pan, locked-off, gyro, FPV, crane), dutch angle in degrees if any, the action and the performance (objective, subtext, eye life). End with "Hard cut." Shot 2 (…) etc. Time every shot; vary sizes (wide → medium → close-up → insert); one idea per shot.
-   PHYSICS: how fabric, hair, liquid, objects move; real-time unless a speed ramp is written (e.g. 100% → 60% → 100%).
-   LIGHTING: the motivated source, direction, falloff.
-   CONSISTENCY: zero drift on faces, wardrobe and props; exact head-count; no duplicates; product details stay sharp.
-   AUDIO: bracket syntax — (music: …) or (no music, music added in edit), <sfx: … at 0:03>, {Dialogue language: <lang>. <Name>, <delivery>: "<line>"} with timestamps, 【on-screen text】 only when the script asks. Say "no subtitles".
+3. CHARACTERS — assets come first. One THREE-PANEL character sheet per character on a flat mid-grey backdrop: (1) head-and-shoulders portrait, the ONLY head on the sheet; (2) neck-to-shoes FRONT view with no head; (3) neck-to-shoes BACK view with no head. Follow the CHARACTER SHEET template in the brain exactly, filling every bracket with specific detail (age, face, eyes, gaze, hair, build, every garment with colour, fabric, fit and wear, shoes; matte pore-level skin; giant-softbox light; 50mm portrait, 85mm body).
+4. LOCATIONS & PROPS — each location is an EMPTY establishing plate (no people) with its layout written with positions (left/right/back wall, doors with hinge and opening direction, windows, furniture); it is a STYLE reference for textures and light, never a fixed frame. Each prop is a PRODUCT SHEET of ONE object shown twice (front three-quarter and back three-quarter, ~45° and slightly above) on mid-grey, with its physical state and what it must NOT be confused with. Follow the LOCATION and PROP SHEET templates.
+5. DIRECTING — first a FILM LOOK shared by every scene (written once, reused verbatim so the reel reads as one film): format and aspect, film stock look, lens character, grade with a colour split (dominant 60% / secondary 30% / accent 10%) and white balance in K, 24 fps and 180° shutter, pore-level matte skin, "photorealistic — no 3D render, no game engine", global constraints (NO FADE, no slow motion unless written, nobody looks into the camera, no text/logos/watermark), audio policy (SFX and dialogue only, no music, no subtitles). Then one Seedance 2.5 prompt per scene (4–15 s) written in the SCENE PROMPT FORMAT of the brain: opener, SECTION + location, first-frame blocking of every person, SHOT n (a–b s) with mm + FOV°, one named move with distance and speed, framing limits, camera height and position, ACTING micro-detail and what not to do, per-second ACTION timeline for continuous takes, framing guarantees (HEAD PRIORITY), props state, RULES, sound. Refer to every element by its HANDLE (@char_…, @loc_…, @prop_…). Do NOT write a REFERENCES block or the film look inside scenes: the studio adds both automatically when it renders.
    BLOCKING BLUEPRINT FIRST: before writing any scene, decide its geography like a director and script supervisor: the zones (INTERIOR/EXTERIOR, behind/in front of a counter, inside/outside a car), which zone every person is in, doors (hinge, opening direction), where the camera stands for each shot and which way it looks (lens as FOV°), the axis of action (180° rule), the motivated light source and the time of day, the exact head-count and the props in each hand. Then write the prompts FROM the blueprint and state the geography explicitly in words (e.g. "Sara @img1 is INSIDE the apartment hallway; Lina @img2 stands OUTSIDE on the landing; the door opens inward; the camera is inside, behind Sara's right shoulder"). Never leave the AI to guess where anyone is.
    FIRST FRAME: every scene also gets a still-image prompt for its exact first frame (same shot size, lens, blocking, wardrobe, light and grade as Shot 1, photoreal, BAE look). It is generated first as an image with the tagged references, then Seedance animates the video FROM that frame (image-to-video), so faces, place and light are locked before motion.
 6. RENDER — each scene renders separately in Seedance 2.5: start frame + references attached in tag order.`;
+/* House templates (the team can override them in the brain's "templates" section) */
+const RL_TPL={"char": "Three-panel cinematic character sheet, one horizontal 16:9 image on a seamless flat matte MID-GREY studio backdrop (neutral grey, no gradient, no floor line, no shadows on the backdrop), soft even diffused studio light, neutral white balance. Three panels side by side at identical scale: (1) LEFT — a large head-and-shoulders PORTRAIT including the entire head, hair [and headwear] and face, looking into camera — the ONLY face and the ONLY head on the sheet; (2) MIDDLE — full-body FRONT view of the wardrobe from the BASE OF THE NECK to the SHOES: the top edge of the panel cuts through the base of the neck, the head and hair lie above the border and are NOT shown; the panel starts at the collar, the neck-to-toe figure fills the whole panel height, shoes fully visible with a few centimetres of grey below them; (3) RIGHT — full-body BACK view framed exactly the same way, top edge at the base of the neck, no head, same scale, both shoes visible. HARD RULE: panels 2 and 3 contain NO head, NO face, NO hair — only the neck stump at the top border, collar, shoulders, torso, arms, legs and shoes; do not draw a smaller head inside them; this is a framing crop of a complete healthy body. Identical wardrobe, light and scale in panels 2 and 3. No captions, labels, panel borders, text or watermark.\nTHE PERSON: an original Jordanian [man/woman] exactly [age] years old, [occupation / place in the story] — [essence: e.g. a characterful working man with quiet dignity, warm, likable, trustworthy]. Face: [shape], [complexion], [cheekbones], [nose with one natural irregularity], [lips], [facial hair if any], [hair: colour, length, texture, how it falls]. Eyes: [colour, size, lashes], [gaze: calm, attentive…], [brows], [mouth: closed, faintest hint of a smile]. Clearly [age], [skin age detail]. Build: [build], upright balanced posture, relaxed empty hands at the sides.\nWARDROBE, identical in every view: [garment 1 — colour from the BAE palette, fabric, fit, wear and age]; [garment 2 …]; [trousers/skirt: cut, length, fabric]; [belt]; [shoes: material, colour, wear]. No jewellery [unless written], no bag, no props, no logos, no lettering. (BAE: refined old-money minimal; never orange, never teal, never streetwear; no hijab unless the brief asks.)\nSKIN AND TEXTURE: realistic natural skin with visible fine pores, faint expression lines at the eyes, subtle natural tone variation, lightly retouched even tone but never smoothed, completely matte — no wet shine, no specular highlights, no glare, no beauty filter, no plastic or waxy look. Tactile real cotton, wool and leather; everyday authenticity, not costume styling. Extremely soft diffused wraparound light like a giant overcast softbox, shadowless, no rim light, no hard shadows. Muted palette of [wardrobe colours] and warm skin against the grey; eye-level 50mm lens for the portrait, 85mm for the body views; subtle natural film grain, calm intimate documentary mood, photoreal cinematic realism. One original character shown in three views only, no other people, no cropped feet.", "prop": "Product asset sheet of ONE [object] — the SAME single object shown twice from two genuinely different angles — on a flat even MID-GREY studio backdrop, soft even studio light, only a faint soft contact shadow under it. [PHYSICAL STATE: what it is, its real volume, whether it stands/lies/is empty or hollow; what it is NOT attached to — no hand, no body, no stand, no mannequin.]\nVIEW 1 (left half of the sheet): FRONT THREE-QUARTER view, the camera about 45 degrees off the front axis and slightly above — [what this angle shows: the key front feature clearly on the near-front, the side wall turning away, a glimpse of the top].\nVIEW 2 (right half of the sheet): BACK THREE-QUARTER view of the same object, camera about 45 degrees off the back axis and slightly above — [what this angle shows: the back, openings, the front feature hidden or only at the far edge].\nBoth views identical in scale, height, lighting and colour; nothing is flat or frontal, every edge shows the object's real volume.\nAPPEARANCE — stay as close as possible to a real [object]: [materials, colours, textures, finishes, seams, edges, proportions, small details]. NOT [the things the model could confuse it with: e.g. not a rolled bandage, not a rigid brace, not a flat cut-out] — no logos, no text, no watermark. Photographic realism, catalogue clarity.\n(Phones: a modern iPhone 18 with no visible logo; screen off or a soft clean glow with no readable text.)", "loc": "[Place in modern Amman, specific: e.g. the entrance hall of a modern Abdoun apartment], completely EMPTY — no people, no animals, no text, no logos — [time of day], [motivated light: source, direction, colour temperature in K, how it falls], [layout with positions: what is on the left wall, the right wall, the back wall; doors with hinge side and opening direction; windows; key furniture and props in place], [materials and textures: light oak, white plaster, stone…], [grade: warm neutral, BAE]. Wide establishing frame at eye level, 24mm (74°), anamorphic lens character, shallow depth of field, fine film grain, photoreal, no 3D render.\nUse: the location image is a STYLE reference for architecture, textures and light, never a fixed frame.\nPOSITION MAP (when positions matter): generate \"High angle top-down wide shot of the location @loc, empty, same light\" with numbered circles where people stand; attach it as a reference that defines positions only.", "scene": "Write every scene prompt as continuous precise prose (no markdown, no bullet lists), in this order:\n1. OPENER — \"Cinematic [N]-second sequence in [K] SECTION(S), [M] shots, hard cut between shots/sections, realistic, no overacting.\" + global rules for this scene (\"Nobody ever looks into the camera.\").\n2. SECTION \"[name]\" — [@loc_handle] (shots a–b, t1–t2 s): place, time, light (source, direction, K), grade. The location is a style reference.\n3. BLOCKING at the first frame, for every person: exact pose (standing / leaning back on the edge of X / sitting on the RIGHT end of the sofa, on the edge of the seat), what supports the body, hands (which hand, where, holding what, thumbs hooked…), gaze (eyes on the floor / on the sleeve, unfocused), body angle, what is on their left and right, how the light hits them, INSIDE/OUTSIDE. Say who appears ONLY in which shot.\n4. SHOT n (a–b s): lens in mm with FOV (35mm, 54°), STATIC or ONE named move with distance and speed (\"smooth steady DOLLY IN for the whole shot, closing about a quarter of the distance\"); framing limits (\"from just above his head to his hips\"); camera height in cm and position relative to the subject (\"high above his head, tilted down, to his front-right, so we see the right side of his face in three-quarter view\"); what the background shows because of that angle; ACTING in micro-detail (eyes, jaw, lips, breath) and what NOT to do (no frown, no tears, no sigh, no movement); who is NOT in the shot. \"HARD CUT.\" before the next shot.\n5. CONTINUOUS TAKE: an ACTION timeline per second (\"8–9s — ONE MOVEMENT: …; 9–10s — …; 10–12s — …\"), one action per range, physical detail (weight, fabric stretch, skin, effort, breath).\n6. FRAMING GUARANTEES where AI fails: \"HEAD PRIORITY: the head stays complete with headroom in every frame\"; hands and the key prop fully in frame; the camera stops at a stated distance and never overshoots.\n7. PROPS: state at the first frame, which hand or limb, how it moves, what it never does (\"never taken off\", \"never changes hands\").\n8. RULES: no other people, no pets, no text, no logos, no watermark; the place, light and grade exactly as the location; left/right specifics; no slow motion and no speed changes unless written; no cuts inside a continuous take.\n9. Sound per section: room tone, specific SFX with timing, dialogue (who, language, delivery, the exact line), \"No music, no subtitles\" (music is added in the edit).\nUse element handles exactly (@char_sara, @loc_hall, @prop_phone). Do NOT write a REFERENCES block or the film look — the studio adds them automatically."};
+const rlTpl=k=>(BR?.sections?.find(s=>s.id==="templates")?.[k])||RL_TPL[k];
+const RL_ADV={"trend": {"name": "Trend Scout", "icon": "↗", "role": "Finds what is travelling right now: formats, hooks, sounds, memes and talking points in Jordan, the Arab world and global reels.", "order": 1}, "story": {"name": "Story Doctor", "icon": "✎", "role": "Guards the insight and the story: one human truth, a clear turn, a payoff that earns the brand.", "order": 2}, "dp": {"name": "Director of Photography", "icon": "◉", "role": "Camera, lens, light and composition that look expensive and stay readable to the AI.", "order": 3}, "performance": {"name": "Performance Coach", "icon": "☺", "role": "Acting, casting and wardrobe truth: performances that feel real, never 'ad acting'.", "order": 4}, "tech": {"name": "Seedance Technician", "icon": "⚙", "role": "Prompt engineering for Seedance 2.5 and Nano Banana: references, constraints and the failure modes that waste credits.", "order": 5}};
+const rlAdv=id=>({...(RL_ADV[id]||{name:id,icon:"•",role:""}),...((BR?.advisors||[]).find(x=>x.id===id)||{})});
 const RL_BAE=`BANK AL ETIHAD HOUSE STYLE (non-negotiable in every image and video prompt):
 - Cinematic, warm, premium, human. Clean natural light (golden hour, window light, soft daylight), warm neutral grade with orange and burgundy accents, fine grain, gentle halation. Never cold, never neon.
 - Modern Jordan only: today's Amman (Abdali, new towers, sleek cafés, modern homes and offices, modern malls). Modern Scandinavian IKEA-style interiors: light oak, white walls, clean lines.
@@ -1708,7 +1703,17 @@ const RL_DEF_SET={length:30,aspect:"9:16",lang:"Jordanian Arabic",res:"720p"};
 const rlNew=()=>({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),kind:"reel",title:"Untitled reel",stage:"idea",view:"idea",chat:[],notes:"",ideas:[],ideasPrev:[],picked:null,script:null,characters:[],locations:[],scenes:[],final:null,space:null,settings:{...RL_DEF_SET},nextTag:1,createdAt:Date.now(),updatedAt:Date.now()});
 const rlSet=()=>({...RL_DEF_SET,...(RL?.settings||{})});
 const rlEls=()=>[...RL.characters,...RL.locations];
-const rlElByTag=t=>rlEls().find(e=>e.tag===t);
+const RL_TOK=/@img\d+|@(?:char|loc|prop)_[A-Za-z0-9_]+/g;
+const rlElByTag=t=>{ if(!t) return null; const s=String(t).toLowerCase(); return rlEls().find(e=>e.tag===t||(e.handle&&e.handle.toLowerCase()===s)); };
+const rlTokens=txt=>String(txt||"").match(RL_TOK)||[];
+function rlSlug(s){ return String(s||"").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"").slice(0,24); }
+/* readable handles (@char_sara, @loc_hall, @prop_phone), unique inside a project */
+function rlEnsureHandles(p){
+  const all=[...(p.characters||[]).map(e=>[e,"char"]),...(p.locations||[]).map(e=>[e,e.kind==="prop"?"prop":"loc"])], used=new Set();
+  for(const [e] of all) if(e.handle&&/^@(char|loc|prop)_[a-z0-9_]+$/i.test(e.handle)&&!used.has(e.handle.toLowerCase())) used.add(e.handle.toLowerCase()); else e.handle=null;
+  for(const [e,pre] of all){ if(e.handle) continue; const base="@"+pre+"_"+(rlSlug(e.lib||e.name)||String(e.tag||"x").replace("@","")); let h=base,i=2; while(used.has(h.toLowerCase())) h=base+"_"+(i++); e.handle=h; used.add(h.toLowerCase()); }
+}
+const rlLabel=e=>e?(e.handle||e.tag):"";
 const rlAr=()=>RL.chat.some(m=>m.role==="u"&&/[؀-ۿ]/.test(m.text||""));
 async function rlThumb(src,max=480){ try{ const im=new Image(); im.src=src; await im.decode(); const k=Math.min(1,max/Math.max(im.width,im.height)); const c=document.createElement("canvas"); c.width=Math.round(im.width*k); c.height=Math.round(im.height*k); c.getContext("2d").drawImage(im,0,0,c.width,c.height); return c.toDataURL("image/jpeg",.78); }catch{ return null; } }
 function rlAgo(t){ if(!t) return ""; const s=Math.max(1,Math.round((Date.now()-t)/1000)); if(s<60) return "just now"; const m=Math.round(s/60); if(m<60) return m+" min ago"; const h=Math.round(m/60); if(h<24) return h+" h ago"; const d=Math.round(h/24); return d<7?d+" d ago":new Date(t).toLocaleDateString(); }
@@ -1753,6 +1758,7 @@ function rlUpgrade(p){
   let n=0; for(const e of [...p.characters,...p.locations]){ const k=+String(e.tag||"").replace("@img","")||0; n=Math.max(n,k); }
   p.nextTag=Math.max(p.nextTag||1,n+1);
   for(const e of [...p.characters,...p.locations]) if(!e.tag) e.tag="@img"+(p.nextTag++);
+  rlEnsureHandles(p);
   if(!p.view) p.view=p.stage||"idea";
 }
 let rlSaveT=null, rlChain=Promise.resolve();
@@ -1787,11 +1793,12 @@ const rlImgOf=e=>e?.lib&&e.fromLib?"lib:ch_"+String(e.lib).toLowerCase():e?.id||
 
 
 /* ---------- the Director's brain: shared team memory (knowledge, daily research, team feedback) ---------- */
-const BR={sections:[],research:[],feedback:[],loaded:0,canEdit:false,uid:null};
+const BR={sections:[],research:[],feedback:[],advisors:[],loaded:0,canEdit:false,uid:null};
 async function brLoad(force){
   await rlStoreInit(); const db=RLS.db; if(!db) return BR;
   if(!force&&Date.now()-BR.loaded<60000) return BR;
-  try{ const [s,r]=await Promise.all([db.collection("brain").get(),db.collection("research").orderBy("date","desc").limit(7).get()]);
+  try{ const [s,r,ad]=await Promise.all([db.collection("brain").get(),db.collection("research").orderBy("date","desc").limit(7).get(),db.collection("advisors").get().catch(()=>({docs:[]}))]);
+    BR.advisors=ad.docs.map(d=>({id:d.id,...JSON.parse(JSON.stringify(d.data()))})).sort((a,b)=>(a.order||9)-(b.order||9));
     BR.sections=s.docs.map(d=>({id:d.id,...JSON.parse(JSON.stringify(d.data()))})).sort((a,b)=>(a.order||99)-(b.order||99));
     BR.research=r.docs.map(d=>({id:d.id,...JSON.parse(JSON.stringify(d.data()))})); BR.loaded=Date.now(); }
   catch(e){ log("✕","brain load",{code:e?.code}); }
@@ -1806,7 +1813,8 @@ function brText(){
   const lessons=BR.sections.find(s=>s.id==="lessons"), rest=BR.sections.filter(s=>s.id!=="lessons");
   const R=BR.research[0];
   return `DIRECTOR'S BRAIN — the team's shared memory. Think with it on every answer. Where the team's lessons disagree with general knowledge, the lessons win.
-${rest.map(s=>`### ${s.title}\n${cut(s.text,6000)}`).join("\n\n")}
+${rest.map(s=>`### ${s.title}\n${cut(s.text,s.id==="templates"?9000:6000)}`).join("\n\n")}
+${BR.advisors.length?`### ASSISTANT DIRECTORS — five specialists who research every morning and advise you. Consult them; pass on their best note when it matters.\n${BR.advisors.map(x=>`[${x.id}] ${x.name} — ${x.role}\n${cut(x.notes,800)}`).join("\n\n")}`:""}
 ${lessons?`### ${lessons.title}\n${cut(lessons.text,5000)}`:""}
 ${R?`### This morning's research (${R.date})\n${cut(R.text,4000)}`:""}`;
 }
@@ -1842,6 +1850,8 @@ function rlShowBrain(){
     box.innerHTML=`
     <div class="br-stats"><div><b>${BR.sections.length}</b><span>knowledge sections</span></div><div><b>${BR.research.length}</b><span>mornings of research</span></div><div><b>${fb.length}</b><span>recent signals · ${up} 👍 ${down} 👎 · ${taught} lessons · ${sig} learned from actions</span></div></div>
     <form class="rl-card br-teach" id="brTeach"><div class="rl-ihead"><b>Teach the Director</b></div><p class="muted">A rule, an insight about Jordanians, a line people really say, an ad you loved and why. It also learns silently from what everyone does — the ideas you choose and skip, your edits, revisions, regenerations and approvals. Every morning it's all condensed into the team's lessons.</p><textarea class="rl-field" name="t" rows="3" dir="auto" placeholder="e.g. Jordanians laugh at the father who forwards every voice note… / Don't use the word 'easy' — say 'بكبسة'"></textarea><div class="rl-btns"><button class="btn primary small" type="submit">Teach</button><span class="t12 muted" id="brTeachMsg"></span></div></form>
+    <div class="rl-head"><div><h2>Assistant directors</h2><p>Five specialists research every morning and advise the Director: their notes appear under its replies, and "Ask the room" on any shot gets one concrete improvement from each.</p></div></div>
+    <div class="br-advs">${["trend","story","dp","performance","tech"].map(id=>{ const A=rlAdv(id); return `<div class="br-adv"><div class="ih"><span class="ic" aria-hidden="true">${esc(A.icon||"•")}</span><b>${esc(A.name||id)}</b></div><p class="t12 muted" style="margin:0">${esc(A.role||"")}</p><div class="br-text" dir="auto">${esc(A.notes||"Research arrives tomorrow morning.")}</div><span class="t12 muted">${A.updatedAt?"Updated "+rlAgo(A.updatedAt):""}</span></div>`; }).join("")}</div>
     ${BR.research.length?`<details class="rl-card br-sec" open><summary><b>This morning's research</b><span class="t12 muted">${esc(BR.research[0].date||"")} · runs every day at 5:33 AM Amman time</span></summary><div class="br-text" dir="auto">${esc(BR.research[0].text||"")}</div>${(BR.research[0].sources||[]).length?`<p class="t12 muted">Sources: ${(BR.research[0].sources||[]).slice(0,8).map(u=>`<a href="${esc(u.url||u)}" target="_blank" rel="noopener">${esc(u.title||u.url||u)}</a>`).join(" · ")}</p>`:""}${BR.research.length>1?`<p class="t12 muted">Earlier: ${BR.research.slice(1).map(r=>esc(r.date)).join(" · ")}</p>`:""}</details>`:`<div class="rl-card"><b>Daily research</b><p class="muted">The first morning research arrives at 5:33 AM Amman time.</p></div>`}
     ${BR.sections.map(s=>`<details class="rl-card br-sec"${s.id==="lessons"?" open":""}><summary><b>${esc(s.title||s.id)}</b><span class="t12 muted">${s.updatedAt?"Updated "+rlAgo(s.updatedAt):""}</span></summary>
       <div class="br-text" dir="auto" data-sec="${esc(s.id)}">${esc(s.text||"")}</div>
@@ -1866,9 +1876,10 @@ const rlJob=async(fn)=>{ rlWake(true); try{ return await fn(); } finally{ rlWake
 function rlState(){
   const set=rlSet();
   return {title:RL.title,stage:RL.stage,viewing_tab:RL.view,settings:set,notes:RL.notes,ideas:RL.ideas,picked_idea:RL.picked,script:RL.script,next_free_tag:"@img"+RL.nextTag,
-    characters:RL.characters.map(({name,tag,role,description,wardrobe,prompt,id,lib})=>({tag,name,role,description,wardrobe,prompt,image_generated:!!id,library:lib||null})),
-    locations:RL.locations.map(({name,tag,kind,description,prompt,id})=>({tag,name,kind,description,prompt,image_generated:!!id})),
-    scenes:RL.scenes.map(({n,title,duration_s,refs,prompt,frame_prompt,frame,status})=>({n,title,duration_s,refs,frame_prompt,prompt,first_frame_generated:!!frame?.id,video_rendered:status==="done"}))};
+    characters:RL.characters.map(({name,tag,handle,role,description,wardrobe,prompt,id,lib})=>({tag,handle,name,role,description,wardrobe,prompt,image_generated:!!id,library:lib||null})),
+    locations:RL.locations.map(({name,tag,handle,kind,description,prompt,id})=>({tag,handle,name,kind,description,prompt,image_generated:!!id})),
+    film_look:RL.look||null,
+    scenes:RL.scenes.map(({n,title,logline,duration_s,refs,prompt,frame_prompt,frame,status})=>({n,title,logline,duration_s,refs,frame_prompt,prompt,first_frame_generated:!!frame?.id,video_rendered:status==="done"}))};
 }
 function rlPromptFor(text){
   const set=rlSet();
@@ -1885,7 +1896,7 @@ TARGET: ${set.aspect} reel, about ${set.length} seconds in total, dialogue langu
 
 STAGE FLOW: idea → script → characters → locations → directing → render. Work on what the user asks; by default the current stage. When the user approves ("تمام", "ok", "approve", picks an idea…), move to the next stage AND deliver it in the same answer. The user can come back at any time to change an earlier stage (a new idea, a new or edited character, a new location, a rewritten scene): do exactly that change, keep everything else, and update later stages only where the change requires it. If attachments are given (storyboards, characters, places, scripts), analyse them carefully and record the useful facts in "notes" because you will not see the images again.
 
-TAGS: every character, location and prop has a permanent tag (@img1, @img2…) shown in the project state. Keep each existing element's tag. A NEW element you add gets the next free tag (${"@img"+RL.nextTag}, then the following numbers, characters before locations). Scenes refer to elements only by these tags.
+HANDLES: every character, location and prop has a permanent readable handle (@char_sara, @loc_hall, @prop_phone) and an internal tag (@img1…) shown in the project state. In every prompt refer to elements ONLY by their handle. Keep each existing element's tag and handle. A NEW element gets a handle you choose (@char_<name>, @loc_<place>, @prop_<object>; lowercase latin letters, digits and underscores) — the studio assigns its tag. The studio maps handles to Seedance's @img numbers when it renders.
 
 PROJECT STATE (JSON): ${trimJSON(rlState(),26000)}
 
@@ -1900,10 +1911,12 @@ Reply with ONLY one JSON object. Always include "reply" (the chat message, no ma
 - "ideas": [{"title","hook","logline","beats","why_viral","product_moment","jury"}]  (3 per request). Before answering, silently generate at least 8 directions through different lenses of the masters, score each with THE JURY in the brain, and return only the best 3; "jury" = one line on why it wins (score /35)
 - "picked_idea": index (0-based) into "ideas" when the user picks one
 - "script": {"title","duration_s","scenes":[{"n","time","title","action","dialogue":[{"who","line"}],"on_screen_text","sound"}]}
-- "characters": [{"tag","name","role","description","wardrobe","library":null|"Wissam"|"Lina"|"Sara"|"Omar","prompt"}]  — prompt = the full image prompt for the character reference sheet; set "library" only when the user wants that BAE character
-- "locations": [{"tag","name","kind":"location"|"prop","description","prompt"}]  — full image prompt; locations empty of people
-- "scenes": [{"n","title","duration_s","refs":["@img1",...],"blueprint":{...},"frame_prompt","prompt"}]  — blueprint = the top-down blocking plan written FIRST (format: ${RL_BP_SCHEMA}); frame_prompt = the still-image prompt (Nano Banana 2.1) for the scene's first frame, using the tags ("the man @img1 sits…"); prompt = the full Seedance 2.5 prompt that continues from that first frame, following the DIRECTING structure; duration 4–15 s, ${set.aspect}
-- "chips": 2–4 short suggested next replies for the user, in their language`;
+- "characters": [{"tag","handle","name","role","description","wardrobe","library":null|"Wissam"|"Lina"|"Sara"|"Omar","prompt"}]  — prompt = the full THREE-PANEL character sheet prompt (CHARACTER SHEET template); set "library" only when the user wants that BAE character
+- "locations": [{"tag","handle","name","kind":"location"|"prop","description","prompt"}]  — full image prompt (LOCATION template, empty of people / PROP SHEET template)
+- "film_look": the shared FILM LOOK paragraph (write it with the first scenes; change it only when asked)
+- "scenes": [{"n","title","logline","duration_s","refs":["@char_…","@loc_…"],"blueprint":{...},"frame_prompt","prompt"}]  — logline = one line "what it does"; blueprint = the top-down blocking plan written FIRST (format: ${RL_BP_SCHEMA}); frame_prompt = the still-image prompt (Nano Banana 2.1) for the scene's first frame, using the tags ("the man @img1 sits…"); prompt = the full Seedance 2.5 prompt that continues from that first frame, following the DIRECTING structure; duration 4–15 s, ${set.aspect}
+- "chips": 2–4 short suggested next replies for the user, in their language
+- "advisors": 0–3 short notes from the ASSISTANT DIRECTORS that matter for THIS reply: [{"id":"trend"|"story"|"dp"|"performance"|"tech","note":"one concrete suggestion in the user's language"}]. Only when genuinely useful; never repeat what you already did.`;
 }
 async function rlSend(text,{retry}={}){
   if(rlBusy||!RL) return; text=(text||"").trim(); const atts=retry?[]:rlPending.slice(); if(!text&&!atts.length) return;
@@ -1933,12 +1946,13 @@ function rlApply(o){
     if(!was||was.title!==RL.picked.title) brSignal("idea","chosen",1,{item:ideaLine(RL.picked),note:"Rejected in the same set: "+RL.ideas.filter(x=>x!==RL.picked).map(ideaLine).join(" | "),key:RL.picked.title}); }
   if(o.script&&typeof o.script==="object") RL.script=o.script;
   /* elements keep their tag, image and edits; new ones take the next free tag */
-  const merge=(oldL,newL)=>newL.map(n=>{ const o2=oldL.find(x=>n.tag&&x.tag===n.tag)||oldL.find(x=>x.name&&n.name&&x.name.toLowerCase()===String(n.name).toLowerCase());
-    if(o2){ const m={...o2,...n,tag:o2.tag,id:o2.id,web:o2.web,lib:n.library!==undefined?n.library:o2.lib,status:o2.status}; if(o2.id&&n.prompt&&n.prompt!==o2.prompt) m.stale=true; delete m.library; return m; }
+  const merge=(oldL,newL)=>newL.map(n=>{ const o2=oldL.find(x=>n.tag&&x.tag===n.tag)||oldL.find(x=>n.handle&&x.handle&&x.handle.toLowerCase()===String(n.handle).toLowerCase())||oldL.find(x=>x.name&&n.name&&x.name.toLowerCase()===String(n.name).toLowerCase());
+    if(o2){ const m={...o2,...n,tag:o2.tag,handle:o2.handle||n.handle,id:o2.id,web:o2.web,lib:n.library!==undefined?n.library:o2.lib,status:o2.status}; if(o2.id&&n.prompt&&n.prompt!==o2.prompt) m.stale=true; delete m.library; return m; }
     const m={...n,lib:n.library||null,tag:"@img"+(RL.nextTag++)}; delete m.library; return m; });
   if(Array.isArray(o.characters)) RL.characters=merge(RL.characters,o.characters);
   if(Array.isArray(o.locations)) RL.locations=merge(RL.locations,o.locations);
-  rlLinkLibrary();
+  rlEnsureHandles(RL); rlLinkLibrary();
+  if(typeof o.film_look==="string"&&o.film_look.trim()) RL.look=o.film_look.trim();
   let toCheck=[];
   if(Array.isArray(o.scenes)) RL.scenes=o.scenes.map(sc=>{ const old=RL.scenes.find(x=>+x.n===+sc.n); if(!old){ toCheck.push(sc.n); return {...sc}; }
     const m={...old,...sc}; if(sc.prompt&&sc.prompt!==old.prompt) Object.assign(m,{status:null,clip:null,url:null,note:null,_src:null,web:null});
@@ -1946,7 +1960,7 @@ function rlApply(o){
     return m; });
   if(toCheck.length) setTimeout(()=>rlCheckScenes(toCheck,{quiet:true}),60);
   if(o.stage&&rlStageIx(o.stage)>=0){ if(rlStageIx(o.stage)!==rlStageIx(RL.stage)) RL.view=o.stage; RL.stage=o.stage; }
-  RL.chat.push({role:"a",text:String(o.reply||"…"),chips:Array.isArray(o.chips)?o.chips.slice(0,4):[]});
+  RL.chat.push({role:"a",text:String(o.reply||"…"),chips:Array.isArray(o.chips)?o.chips.slice(0,4):[],advisors:Array.isArray(o.advisors)?o.advisors.filter(x=>x&&x.note).slice(0,3).map(x=>({id:String(x.id||""),note:String(x.note).slice(0,400)})):[]});
 }
 function rlLinkLibrary(){ for(const c of RL.characters){ if(!c.lib){ if(c.fromLib){ c.fromLib=false; c.id=null; } continue; } const id="ch_"+String(c.lib).toLowerCase(); const mid=S.magIds?.[id]; if(refById(id)){ c.fromLib=true; if(mid) c.id=mid; } } }
 function rlSys(t,bad){ RL.chat.push({role:"sys",text:t,err:!!bad}); rlRenderChat(); }
@@ -1956,7 +1970,7 @@ function rlTyping(on){ const b=$("rlMsgs"); b.querySelector(".rl-typing-m")?.rem
 async function rlWriteElement(kind,base,instruction){
   const set=rlSet();
   const o=await rlAsk(`You write production assets for a Bank al Etihad reel (${set.aspect}, ${set.length} s).
-${kind==="character"?"Write a CHARACTER: the image prompt is a reference sheet — \"Character reference sheet, two panels side by side on a seamless light stone backdrop: left full body front view, right close-up of the face\" — plus exact age, face, hair, build, skin (natural texture, visible pores, lightly retouched even tone), wardrobe and expression.":kind==="prop"?"Write a PROP / PRODUCT: the image prompt is a product sheet with front, back and top views on a seamless light stone backdrop, studio light, exact materials.":"Write a LOCATION: the image prompt is an EMPTY establishing image (no people) — place, time of day, motivated light, anamorphic lens, shallow depth of field, fine film grain."}
+${kind==="character"?"Write a CHARACTER. The image prompt MUST follow this house template exactly, keeping every fixed sentence and replacing every [bracket] with specific, vivid detail:\n"+rlTpl("char"):kind==="prop"?"Write a PROP / PRODUCT. The image prompt MUST follow this house template exactly, keeping every fixed sentence and replacing every [bracket] with specific detail:\n"+rlTpl("prop"):"Write a LOCATION. The image prompt MUST follow this house template, replacing every [bracket] with specific detail (positions of walls, doors, windows and furniture included):\n"+rlTpl("loc")}
 ${RL_BAE}
 
 Reel so far: ${trimJSON({title:RL.title,idea:RL.picked,notes:RL.notes,script:RL.script},6000)}
@@ -1970,7 +1984,7 @@ Reply with only JSON: {"name":"","role":"","description":"one or two lines","war
 async function rlAddElement(kind,name,desc,lib){
   const list=kind==="character"?RL.characters:RL.locations;
   const e={tag:"@img"+(RL.nextTag++),name:name||(kind==="character"?"New character":kind==="prop"?"New prop":"New location"),description:desc||"",kind:kind==="character"?undefined:kind,lib:lib||null,prompt:""};
-  list.push(e); rlLinkLibrary(); RL._adding=null;
+  list.push(e); rlEnsureHandles(RL); rlLinkLibrary(); RL._adding=null;
   if(e.fromLib){ e.prompt=`BAE character ${lib} from the Magnific library.`; rlSave(); rlBoard(); return; }
   e.status="write"; rlFlush(); rlBoard();
   try{ const o=await rlJob(()=>rlWriteElement(kind,e,null)); Object.assign(e,{name:o.name||e.name,role:o.role||e.role,description:o.description||e.description,wardrobe:o.wardrobe||e.wardrobe,prompt:o.prompt}); e.status=null; }
@@ -2058,7 +2072,7 @@ function rlChipsFor(){
 function rlRenderChat(){
   const b=$("rlMsgs");
   if(!RL.chat.length) b.innerHTML=`<div class="rl-m a" dir="auto">Hi! Tell me the reel you need — the product, the message, who it's for. Attach a storyboard, character photos, places or a script and I'll analyse them.\n\nYou can come back to this project any time to change an idea, a character, a location or a shot.</div>`;
-  else b.innerHTML=RL.chat.map(m=>`<div class="rl-m ${m.role==="u"?"u":m.role==="a"?"a":"sys"}${m.err?" err":""}" dir="auto">${esc(m.text||"")}${m.thumbs?.length?`<div class="imgs">${m.thumbs.map(t=>`<img src="${t}" alt="">`).join("")}</div>`:m.n?`<div class="t12" style="opacity:.7;margin-top:6px">${m.n} image${m.n>1?"s":""} attached</div>`:""}</div>`).join("");
+  else b.innerHTML=RL.chat.map((m,mi)=>`<div class="rl-m ${m.role==="u"?"u":m.role==="a"?"a":"sys"}${m.err?" err":""}" dir="auto">${esc(m.text||"")}${m.thumbs?.length?`<div class="imgs">${m.thumbs.map(t=>`<img src="${t}" alt="">`).join("")}</div>`:m.n?`<div class="t12" style="opacity:.7;margin-top:6px">${m.n} image${m.n>1?"s":""} attached</div>`:""}</div>${m.advisors?.length?`<div class="rl-advs" dir="auto">${m.advisors.map((x,ai)=>{ const A=rlAdv(x.id); return `<div class="rl-adv"><span class="ic" aria-hidden="true">${esc(A.icon||"•")}</span><div><b>${esc(A.name||x.id)}</b> ${esc(x.note)} <button type="button" class="rl-advuse" data-adv="${mi}:${ai}">Use</button></div></div>`; }).join("")}</div>`:""}`).join("");
   if(RL.chatPending&&!rlBusy) b.insertAdjacentHTML("beforeend",`<div class="rl-m sys rl-retry" dir="auto">The connection dropped before Claude answered. Your message is saved. <button type="button" class="a-btn" id="rlRetry">Answer it now</button></div>`);
   b.scrollTop=b.scrollHeight;
   const last=[...RL.chat].reverse().find(m=>m.role==="a");
@@ -2109,6 +2123,7 @@ function rlBoard(){
     if(missing.length&&RL.scenes.length) out.push(`<p class="rl-warn">Generate ${missing.join(", ")} first (Cast / Locations) so every shot can use them.</p>`);
     if(!RL.scenes.length) out.push(rlEmpty("Claude writes one Seedance 2.5 prompt per scene, with its first frame, from the script, cast and locations.",`<button class="btn primary" type="button" data-rl="say" data-t="approveLoc">Direct the shots</button>`));
     else{ out.push(`<div class="rl-sb">${RL.scenes.map(sc=>{ const im=rlTGet(sc.clip)||rlTGet(sc.frame?.id); return `<button type="button" class="rl-sbi" data-rl="goto" data-n="${sc.n}" style="aspect-ratio:${ar}" aria-label="Scene ${sc.n}">${im?`<img src="${im}" alt="">`:""}<span>${sc.n}</span>${sc.status==="done"?'<i aria-hidden="true">▶</i>':""}${sc.status==="run"||sc.frame?.status==="run"?'<em class="dot" aria-hidden="true"></em>':""}</button>`; }).join("")}</div>`);
+      out.push(`<details class="rl-card rl-look"${RL.look?"":" open"}><summary><b>Film look</b><span class="t12 muted">Shared by every shot, added on top of each prompt when it renders</span></summary><textarea class="rl-prompt" data-rl-edit="look:0" spellcheck="false" dir="ltr" placeholder="Claude writes the film look with the scenes: stock look, lens character, grade with a 60/30/10 colour split, white balance, 24 fps, skin, global constraints, audio policy.">${esc(RL.look||"")}</textarea></details>`);
       out.push(RL.scenes.map(rlShotCard).join("")); }
   }
   if(v==="render") out.push(rlDeliver());
@@ -2128,14 +2143,14 @@ function rlAddForm(k){
 }
 function rlElCard(e,kind){
   const isProp=e.kind==="prop", busy=e.status==="run", writing=e.status==="write", img=rlImgOf(e), th=rlTGet(img); if(img&&!th) rlNeed(img);
-  if(e._edit) return `<div class="rl-item rl-edit" dir="auto"><div><span class="rl-tag">${e.tag}</span><b>Edit</b></div>
+  if(e._edit) return `<div class="rl-item rl-edit" dir="auto"><div><span class="rl-tag">${esc(rlLabel(e))}</span><b>Edit</b></div>
     <label class="rl-lab">Name<input class="rl-field" data-rl-edit="${kind}:${e.tag}:name" value="${esc(e.name||"")}"></label>
     <label class="rl-lab">Description<textarea class="rl-field" rows="2" data-rl-edit="${kind}:${e.tag}:description">${esc(e.description||e.role||"")}</textarea></label>
     ${kind==="c"?`<label class="rl-lab">Wardrobe<textarea class="rl-field" rows="2" data-rl-edit="${kind}:${e.tag}:wardrobe">${esc(e.wardrobe||"")}</textarea></label>`:""}
     <label class="rl-lab">Image prompt<textarea class="rl-prompt" data-rl-edit="${kind}:${e.tag}:prompt" spellcheck="false" dir="ltr">${esc(e.prompt||"")}</textarea></label>
     ${e.err?`<p class="rl-status bad">${esc(e.err)}</p>`:""}
     <div class="rl-btns"><button class="btn small primary" type="button" data-rl="editdone" data-tag="${e.tag}">Done</button><button class="btn small" type="button" data-rl="remove" data-tag="${e.tag}">Remove</button></div></div>`;
-  return `<div class="rl-item" dir="auto"><div class="rl-ihead"><span class="rl-tag">${e.tag}</span><b>${esc(e.name||"")}</b>${e.stale?`<span class="rl-pill warn" title="The prompt changed after this image was made">Changed</span>`:""}</div>
+  return `<div class="rl-item" dir="auto"><div class="rl-ihead"><span class="rl-tag" title="${esc(e.tag)}">${esc(rlLabel(e))}</span><b>${esc(e.name||"")}</b>${e.stale?`<span class="rl-pill warn" title="The prompt changed after this image was made">Changed</span>`:""}</div>
     <div class="rl-media${busy||writing?" busy":""}" style="aspect-ratio:${isProp?"1 / 1":"16 / 9"}">${th?`<img src="${th}" alt="${esc(e.name||"")}" data-zoom="${esc(img)}">`:`<span class="ph">${busy||writing?"":img?"Loading image…":"No image yet"}</span>`}${busy?`<span class="rl-busy">Generating…</span>`:writing?`<span class="rl-busy">Claude is writing…</span>`:""}</div>
     <p>${esc(e.description||e.role||"")}</p>
     ${e.status==="paused"?`<p class="rl-status">Still generating in Magnific — it appears here when it's done.</p>`:""}
@@ -2145,10 +2160,12 @@ function rlElCard(e,kind){
     ${e.err?`<p class="rl-status bad">${esc(e.err)}</p>`:""}</div>`;
 }
 function rlEditValue(t){ const p=t.dataset.rlEdit.split(":");
+  if(p[0]==="look") return RL.look||"";
   if(p[0]==="s"||p[0]==="f"){ const sc=RL.scenes.find(x=>String(x.n)===p[1]); return sc?(p[0]==="s"?sc.prompt:sc.frame_prompt)||"":null; }
   if(p[0]==="b"){ const s=RL.script?.scenes?.[+p[1]]; if(!s) return null; return p[2]==="dialogue"?(s.dialogue||[]).map(d=>`${d.who||""}: ${d.line||""}`).join("\n"):s[p[2]]||""; }
   const el=rlElByTag(p[1]); return el?el[p[2]||"prompt"]||"":null; }
 function rlCommit(t){ const parts=t.dataset.rlEdit.split(":"); const k=parts[0];
+  if(k==="look"){ RL.look=t.value; return; }
   if(k==="s"||k==="f"){ const sc=RL.scenes.find(x=>String(x.n)===parts[1]); if(sc){ const old=k==="s"?sc.prompt:sc.frame_prompt; if(old!==t.value&&sc.check) sc.check.dirty=true; if(k==="s") sc.prompt=t.value; else sc.frame_prompt=t.value; } return; }
   if(k==="b"){ const s=RL.script?.scenes?.[+parts[1]]; if(!s) return; const f=parts[2];
     if(f==="dialogue") s.dialogue=t.value.split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{ const i=l.indexOf(":"); return i>0?{who:l.slice(0,i).trim(),line:l.slice(i+1).trim()}:{who:"",line:l}; }); else s[f]=t.value; return; }
@@ -2158,7 +2175,7 @@ function rlCommit(t){ const parts=t.dataset.rlEdit.split(":"); const k=parts[0];
 function rlShotCard(sc){
   const set=rlSet(), ar=set.aspect.replace(":"," / "), f=sc.frame||{};
   const {refs}=rlSceneRefs(sc), fr=rlSceneRefs(sc,"frame_prompt").refs;
-  const used=[...new Map([...fr,...refs].map(r=>[r.global,r])).values()].sort((x,y)=>+x.global.slice(4)-+y.global.slice(4));
+  const used=[...new Map([...fr,...refs].filter(r=>!r.map).map(r=>[r.global,r])).values()].sort((x,y)=>+x.global.slice(4)-+y.global.slice(4));
   const vsrc=sc._src||(!sc._blocked&&sc.url)||null, poster=rlTGet(sc.clip)||rlTGet(f.id)||"";
   if(f.id&&!rlTGet(f.id)) rlNeed(f.id);
   const busy=f.status==="run"?"Generating first frame…":sc.status==="run"?(sc.note||"Rendering video…"):"";
@@ -2168,7 +2185,7 @@ function rlShotCard(sc){
   return `<div class="rl-shot" id="rlShot${sc.n}" dir="auto">
     <div class="rl-shot-l">
       <div class="rl-media dark${busy?" busy":""}" style="aspect-ratio:${ar}">${media}${busy?`<span class="rl-busy">${esc(busy)}</span>`:""}${sc.status==="done"?`<span class="rl-badge">Video</span>`:f.id?`<span class="rl-badge">First frame</span>`:""}</div>
-      ${used.length?`<div class="rl-refs" aria-label="References attached">${used.map(r=>{ const e=rlElByTag(r.global), im=rlTGet(rlImgOf(e)); return `<span class="rl-ref" title="${esc(e?.name||"")}">${im?`<img src="${im}" alt="" data-zoom="${esc(rlImgOf(e))}">`:`<i></i>`}<b>${r.global}</b></span>`; }).join("")}</div>`:""}
+      ${used.length?`<div class="rl-refs" aria-label="References attached">${used.map(r=>{ const e=rlElByTag(r.global), im=rlTGet(rlImgOf(e)); return `<span class="rl-ref" title="${esc(e?.name||"")}">${im?`<img src="${im}" alt="" data-zoom="${esc(rlImgOf(e))}">`:`<i></i>`}<b>${esc(rlLabel(e)||r.global)}</b></span>`; }).join("")}</div>`:""}
     </div>
     <div class="rl-shot-r">
       <div class="rl-ihead"><span class="rl-tag">Scene ${sc.n}</span><b>${esc(sc.title||"")}</b> <span class="sub">${sc.duration_s||""} s</span></div>
@@ -2243,7 +2260,7 @@ function rlBlockingHTML(sc){
     :`<span class="rl-pill">Not checked yet</span>`;
   return `<details class="rl-block"${bp?" open":""}><summary><span>Blocking &amp; continuity</span>${pill}</summary>
     ${bp?`<div class="rl-blockgrid">${rlPlanSVG(bp)}<div class="rl-blocktext" dir="auto">
-      ${(bp.people||[]).map(p=>`<p><b>${esc(p.name||p.tag)}</b> ${esc(p.tag||"")} — <span class="zone">${esc(zoneName(p.zone))}</span>${p.action?` · ${esc(p.action)}`:""}</p>`).join("")}
+      ${(bp.people||[]).map(p=>`<p><b>${esc(p.name||p.tag)}</b> ${esc(rlLabel(rlElByTag(p.tag))||p.tag||"")} — <span class="zone">${esc(zoneName(p.zone))}</span>${p.action?` · ${esc(p.action)}`:""}</p>`).join("")}
       ${(bp.openings||[]).map(o=>`<p class="muted">${esc(o.name||"Door")}: hinge ${esc(o.hinge||"?")}, opens ${esc(o.opens||"?")}</p>`).join("")}
       ${(bp.cameras||[]).slice(0,5).map(c=>`<p class="muted">Shot ${esc(c.shot||1)} camera: ${[zoneName(c.zone),c.height,c.fov?c.fov+"° FOV":"",c.move].filter(Boolean).map(esc).join(", ")}</p>`).join("")}
       ${bp.light?`<p class="muted">Light: ${esc(bp.light.source||"")}${bp.light.temp?` · ${esc(bp.light.temp)}`:""}</p>`:""}
@@ -2252,7 +2269,9 @@ function rlBlockingHTML(sc){
     </div></div>`:`<p class="muted">No blueprint yet. The script supervisor builds one when it checks the scene.</p>`}
     ${ck?.issues?.length?`<ul class="rl-issues">${ck.issues.map(i=>`<li><b>${esc(i.problem||"")}</b>${i.fix?` → ${esc(i.fix)}`:""}</li>`).join("")}</ul>`:""}
     ${ck?.err?`<p class="rl-status bad">${esc(ck.err)}</p>`:""}
-    <div class="rl-btns"><button class="a-btn" type="button" data-rl="check" data-n="${sc.n}" ${sc._checking?"disabled":""}>${ck?"Check again":"Check this scene"}</button></div>
+    <div class="rl-map">${sc.map?.id?`<img src="${rlTGet(sc.map.id)||""}" alt="Position map" data-zoom="${esc(sc.map.id)}"><div><b>Position map</b><p class="t12 muted">${esc((sc.map.legend||[]).join(" · "))}</p><label class="rl-chk"><input type="checkbox" data-rl-usemap="${sc.n}" ${sc.useMap!==false?"checked":""}> Attach to this shot (positions only)</label></div>`:`<div><b>Position map</b><p class="t12 muted">A top-down image of the location with numbered positions, attached as a reference so people stay exactly where they should (Adil's map technique).</p></div>`}</div>
+    ${sc.map?.err?`<p class="rl-status bad">${esc(sc.map.err)}</p>`:""}
+    <div class="rl-btns"><button class="a-btn" type="button" data-rl="check" data-n="${sc.n}" ${sc._checking?"disabled":""}>${ck?"Check again":"Check this scene"}</button><button class="a-btn" type="button" data-rl="makemap" data-n="${sc.n}" ${sc.map?.status==="run"?"disabled":""}>${sc.map?.status==="run"?"Making the map…":sc.map?.id?"Remake the map":"Make a position map"}</button></div>
   </details>`;
 }
 /* The script supervisor: an independent pass that checks every scene against the blueprint, the brain's cinematography and AI-video rules, and fixes the prompts */
@@ -2270,7 +2289,7 @@ function rlQuickCheck(sc){
   const w=[], P=sc.prompt||"", F=sc.frame_prompt||"", bp=sc.blueprint;
   const ts=[...P.matchAll(/(\d+):(\d{2}(?:\.\d+)?)\s*[–-]\s*(\d+):(\d{2}(?:\.\d+)?)/g)].map(m=>(+m[3])*60+(+m[4]));
   if(ts.length&&Math.abs(Math.max(...ts)-(+sc.duration_s||0))>0.6) w.push(`Shot timings end at ${Math.max(...ts)}s but the scene is ${sc.duration_s}s.`);
-  for(const t of new Set([...(P.match(/@img\d+/g)||[]),...(F.match(/@img\d+/g)||[])])) if(!rlElByTag(t)) w.push(`${t} isn't in Cast or Locations.`);
+  for(const t of new Set([...rlTokens(P),...rlTokens(F)])) if(!rlElByTag(t)) w.push(`${t} isn't in Cast or Locations.`);
   if(bp&&(bp.zones||[]).length>1){ const zonesUsed=new Set((bp.people||[]).map(p=>p.zone)); if(zonesUsed.size>1&&!/inside|interior/i.test(F+P)&&!/outside|exterior/i.test(F+P)) w.push("The prompts don't say who is inside and who is outside."); }
   if(!/exactly (one|two|three|four|\d+) (person|people|women|men)|no other people/i.test(P+F)&&(bp?.people||[]).length) w.push("Head-count isn't stated.");
   return w;
@@ -2340,7 +2359,7 @@ async function rlImproveScene(n,instruction){
     const out=await rlAsk(`You are the Director of a Bank al Etihad reel (${set.aspect}, Seedance 2.5 animating from a Nano Banana 2.1 first frame, dialogue ${set.lang}).
 ${instruction?`THE USER ASKED FOR THIS CHANGE TO SCENE ${sc.n}: "${instruction}"
 Apply it precisely and completely. Keep everything the user didn't ask to change (story beat, cast, wardrobe, location, tags), unless the change requires it.`:`UPDATE SHOT PROMPT: rewrite scene ${sc.n} so it is clearly BETTER than the current version, using everything in the brain below, especially the team's latest lessons and this morning's research. Raise the craft: a stronger first-second hook, more precise and motivated camera work (shot sizes, FOV°, moves with speed), better light, a more specific and natural performance, cleaner physics, tighter timing, sharper sound design. Do not change the story beat, the cast or the location.`}
-Rules: keep every @img tag exactly; keep the prompt structure (GLOBAL STYLE, REFERENCES, SCENE, CHARACTERS, LOCATION, FIRST FRAME & BLOCKING, Shot 1… with timestamps and "Hard cut.", PHYSICS, LIGHTING, CONSISTENCY, AUDIO); state the geography explicitly (zones, who is where, door direction, camera position and direction, head-count, light source); one action per shot; timestamps add up to duration_s (4–15 s). Update the blueprint if the blocking changes, and keep frame_prompt = the exact first moment of shot 1. Avoid every mistake in the AI-video rules.
+Rules: keep every element handle (@char_…, @loc_…, @prop_…) exactly; write in the SCENE PROMPT FORMAT of the brain (opener, SECTION + location, first-frame blocking, SHOT n (a–b s) with mm + FOV°, one move with distance and speed, framing limits, camera height, ACTING micro-detail and what not to do, per-second action for continuous takes, HEAD PRIORITY framing, props, RULES, sound); do not add a REFERENCES block or the film look (the studio adds them); state the geography explicitly (zones, who is where, door direction, camera position and direction, head-count, light source); one action per shot; timestamps add up to duration_s (4–15 s). Update the blueprint if the blocking changes, and keep frame_prompt = the exact first moment of shot 1. Avoid every mistake in the AI-video rules.
 
 ${RL_BAE}
 
@@ -2381,11 +2400,52 @@ function rlUndoScene(n){
 function rlShotBar(sc){
   const busy=sc._improving, ar=rlAr();
   const chips=ar?["سينمائي أكثر","أضحك","لقطات أقرب","حركة كاميرا أجرأ","أقصر وأسرع"]:["More cinematic","Funnier","Closer shots","Bolder camera","Shorter, faster"];
-  return `<div class="rl-shotbar"><button class="btn small primary" type="button" data-rl="improve" data-n="${sc.n}" ${busy?"disabled":""}>${busy==="upgrade"?"Rewriting…":"Update shot prompt"}</button><button class="btn small" type="button" data-rl="ask" data-n="${sc.n}" aria-expanded="${!!sc._ask}" ${busy?"disabled":""}>${busy==="edit"?"Applying your edit…":"Ask for edit"}</button>${sc.history?.length?`<button class="a-btn" type="button" data-rl="undo" data-n="${sc.n}" ${busy?"disabled":""} title="Back to the previous version">Undo</button>`:""}</div>
+  const room=sc.room?.items?.filter(x=>!x.done)||[];
+  return `${sc.logline?`<p class="rl-logline" dir="auto">${esc(sc.logline)}</p>`:""}<div class="rl-shotbar"><button class="btn small primary" type="button" data-rl="improve" data-n="${sc.n}" ${busy?"disabled":""}>${busy==="upgrade"?"Rewriting…":"Update shot prompt"}</button><button class="btn small" type="button" data-rl="ask" data-n="${sc.n}" aria-expanded="${!!sc._ask}" ${busy?"disabled":""}>${busy==="edit"?"Applying your edit…":"Ask for edit"}</button><button class="btn small" type="button" data-rl="room" data-n="${sc.n}" ${sc._room||busy?"disabled":""}>${sc._room?"The room is thinking…":"Ask the room"}</button>${sc.history?.length?`<button class="a-btn" type="button" data-rl="undo" data-n="${sc.n}" ${busy?"disabled":""} title="Back to the previous version">Undo</button>`:""}</div>
   ${sc._ask?`<form class="rl-ask" data-ask="${sc.n}"><label class="t12 muted" for="rlAsk${sc.n}">What should change in this scene? Write it any way you like.</label><textarea class="rl-field" id="rlAsk${sc.n}" name="q" rows="3" dir="auto" placeholder="${ar?"مثلاً: خلي الكاميرا هاند هيلد، وسارة تبتسم لما تفتح الباب، والضو أدفى":"e.g. make it handheld, she smiles when she opens the door, warmer light"}"></textarea><div class="rl-askchips">${chips.map(c=>`<button type="button" data-chip="${esc(c)}">${esc(c)}</button>`).join("")}</div><div class="rl-btns"><button class="btn small primary" type="submit">Apply edit</button><button class="btn small" type="button" data-rl="askcancel" data-n="${sc.n}">Cancel</button><span class="t12 muted">⌘/Ctrl + Enter</span></div></form>`:""}
   ${busy?`<p class="rl-status"><span class="spin" aria-hidden="true" style="display:inline-block;vertical-align:-2px"></span> ${busy==="edit"?"Applying your edit, then the script supervisor checks it…":"Rewriting with everything the Director knows today, then the script supervisor checks it…"}</p>`:""}
   ${sc.improveErr?`<p class="rl-status bad">${esc(sc.improveErr)}</p>`:""}
+  ${sc.roomErr?`<p class="rl-status bad">${esc(sc.roomErr)}</p>`:""}
+  ${room.length?`<div class="rl-room" dir="auto">${sc.room.items.map((x,i)=>x.done?"":`<div class="rl-roomi"><span class="ic" aria-hidden="true">${esc(rlAdv(x.id).icon||"•")}</span><div><span class="t12 muted">${esc(rlAdv(x.id).name||x.id)}</span><b>${esc(x.title)}</b><p>${esc(x.why)}</p><div class="rl-btns"><button class="btn small primary" type="button" data-rl="roomapply" data-n="${sc.n}" data-i="${i}" ${busy?"disabled":""}>Apply</button><button class="a-btn" type="button" data-rl="roomskip" data-n="${sc.n}" data-i="${i}">Skip</button></div></div></div>`).join("")}</div>`:""}
   ${sc.lastChange?.changes?.length&&!busy?`<div class="rl-changes"><b>${sc.lastChange.kind==="edit"?"Your edit":sc.lastChange.kind==="undo"?"Undone":"Updated"}</b>${sc.lastChange.ask?` · “${esc(sc.lastChange.ask)}”`:""}<ul>${sc.lastChange.changes.map(c=>`<li dir="auto">${esc(c)}</li>`).join("")}</ul></div>`:""}`;
+}
+/* Adil's map technique: a top-down image of the location with numbered positions, attached to the shot as a positions-only reference */
+async function rlMakeMap(n){
+  const sc=RL.scenes.find(x=>+x.n===+n); if(!sc||!mcp||!sample||sc.map?.status==="run") return;
+  if(!S.connected) await connect(true);
+  const loc=[...rlTokens(sc.prompt),...rlTokens(sc.frame_prompt),...(sc.refs||[])].map(rlElByTag).find(e=>e&&RL.locations.includes(e)&&e.kind!=="prop");
+  sc.map={...(sc.map||{}),status:"run",err:null}; rlBoard(); rlWake(true);
+  try{
+    if(!loc) throw {code:"tool_error",message:"This scene doesn't name a location (@loc_…)."};
+    if(!loc.id) throw {code:"tool_error",message:`Generate the location ${loc.handle} first.`};
+    await rlEnsureChecked(sc);
+    const bp=sc.blueprint||{}, zone=id=>(bp.zones||[]).find(z=>z.id===id)?.name||"";
+    const where=p=>`${(+p.x)<35?"left":(+p.x)>65?"right":"centre"}-${(+p.y)<35?"back":(+p.y)>65?"front":"middle"} of the space${zone(p.zone)?` (${zone(p.zone)})`:""}`;
+    const people=bp.people||[], cam=(bp.cameras||[])[0];
+    const legend=people.map((p,i)=>`${i+1} = ${p.name||p.tag}`);
+    const prompt=`High angle top-down wide shot of the location @img1, seen from above at about 70 degrees, completely empty, the same architecture, materials, doors and light. On the floor, flat bright red circles with large white numbers mark positions: ${people.map((p,i)=>`circle ${i+1} where ${p.name||p.tag} stands, ${where(p)}`).join("; ")}${cam?`; a black triangle marked C where the camera stands for shot 1, ${where(cam)}`:""}. Doors and openings exactly as in the location${(bp.openings||[]).length?` (${bp.openings.map(o=>`${o.name}: opens ${o.opens||"?"}`).join("; ")})`:""}. No people, no furniture changes, no text other than the numbers and C, photoreal.`;
+    const out=await rlImage({prompt,aspect:"1:1",refs:[{id:loc.id,tag:"@img1"}],label:"position map"});
+    sc.map={id:out.id,web:out.web,legend,status:"ok"}; sc.useMap=true;
+  }catch(err){ sc.map={...(sc.map||{}),status:"err",err:mcpCopy(err)}; }
+  finally{ rlWake(false); rlSave(); rlBoard(); }
+}
+/* Ask the room: the five assistant directors each give one concrete improvement for a scene; Apply sends it through Ask for edit */
+async function rlRoom(n){
+  const sc=RL.scenes.find(x=>+x.n===+n); if(!sc||!sample||sc._room) return;
+  sc._room=true; sc.roomErr=null; rlBoard(); rlWake(true);
+  await brLoad();
+  const ids=["trend","story","dp","performance","tech"];
+  try{
+    const out=await rlAsk(`Five assistant directors review ONE scene of a Bank al Etihad reel (${rlSet().aspect}, Seedance 2.5). Each gives exactly ONE concrete, high-impact improvement from their speciality, grounded in their latest research notes and the team's lessons. No generic advice; name the exact change (lens, move, beat, line, gesture, prop, constraint…). Write in the user's language (${rlAr()?"Arabic, Jordanian tone":"English"}); keep handles (@char_…) as they are.
+${ids.map(id=>{ const A=rlAdv(id); return `[${id}] ${A.name} — ${A.role}\nLatest notes: ${String(A.notes||"").slice(0,700)}`; }).join("\n\n")}
+Team lessons: ${(BR.sections.find(s=>s.id==="lessons")?.text||"").slice(0,800)}
+Script beat: ${trimJSON(RL.script?.scenes?.[(+sc.n||1)-1]||null,1000)}
+Scene ${sc.n} "${sc.title||""}" (${sc.duration_s||""} s):
+${String(sc.prompt||"").slice(0,6000)}
+Reply with only JSON: {"suggestions":[{"id":"trend","title":"3–6 words","why":"one line","instruction":"the exact edit to make, written as an instruction to the director"}]} — exactly 5, one per id in this order: ${ids.join(", ")}.`,{modelTier:"default",effort:"low",cache:false});
+    sc.room={at:Date.now(),items:(out?.suggestions||[]).filter(x=>x&&x.instruction).slice(0,5).map(x=>({id:String(x.id||""),title:String(x.title||""),why:String(x.why||""),instruction:String(x.instruction)}))};
+  }catch(e){ sc.roomErr=sampleCopy(e); }
+  finally{ delete sc._room; rlWake(false); rlSave(); rlBoard(); }
 }
 async function rlEnsureChecked(sc){ if(sc._checkP){ await sc._checkP; return; } if(!sc.check||sc.check.dirty||!sc.blueprint){ await rlCheckScenes([sc.n],{quiet:true}); } }
 /* ---------- Magnific: images for cast, locations and first frames ---------- */
@@ -2407,7 +2467,7 @@ async function rlGenElement(tag){
   const e=rlElByTag(tag); if(!e||!mcp||!sample||e.status==="run"||!e.prompt) return;
   if(!S.connected) await connect(true);
   e.status="run"; e.err=null; e._live=true; rlBoard();
-  try{ const out=await rlJob(()=>rlImage({prompt:e.prompt,aspect:e.kind==="prop"?"1:1":"16:9",label:"reference image",onQueued:(id,web)=>{ e.pending=id; e.web=web||e.web; rlFlush(); }})); Object.assign(e,{id:out.id,web:out.web,status:"ok",stale:false}); delete e.pending; }
+  try{ const out=await rlJob(()=>rlImage({prompt:e.prompt,aspect:"16:9",label:"reference image",onQueued:(id,web)=>{ e.pending=id; e.web=web||e.web; rlFlush(); }})); Object.assign(e,{id:out.id,web:out.web,status:"ok",stale:false}); delete e.pending; }
   catch(err){ if(e.pending&&rlTransient(err)){ e.status="paused"; e.err=null; } else { e.status="err"; e.err=mcpCopy(err); delete e.pending; } }
   finally{ delete e._live; }
   rlSave(); rlBoard();
@@ -2419,7 +2479,7 @@ async function rlGenFrame(n){
   try{
     await rlEnsureChecked(sc);
     if(!(sc.frame_prompt||"").trim()){
-      const o=await rlAsk(`Write ONE photorealistic still-image prompt (Google Nano Banana 2.1) for the exact FIRST FRAME of this Seedance 2.5 scene: shot size, lens, camera height, blocking and screen sides, wardrobe, props, light and grade, as in its first shot. Name people, places and props with their @imgN tags exactly as the scene does ("the man @img1 stands…") and say "use @imgN only for identity / place, not its background or panel layout". State the geography explicitly from the blueprint: zones (INTERIOR/EXTERIOR…), who is in which zone, door direction, where the camera stands and looks, exact head-count, light source. No motion words. ${RL_BAE}\n\nBlueprint: ${trimJSON(sc.blueprint||null,4000)}\n\nScene prompt:\n${sc.prompt}\n\nReply with only JSON: {"frame_prompt":"..."}`,{modelTier:"default"});
+      const o=await rlAsk(`Write ONE photorealistic still-image prompt (Google Nano Banana 2.1) for the exact FIRST FRAME of this Seedance 2.5 scene: shot size, lens, camera height, blocking and screen sides, wardrobe, props, light and grade, as in its first shot. Name people, places and props with their handles exactly as the scene does ("@char_sara stands…"); the studio adds the references block itself. State the geography explicitly from the blueprint: zones (INTERIOR/EXTERIOR…), who is in which zone, door direction, where the camera stands and looks, exact head-count, light source. No motion words. ${RL_BAE}\n\nBlueprint: ${trimJSON(sc.blueprint||null,4000)}\n\nScene prompt:\n${sc.prompt}\n\nReply with only JSON: {"frame_prompt":"..."}`,{modelTier:"default"});
       sc.frame_prompt=String(o?.frame_prompt||"").trim(); if(!sc.frame_prompt) throw {code:"invalid_json",message:"Claude didn't return a first-frame prompt."};
     }
     const {prompt,refs,missing}=rlSceneRefs(sc,"frame_prompt");
@@ -2443,13 +2503,27 @@ async function rlModel(){
   if(!id&&typeof raw==="string"){ const m=raw.match(/([a-z0-9._-]*seedance[a-z0-9._-]*2[._-]?5[a-z0-9._-]*)/i); if(m) id=m[1]; }
   return rlModel.m={id,name,raw:trimJSON(raw,6000)};
 }
-/* Per scene, the tags it uses are attached in ascending order and renumbered @img1…: the prompt and the attachments always agree */
-function rlSceneRefs(sc,field="prompt"){
+/* At send time: the elements a prompt names (by handle or tag) are attached in tag order and renumbered @img1…,
+   a REFERENCES block says what each image is for, the shared FILM LOOK goes on top, and an optional position map is attached last */
+function rlRefLine(r){ const e=r.el;
+  if(RL.characters.includes(e)) return `${r.tag} = ${e.name} (${e.handle}): identity reference from a three-panel character sheet — use this person's face, hair, build and wardrobe only; ignore the grey backdrop, the panel layout and the headless body panels.`;
+  if(e.kind==="prop") return `${r.tag} = ${e.name} (${e.handle}): the exact prop — shape, materials, colours and details.`;
+  return `${r.tag} = ${e.name} (${e.handle}): the location as a STYLE reference — architecture, materials, textures and light; not a fixed frame.`; }
+function rlSceneRefs(sc,field="prompt",{compose=true}={}){
   const txt=sc[field]||"";
-  const tags=[...new Set([...(field==="prompt"?(sc.refs||[]):[]),...(txt.match(/@img\d+/g)||[])])].filter(t=>rlElByTag(t)).sort((a,b)=>+a.slice(4)-+b.slice(4));
-  const map={}; tags.forEach((t,i)=>map[t]="@img"+(i+1));
-  const prompt=txt.replace(/@img\d+/g,t=>map[t]||t);
-  return {prompt, refs:tags.map(t=>({tag:map[t],global:t,id:rlElByTag(t).id,name:rlElByTag(t).name})), missing:tags.filter(t=>!rlElByTag(t).id)};
+  const els=[]; for(const t of [...(field==="prompt"?(sc.refs||[]):[]),...rlTokens(txt)]){ const el=rlElByTag(t); if(el&&!els.includes(el)) els.push(el); }
+  els.sort((x,y)=>+String(x.tag).slice(4)-+String(y.tag).slice(4));
+  const map=new Map(); els.forEach((el,i)=>map.set(el,"@img"+(i+1)));
+  let body=txt.replace(RL_TOK,t=>{ const el=rlElByTag(t); return el&&map.has(el)?map.get(el):t; });
+  const refs=els.map(el=>({tag:map.get(el),global:el.tag,id:el.id,name:el.name,el}));
+  if(sc.map?.id&&sc.useMap!==false) refs.push({tag:"@img"+(refs.length+1),global:"map",id:sc.map.id,name:"position map",map:true});
+  if(compose){
+    const lines=refs.map(r=>r.map?`${r.tag} = POSITION MAP of the location seen from above: it ONLY defines where people stand (${(sc.map.legend||[]).join("; ")}) and where the camera is (C). Never copy its top-down view, circles or numbers into the ${field==="prompt"?"video":"image"}.`:rlRefLine(r));
+    const parts=[]; if(RL.look&&!/GLOBAL STYLE\s*:|FILM LOOK\s*:/i.test(body)) parts.push(`FILM LOOK: ${RL.look}`);
+    if(lines.length&&!/^REFERENCES\s*:/im.test(body)) parts.push(`REFERENCES:\n${lines.join("\n")}`);
+    parts.push(body); body=parts.join("\n\n");
+  }
+  return {prompt:body, refs:refs.map(({el,...r})=>r), missing:els.filter(el=>!el.id).map(el=>el.tag)};
 }
 async function rlRenderScene(n){
   const sc=RL.scenes.find(x=>+x.n===+n); if(!sc||!mcp||!sample||sc.status==="run") return;
@@ -2536,7 +2610,8 @@ function rlNotes(){
   if(RL.characters.length) n.push({title:"03 · Cast",text:RL.characters.map(e=>`${e.tag} ${e.name}${e.lib?` (BAE library: ${e.lib})`:""}\n${e.description||""}${e.wardrobe?`\nWardrobe: ${e.wardrobe}`:""}\nPROMPT: ${e.prompt||""}`).join("\n\n")});
   if(RL.locations.length) n.push({title:"04 · Locations & props",text:RL.locations.map(e=>`${e.tag} ${e.name} (${e.kind||"location"})\n${e.description||""}\nPROMPT: ${e.prompt||""}`).join("\n\n")});
   const bpText=bp=>{ if(!bp) return "—"; const z=id=>(bp.zones||[]).find(q=>q.id===id)?.name||id; return [...(bp.people||[]).map(p=>`${p.name} ${p.tag||""}: ${z(p.zone)}${p.action?` — ${p.action}`:""}`),...(bp.openings||[]).map(o=>`${o.name}: hinge ${o.hinge||"?"}, opens ${o.opens||"?"}`),...(bp.cameras||[]).map(c=>`Shot ${c.shot||1} camera: ${z(c.zone)}, facing ${c.facing}°, ${c.fov}° FOV, ${c.height||""} ${c.move||""}`),bp.light?`Light: ${bp.light.source||""} ${bp.light.temp||""}`:"",bp.axis?`Axis: ${bp.axis}`:"",(bp.rules||[]).length?`Locks: ${bp.rules.join(" · ")}`:""].filter(Boolean).join("\n"); };
-  RL.scenes.forEach(s=>{ const r=rlSceneRefs(s); n.push({title:`Shot ${s.n} · ${s.title||""} · ${s.duration_s||""} s`,text:`References: ${r.refs.map(x=>`${x.tag} = ${x.name} (${x.global})`).join(", ")||"none"}\n\nBLOCKING (checked by the script supervisor${s.check?.passed?`: ${s.check.passed} checks passed`:""}):\n${bpText(s.blueprint)}\n\nFIRST FRAME (Nano Banana 2.1):\n${rlSceneRefs(s,"frame_prompt").prompt||"—"}\n\nSEEDANCE 2.5:\n${r.prompt}`}); });
+  if(RL.look) n.push({title:"05 · Film look (shared by every shot)",text:RL.look});
+  RL.scenes.forEach(s=>{ const r=rlSceneRefs(s,"prompt",{compose:false}); n.push({title:`Shot ${s.n} · ${s.title||""} · ${s.duration_s||""} s`,text:`${s.logline?s.logline+"\n\n":""}References in order: ${r.refs.map(x=>`${x.tag} = ${x.map?"position map":`${x.name} (${rlElByTag(x.global)?.handle||x.global})`}`).join(", ")||"none"}\n\nBLOCKING (checked by the script supervisor${s.check?.passed?`: ${s.check.passed}/8 checks`:""}):\n${bpText(s.blueprint)}\n\nFIRST FRAME (Nano Banana 2.1):\n${s.frame_prompt||"—"}\n\nSEEDANCE 2.5:\n${s.prompt||""}`}); });
   return n;
 }
 async function rlFind(r,what){
@@ -2664,14 +2739,20 @@ async function rlBible(){
   $("rlBrainBody").addEventListener("click",async e=>{ const b=e.target.closest("[data-bredit]"); if(!b) return; const id=b.dataset.bredit, div=$("rlBrainBody").querySelector(`[data-sec="${id}"]`), s=BR.sections.find(x=>x.id===id); if(!div||!s) return;
     if(b.dataset.saving){ return; }
     if(div.tagName!=="TEXTAREA"){ const ta=document.createElement("textarea"); ta.className="rl-field br-edit"; ta.dataset.sec=id; ta.value=s.text||""; ta.dir="auto"; div.replaceWith(ta); b.textContent="Save"; ta.focus(); return; }
-    b.dataset.saving="1"; b.textContent="Saving…"; try{ await RLS.db.collection("brain").doc(id).update({text:div.value,updatedAt:Date.now()}); s.text=div.value; } catch(err){ b.textContent="Couldn't save"; delete b.dataset.saving; return; } rlShowBrain(); });
+    b.dataset.saving="1"; b.textContent="Saving…";
+    const upd={text:div.value,updatedAt:Date.now()};
+    if(id==="templates"){ const grab=(h,next)=>{ const m=div.value.split(h)[1]; if(!m) return null; return (next?m.split(next)[0]:m).trim(); };
+      const c=grab("CHARACTER SHEET:","PROP SHEET:"), p=grab("PROP SHEET:","LOCATION:"), l=grab("LOCATION:","SCENE PROMPT FORMAT:"), sc=grab("SCENE PROMPT FORMAT:");
+      if(c) upd.char=c; if(p) upd.prop=p; if(l) upd.loc=l; if(sc) upd.scene=sc; }
+    try{ await RLS.db.collection("brain").doc(id).update(upd); Object.assign(s,upd); } catch(err){ b.textContent="Couldn't save"; delete b.dataset.saving; return; } rlShowBrain(); });
   $("rlTitle").addEventListener("input",()=>{ if(!RL) return; RL.title=$("rlTitle").value.trim()||"Untitled reel"; rlSave(); });
   $("rlStages").addEventListener("click",e=>{ const b=e.target.closest("[data-tab]"); if(!b||!RL) return; RL.view=b.dataset.tab; R.dataset.view="board"; rlSave(); rlBoard(); rlRenderChat(); $("rlBoardPane").scrollIntoView({block:"start"}); });
   document.addEventListener("keydown",e=>{ if(e.key!=="Escape"||R.hidden) return; const lb=$("rlLb"); if(lb&&!lb.hidden){ lb.hidden=true; return; } });
   $("rlForm").onsubmit=e=>{ e.preventDefault(); rlSend($("rlInput").value); };
   $("rlInput").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing){ e.preventDefault(); rlSend($("rlInput").value); } });
   document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&RL&&!$("rlProjView").hidden){ setTimeout(rlResume,600); if(rlWakeN>0) rlWake(true).then(()=>rlWake(false)); } });
-  $("rlMsgs").addEventListener("click",e=>{ if(e.target.closest("#rlRetry")&&RL?.chatPending) rlSend(RL.chatPending.text,{retry:true}); });
+  $("rlMsgs").addEventListener("click",e=>{ if(e.target.closest("#rlRetry")&&RL?.chatPending) rlSend(RL.chatPending.text,{retry:true});
+    const u=e.target.closest("[data-adv]"); if(u&&RL){ const [mi,ai]=u.dataset.adv.split(":").map(Number); const x=RL.chat[mi]?.advisors?.[ai]; if(x){ const A=rlAdv(x.id); brSignal("chat","advisor_used",1,{note:x.note,item:A.name,key:x.note}); rlSend(rlAr()?`طبّق اقتراح ${A.name}: ${x.note}`:`Apply the ${A.name}'s suggestion: ${x.note}`); } } });
   $("rlChips").onclick=e=>{ const b=e.target.closest("button"); if(b) rlSend(b.textContent); };
   $("rlFile").onchange=e=>{ for(const f of [...e.target.files].slice(0,10-rlPending.length)) rlPending.push({blob:f,url:URL.createObjectURL(f),name:f.name}); e.target.value=""; rlRenderAtt(); };
   $("rlInput").addEventListener("paste",e=>{ const fs=[...(e.clipboardData?.files||[])].filter(f=>/^image\//.test(f.type)); if(fs.length){ fs.forEach(f=>rlPending.push({blob:f,url:URL.createObjectURL(f),name:f.name})); rlRenderAtt(); } });
@@ -2710,6 +2791,9 @@ async function rlBible(){
     else if(a==="check") rlCheckScenes([b.dataset.n]);
     else if(a==="stopcheck"){ e.preventDefault(); const sc=RL.scenes.find(x=>String(x.n)===b.dataset.n); sc?._ctl?.abort(); }
     else if(a==="improve") rlImproveScene(b.dataset.n);
+    else if(a==="room") rlRoom(b.dataset.n);
+    else if(a==="roomapply"||a==="roomskip"){ const sc=RL.scenes.find(x=>String(x.n)===b.dataset.n), it=sc?.room?.items?.[+b.dataset.i]; if(it){ it.done=true; brSignal("shot",a==="roomapply"?"advisor_applied":"advisor_skipped",a==="roomapply"?1:-1,{note:it.instruction,item:`${rlAdv(it.id).name}: ${it.title}`,key:it.instruction}); if(a==="roomapply") rlImproveScene(sc.n,it.instruction); else { rlSave(); rlBoard(); } } }
+    else if(a==="makemap") rlMakeMap(b.dataset.n);
     else if(a==="ask"){ const sc=RL.scenes.find(x=>String(x.n)===b.dataset.n); if(sc){ sc._ask=!sc._ask; rlBoard(); setTimeout(()=>$("rlAsk"+sc.n)?.focus(),20); } }
     else if(a==="askcancel"){ const sc=RL.scenes.find(x=>String(x.n)===b.dataset.n); if(sc){ sc._ask=false; rlBoard(); } }
     else if(a==="undo") rlUndoScene(b.dataset.n);
@@ -2732,6 +2816,7 @@ async function rlBible(){
   });
   B.addEventListener("keydown",e=>{ if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)){ const f=e.target.closest("[data-ask]"); if(f){ e.preventDefault(); f.requestSubmit(); } } });
   B.addEventListener("change",e=>{
+    const um=e.target.closest("[data-rl-usemap]"); if(um){ const sc=RL.scenes.find(x=>String(x.n)===um.dataset.rlUsemap); if(sc){ sc.useMap=um.checked; rlSave(); rlBoard(); } return; }
     const s=e.target.closest("[data-rl-start]"); if(s){ const sc=RL.scenes.find(x=>String(x.n)===s.dataset.rlStart); if(sc){ sc.useFrame=s.checked; rlSave(); rlBoard(); } return; }
     const t=e.target.closest("[data-rl-edit]"); if(!t) return; const before=rlEditValue(t); rlCommit(t); rlSave();
     if(before!=null&&before!==t.value){ const p=t.dataset.rlEdit.split(":"), kind=p[0]==="b"?"script":p[0]==="s"||p[0]==="f"?"shot":p[0]==="c"?"character":"location";
