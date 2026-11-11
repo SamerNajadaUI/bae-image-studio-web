@@ -2123,6 +2123,7 @@ function rlShotCard(sc){
     </div>
     <div class="rl-shot-r">
       <div class="rl-ihead"><span class="rl-tag">Scene ${sc.n}</span><b>${esc(sc.title||"")}</b> <span class="sub">${sc.duration_s||""} s</span></div>
+      ${rlShotBar(sc)}
       ${rlBlockingHTML(sc)}
       <label class="rl-lab" for="rlF${sc.n}">1 · First frame <span>Nano Banana 2.1 · ${set.aspect}</span></label>
       <textarea class="rl-prompt" id="rlF${sc.n}" data-rl-edit="f:${sc.n}" spellcheck="false" dir="ltr" placeholder="Written from the scene when you generate the first frame">${esc(sc.frame_prompt||"")}</textarea>
@@ -2249,6 +2250,64 @@ Reply with only JSON: {"scenes":[{"n":1,"passed":12,"issues":[{"problem":"short,
     for(const s of list) if(!s.check||s.check.at<Date.now()-5000) s.check={...(s.check||{}),err:"The supervisor didn't return this scene. Press Check again.",dirty:true};
   }catch(e){ list.forEach(s=>{ s.check={...(s.check||{}),err:sampleCopy(e),dirty:true}; }); }
   finally{ list.forEach(s=>delete s._checking); rlSave(); rlBoard(); }
+}
+
+/* Rewrite one scene: "Update shot prompt" makes it better with everything the Director knows today; "Ask for edit" applies the user's own change. Every version is kept so it can be undone. */
+async function rlImproveScene(n,instruction){
+  const sc=RL.scenes.find(x=>+x.n===+n); if(!sc||!sample||sc._improving) return;
+  instruction=String(instruction||"").trim();
+  sc._improving=instruction?"edit":"upgrade"; sc._ask=false; sc.improveErr=null; rlBoard();
+  if(instruction) brSignal("shot","edit_requested",-1,{note:instruction,item:`Scene ${sc.n} · ${sc.title||""}`,before:sc.prompt,key:sc.n+instruction});
+  await brLoad();
+  const set=rlSet(), before={title:sc.title,duration_s:sc.duration_s,refs:sc.refs,blueprint:sc.blueprint,frame_prompt:sc.frame_prompt,prompt:sc.prompt};
+  let ok=false;
+  try{
+    const out=await sample.json(`You are the Director of a Bank al Etihad reel (${set.aspect}, Seedance 2.5 animating from a Nano Banana 2.1 first frame, dialogue ${set.lang}).
+${instruction?`THE USER ASKED FOR THIS CHANGE TO SCENE ${sc.n}: "${instruction}"
+Apply it precisely and completely. Keep everything the user didn't ask to change (story beat, cast, wardrobe, location, tags), unless the change requires it.`:`UPDATE SHOT PROMPT: rewrite scene ${sc.n} so it is clearly BETTER than the current version, using everything in the brain below, especially the team's latest lessons and this morning's research. Raise the craft: a stronger first-second hook, more precise and motivated camera work (shot sizes, FOV°, moves with speed), better light, a more specific and natural performance, cleaner physics, tighter timing, sharper sound design. Do not change the story beat, the cast or the location.`}
+Rules: keep every @img tag exactly; keep the prompt structure (GLOBAL STYLE, REFERENCES, SCENE, CHARACTERS, LOCATION, FIRST FRAME & BLOCKING, Shot 1… with timestamps and "Hard cut.", PHYSICS, LIGHTING, CONSISTENCY, AUDIO); state the geography explicitly (zones, who is where, door direction, camera position and direction, head-count, light source); one action per shot; timestamps add up to duration_s (4–15 s). Update the blueprint if the blocking changes, and keep frame_prompt = the exact first moment of shot 1. Avoid every mistake in the AI-video rules.
+
+${RL_BAE}
+
+${brText()}
+
+PROJECT: script ${trimJSON(RL.script,4000)}
+CAST: ${trimJSON(RL.characters.map(({tag,name,description,wardrobe})=>({tag,name,description,wardrobe})),2500)}
+LOCATIONS & PROPS: ${trimJSON(RL.locations.map(({tag,name,kind,description})=>({tag,name,kind,description})),2000)}
+CURRENT SCENE: ${trimJSON({n:sc.n,...before},16000)}
+
+Blueprint format: ${RL_BP_SCHEMA}
+
+Reply with only JSON: {"title":"","duration_s":0,"refs":["@img1"],"blueprint":{...},"frame_prompt":"full text","prompt":"full text","changes":["3–6 short bullets saying what you changed and why, in the user's language"]}`,{modelTier:"complex",cache:false});
+    if(!out||!out.prompt) throw {code:"invalid_json",message:"Claude didn't return a new prompt."};
+    sc.history=[{...before,at:Date.now(),why:instruction||"Update shot prompt"},...(sc.history||[])].slice(0,6);
+    if(out.title) sc.title=String(out.title);
+    if(+out.duration_s) sc.duration_s=Math.max(4,Math.min(15,+out.duration_s));
+    if(Array.isArray(out.refs)&&out.refs.length) sc.refs=out.refs.map(String);
+    if(out.blueprint&&typeof out.blueprint==="object") sc.blueprint=out.blueprint;
+    if(out.frame_prompt&&out.frame_prompt!==sc.frame_prompt){ sc.frame_prompt=String(out.frame_prompt); if(sc.frame?.id) sc.frame.stale=true; }
+    if(out.prompt!==sc.prompt){ sc.prompt=String(out.prompt); if(sc.clip) sc.stale=true; }
+    sc.lastChange={at:Date.now(),kind:instruction?"edit":"upgrade",ask:instruction||"",changes:Array.isArray(out.changes)?out.changes.slice(0,8).map(String):[]};
+    if(sc.check) sc.check.dirty=true; ok=true;
+  }catch(e){ sc.improveErr=sampleCopy(e); }
+  finally{ delete sc._improving; rlSave(); rlBoard(); }
+  if(ok) await rlCheckScenes([sc.n],{quiet:true});
+}
+function rlUndoScene(n){
+  const sc=RL.scenes.find(x=>+x.n===+n); const h=sc?.history?.[0]; if(!h) return;
+  sc.history=sc.history.slice(1);
+  Object.assign(sc,{title:h.title,duration_s:h.duration_s,refs:h.refs,blueprint:h.blueprint,frame_prompt:h.frame_prompt,prompt:h.prompt});
+  if(sc.frame?.id) sc.frame.stale=true; if(sc.clip) sc.stale=true; if(sc.check) sc.check.dirty=true;
+  sc.lastChange={at:Date.now(),kind:"undo",changes:[`Back to the version before “${h.why}”.`]}; rlSave(); rlBoard();
+}
+function rlShotBar(sc){
+  const busy=sc._improving, ar=rlAr();
+  const chips=ar?["سينمائي أكثر","أضحك","لقطات أقرب","حركة كاميرا أجرأ","أقصر وأسرع"]:["More cinematic","Funnier","Closer shots","Bolder camera","Shorter, faster"];
+  return `<div class="rl-shotbar"><button class="btn small primary" type="button" data-rl="improve" data-n="${sc.n}" ${busy?"disabled":""}>${busy==="upgrade"?"Rewriting…":"Update shot prompt"}</button><button class="btn small" type="button" data-rl="ask" data-n="${sc.n}" aria-expanded="${!!sc._ask}" ${busy?"disabled":""}>${busy==="edit"?"Applying your edit…":"Ask for edit"}</button>${sc.history?.length?`<button class="a-btn" type="button" data-rl="undo" data-n="${sc.n}" ${busy?"disabled":""} title="Back to the previous version">Undo</button>`:""}</div>
+  ${sc._ask?`<form class="rl-ask" data-ask="${sc.n}"><label class="t12 muted" for="rlAsk${sc.n}">What should change in this scene? Write it any way you like.</label><textarea class="rl-field" id="rlAsk${sc.n}" name="q" rows="3" dir="auto" placeholder="${ar?"مثلاً: خلي الكاميرا هاند هيلد، وسارة تبتسم لما تفتح الباب، والضو أدفى":"e.g. make it handheld, she smiles when she opens the door, warmer light"}"></textarea><div class="rl-askchips">${chips.map(c=>`<button type="button" data-chip="${esc(c)}">${esc(c)}</button>`).join("")}</div><div class="rl-btns"><button class="btn small primary" type="submit">Apply edit</button><button class="btn small" type="button" data-rl="askcancel" data-n="${sc.n}">Cancel</button><span class="t12 muted">⌘/Ctrl + Enter</span></div></form>`:""}
+  ${busy?`<p class="rl-status"><span class="spin" aria-hidden="true" style="display:inline-block;vertical-align:-2px"></span> ${busy==="edit"?"Applying your edit, then the script supervisor checks it…":"Rewriting with everything the Director knows today, then the script supervisor checks it…"}</p>`:""}
+  ${sc.improveErr?`<p class="rl-status bad">${esc(sc.improveErr)}</p>`:""}
+  ${sc.lastChange?.changes?.length&&!busy?`<div class="rl-changes"><b>${sc.lastChange.kind==="edit"?"Your edit":sc.lastChange.kind==="undo"?"Undone":"Updated"}</b>${sc.lastChange.ask?` · “${esc(sc.lastChange.ask)}”`:""}<ul>${sc.lastChange.changes.map(c=>`<li dir="auto">${esc(c)}</li>`).join("")}</ul></div>`:""}`;
 }
 async function rlEnsureChecked(sc){ if(!sc.check||sc.check.dirty||!sc.blueprint){ await rlCheckScenes([sc.n],{quiet:true}); } }
 /* ---------- Magnific: images for cast, locations and first frames ---------- */
@@ -2513,6 +2572,7 @@ async function rlBible(){
   B.addEventListener("click",async e=>{
     const tab=e.target.closest("[data-tab]"); if(tab&&B.contains(tab)){ RL.view=tab.dataset.tab; rlSave(); rlRender(); return; }
     const z=e.target.closest("[data-zoom]"); if(z){ rlZoom(z.dataset.zoom); return; }
+    const chip=e.target.closest(".rl-ask [data-chip]"); if(chip){ const ta=chip.closest("form").querySelector("textarea"); ta.value=(ta.value.trim()?ta.value.trim()+"، ":"")+chip.dataset.chip; ta.focus(); return; }
     const rv=e.target.closest(".rl-rate [data-v]"); if(rv){ const box=rv.closest(".rl-rate"); RL._rateOpen={key:box.dataset.key,v:+rv.dataset.v}; rlBoard(); setTimeout(()=>B.querySelector(".rl-rateform input")?.focus(),20); return; }
     const b=e.target.closest("[data-rl]"); if(!b) return; const a=b.dataset.rl, ar=rlAr();
     if(a==="pick") rlSend(ar?`اخترت الفكرة ${+b.dataset.i+1}: ${RL.ideas[+b.dataset.i]?.title||""}. اكتبلي السيناريو.`:`I choose idea ${+b.dataset.i+1}: ${RL.ideas[+b.dataset.i]?.title||""}. Write the script.`);
@@ -2534,6 +2594,10 @@ async function rlBible(){
     else if(a==="addcancel"){ RL._adding=null; rlBoard(); }
     else if(a==="cast"){ rlAddElement("character",b.dataset.n,"BAE character from the library",b.dataset.n); }
     else if(a==="check") rlCheckScenes([b.dataset.n]);
+    else if(a==="improve") rlImproveScene(b.dataset.n);
+    else if(a==="ask"){ const sc=RL.scenes.find(x=>String(x.n)===b.dataset.n); if(sc){ sc._ask=!sc._ask; rlBoard(); setTimeout(()=>$("rlAsk"+sc.n)?.focus(),20); } }
+    else if(a==="askcancel"){ const sc=RL.scenes.find(x=>String(x.n)===b.dataset.n); if(sc){ sc._ask=false; rlBoard(); } }
+    else if(a==="undo") rlUndoScene(b.dataset.n);
     else if(a==="frame"){ const sc=RL.scenes.find(x=>String(x.n)===b.dataset.n); if(sc?.frame?.id) brSignal("shot","frame_regenerated",-1,{item:`Scene ${sc.n} first frame: ${String(sc.frame_prompt||"").slice(0,700)}`,key:"f"+sc.frame.id}); rlGenFrame(b.dataset.n); }
     else if(a==="render"){ const sc=RL.scenes.find(x=>String(x.n)===b.dataset.n); if(sc?.clip) brSignal("shot","video_regenerated",-1,{item:`Scene ${sc.n}: ${String(sc.prompt||"").slice(0,800)}`,key:"v"+sc.clip}); rlRenderScene(b.dataset.n); }
     else if(a==="allframes") RL.scenes.filter(s=>!s.frame?.id).forEach(s=>rlGenFrame(s.n));
@@ -2547,9 +2611,11 @@ async function rlBible(){
   });
   B.addEventListener("submit",e=>{
     const f=e.target.closest("[data-addform]"); if(f){ e.preventDefault(); const fd=new FormData(f); rlAddElement(f.dataset.addform,String(fd.get("name")||"").trim(),String(fd.get("desc")||"").trim(),null); return; }
+    const ak=e.target.closest("[data-ask]"); if(ak){ e.preventDefault(); const q=String(new FormData(ak).get("q")||"").trim(); if(q) rlImproveScene(ak.dataset.ask,q); return; }
     const rf=e.target.closest(".rl-rateform"); if(rf){ e.preventDefault(); const note=String(new FormData(rf).get("n")||"").trim(); RL._rateOpen=null; brFeedback(rf.dataset.kind,rf.dataset.key,+rf.dataset.v,note,rf.dataset.item); rlBoard(); return; }
     const r=e.target.closest("[data-revise]"); if(r){ e.preventDefault(); const q=String(new FormData(r).get("q")||"").trim(); if(q) rlReviseElement(r.dataset.revise,q); }
   });
+  B.addEventListener("keydown",e=>{ if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)){ const f=e.target.closest("[data-ask]"); if(f){ e.preventDefault(); f.requestSubmit(); } } });
   B.addEventListener("change",e=>{
     const s=e.target.closest("[data-rl-start]"); if(s){ const sc=RL.scenes.find(x=>String(x.n)===s.dataset.rlStart); if(sc){ sc.useFrame=s.checked; rlSave(); rlBoard(); } return; }
     const t=e.target.closest("[data-rl-edit]"); if(!t) return; const before=rlEditValue(t); rlCommit(t); rlSave();
