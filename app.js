@@ -1692,6 +1692,7 @@ const RL_METHOD=`PRODUCTION METHOD (follow it exactly):
    LIGHTING: the motivated source, direction, falloff.
    CONSISTENCY: zero drift on faces, wardrobe and props; exact head-count; no duplicates; product details stay sharp.
    AUDIO: bracket syntax — (music: …) or (no music, music added in edit), <sfx: … at 0:03>, {Dialogue language: <lang>. <Name>, <delivery>: "<line>"} with timestamps, 【on-screen text】 only when the script asks. Say "no subtitles".
+   BLOCKING BLUEPRINT FIRST: before writing any scene, decide its geography like a director and script supervisor: the zones (INTERIOR/EXTERIOR, behind/in front of a counter, inside/outside a car), which zone every person is in, doors (hinge, opening direction), where the camera stands for each shot and which way it looks (lens as FOV°), the axis of action (180° rule), the motivated light source and the time of day, the exact head-count and the props in each hand. Then write the prompts FROM the blueprint and state the geography explicitly in words (e.g. "Sara @img1 is INSIDE the apartment hallway; Lina @img2 stands OUTSIDE on the landing; the door opens inward; the camera is inside, behind Sara's right shoulder"). Never leave the AI to guess where anyone is.
    FIRST FRAME: every scene also gets a still-image prompt for its exact first frame (same shot size, lens, blocking, wardrobe, light and grade as Shot 1, photoreal, BAE look). It is generated first as an image with the tagged references, then Seedance animates the video FROM that frame (image-to-video), so faces, place and light are locked before motion.
 6. RENDER — each scene renders separately in Seedance 2.5: start frame + references attached in tag order.`;
 const RL_BAE=`BANK AL ETIHAD HOUSE STYLE (non-negotiable in every image and video prompt):
@@ -1889,7 +1890,7 @@ Reply with ONLY one JSON object. Always include "reply" (the chat message, no ma
 - "script": {"title","duration_s","scenes":[{"n","time","title","action","dialogue":[{"who","line"}],"on_screen_text","sound"}]}
 - "characters": [{"tag","name","role","description","wardrobe","library":null|"Wissam"|"Lina"|"Sara"|"Omar","prompt"}]  — prompt = the full image prompt for the character reference sheet; set "library" only when the user wants that BAE character
 - "locations": [{"tag","name","kind":"location"|"prop","description","prompt"}]  — full image prompt; locations empty of people
-- "scenes": [{"n","title","duration_s","refs":["@img1",...],"frame_prompt","prompt"}]  — frame_prompt = the still-image prompt (Nano Banana 2.1) for the scene's first frame, using the tags ("the man @img1 sits…"); prompt = the full Seedance 2.5 prompt that continues from that first frame, following the DIRECTING structure; duration 4–15 s, ${set.aspect}
+- "scenes": [{"n","title","duration_s","refs":["@img1",...],"blueprint":{...},"frame_prompt","prompt"}]  — blueprint = the top-down blocking plan written FIRST (format: ${RL_BP_SCHEMA}); frame_prompt = the still-image prompt (Nano Banana 2.1) for the scene's first frame, using the tags ("the man @img1 sits…"); prompt = the full Seedance 2.5 prompt that continues from that first frame, following the DIRECTING structure; duration 4–15 s, ${set.aspect}
 - "chips": 2–4 short suggested next replies for the user, in their language`;
 }
 async function rlSend(text){
@@ -1923,8 +1924,12 @@ function rlApply(o){
   if(Array.isArray(o.characters)) RL.characters=merge(RL.characters,o.characters);
   if(Array.isArray(o.locations)) RL.locations=merge(RL.locations,o.locations);
   rlLinkLibrary();
-  if(Array.isArray(o.scenes)) RL.scenes=o.scenes.map(sc=>{ const old=RL.scenes.find(x=>+x.n===+sc.n); if(!old) return {...sc};
-    const m={...old,...sc}; if(sc.prompt&&sc.prompt!==old.prompt) Object.assign(m,{status:null,clip:null,url:null,note:null,_src:null,web:null}); return m; });
+  let toCheck=[];
+  if(Array.isArray(o.scenes)) RL.scenes=o.scenes.map(sc=>{ const old=RL.scenes.find(x=>+x.n===+sc.n); if(!old){ toCheck.push(sc.n); return {...sc}; }
+    const m={...old,...sc}; if(sc.prompt&&sc.prompt!==old.prompt) Object.assign(m,{status:null,clip:null,url:null,note:null,_src:null,web:null});
+    if((sc.prompt&&sc.prompt!==old.prompt)||(sc.frame_prompt&&sc.frame_prompt!==old.frame_prompt)||(sc.blueprint&&JSON.stringify(sc.blueprint)!==JSON.stringify(old.blueprint))){ toCheck.push(sc.n); if(m.frame?.id&&sc.frame_prompt&&sc.frame_prompt!==old.frame_prompt) m.frame={...m.frame,stale:true}; }
+    return m; });
+  if(toCheck.length) setTimeout(()=>rlCheckScenes(toCheck,{quiet:true}),60);
   if(o.stage&&rlStageIx(o.stage)>=0){ if(rlStageIx(o.stage)!==rlStageIx(RL.stage)) RL.view=o.stage; RL.stage=o.stage; }
   RL.chat.push({role:"a",text:String(o.reply||"…"),chips:Array.isArray(o.chips)?o.chips.slice(0,4):[]});
 }
@@ -2095,7 +2100,7 @@ function rlEditValue(t){ const p=t.dataset.rlEdit.split(":");
   if(p[0]==="b"){ const s=RL.script?.scenes?.[+p[1]]; if(!s) return null; return p[2]==="dialogue"?(s.dialogue||[]).map(d=>`${d.who||""}: ${d.line||""}`).join("\n"):s[p[2]]||""; }
   const el=rlElByTag(p[1]); return el?el[p[2]||"prompt"]||"":null; }
 function rlCommit(t){ const parts=t.dataset.rlEdit.split(":"); const k=parts[0];
-  if(k==="s"||k==="f"){ const sc=RL.scenes.find(x=>String(x.n)===parts[1]); if(sc){ if(k==="s") sc.prompt=t.value; else sc.frame_prompt=t.value; } return; }
+  if(k==="s"||k==="f"){ const sc=RL.scenes.find(x=>String(x.n)===parts[1]); if(sc){ const old=k==="s"?sc.prompt:sc.frame_prompt; if(old!==t.value&&sc.check) sc.check.dirty=true; if(k==="s") sc.prompt=t.value; else sc.frame_prompt=t.value; } return; }
   if(k==="b"){ const s=RL.script?.scenes?.[+parts[1]]; if(!s) return; const f=parts[2];
     if(f==="dialogue") s.dialogue=t.value.split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{ const i=l.indexOf(":"); return i>0?{who:l.slice(0,i).trim(),line:l.slice(i+1).trim()}:{who:"",line:l}; }); else s[f]=t.value; return; }
   const el=rlElByTag(parts[1]); if(!el) return; const f=parts[2]||"prompt"; if(f==="prompt"&&el.id&&el.prompt!==t.value) el.stale=true; el[f]=t.value; }
@@ -2118,16 +2123,18 @@ function rlShotCard(sc){
     </div>
     <div class="rl-shot-r">
       <div class="rl-ihead"><span class="rl-tag">Scene ${sc.n}</span><b>${esc(sc.title||"")}</b> <span class="sub">${sc.duration_s||""} s</span></div>
+      ${rlBlockingHTML(sc)}
       <label class="rl-lab" for="rlF${sc.n}">1 · First frame <span>Nano Banana 2.1 · ${set.aspect}</span></label>
       <textarea class="rl-prompt" id="rlF${sc.n}" data-rl-edit="f:${sc.n}" spellcheck="false" dir="ltr" placeholder="Written from the scene when you generate the first frame">${esc(sc.frame_prompt||"")}</textarea>
       <div class="rl-btns"><button class="btn small${f.id?"":" primary"}" type="button" data-rl="frame" data-n="${sc.n}" ${f.status==="run"?"disabled":""}>${f.status==="run"?"Generating…":f.id?"Regenerate first frame":"Generate first frame"}</button>${f.web?`<a class="btn small" href="${esc(f.web)}" target="_blank" rel="noopener">Magnific</a>`:""}</div>
-      ${f.err?`<p class="rl-status bad">${esc(f.err)}</p>`:""}
+      ${f.err?`<p class="rl-status bad">${esc(f.err)}</p>`:""}${f.stale&&f.id?`<p class="rl-status warn">The supervisor corrected this first-frame prompt after the image was made. Regenerate it.</p>`:""}
       <details class="rl-vp"${sc.status==="done"?"":" open"}><summary>2 · Video <span>Seedance 2.5 · ${Math.max(4,Math.min(15,+sc.duration_s||8))} s</span></summary>
         <textarea class="rl-prompt tall" data-rl-edit="s:${sc.n}" spellcheck="false" dir="ltr">${esc(sc.prompt||"")}</textarea></details>
       <label class="rl-chk"><input type="checkbox" data-rl-start="${sc.n}" ${useStart?"checked":""} ${startOK?"":"disabled"}> Animate from the first frame${startOK?"":" (generate it first)"}</label>
       <div class="rl-btns"><button class="btn small${sc.status!=="done"&&(startOK||sc.useFrame===false)?" primary":""}" type="button" data-rl="render" data-n="${sc.n}" ${sc.status==="run"?"disabled":""}>${sc.status==="run"?"Rendering…":sc.status==="done"?"Generate video again":"Generate video"}</button>${sc.status==="done"&&!vsrc&&!sc._blocked?`<button class="btn small" type="button" data-rl="play" data-n="${sc.n}">Play here</button>`:""}<button class="btn small" type="button" data-rl="copys" data-n="${sc.n}">Copy prompt</button>${sc.url?`<a class="btn small" href="${esc(sc.url)}" target="_blank" rel="noopener">MP4</a>`:""}${sc.web?`<a class="btn small" href="${esc(sc.web)}" target="_blank" rel="noopener">Magnific</a>`:""}</div>
       ${sc.status==="done"||f.id?`<div class="rl-btns rl-rateline"><span class="t12 muted">${sc.status==="done"?"How is this shot?":"How is this first frame?"}</span>${rlRate("shot","shot:"+sc.n+":"+(sc.clip||f.id),`Scene ${sc.n} ${sc.title}: ${String(sc.prompt||"").slice(0,800)}`)}</div>`:""}
       ${sc.note&&sc.status!=="run"?`<p class="rl-status${sc.status==="err"?" bad":""}">${esc(sc.note)}</p>`:""}
+      ${sc.stale&&sc.clip?`<p class="rl-status warn">The scene prompt was corrected after this video was made.</p>`:""}
       ${sc._blocked&&!vsrc&&sc.status==="done"?`<p class="rl-status">The video file can't play inside this page, so the frame is shown. Open the MP4 or Magnific to watch it.</p>`:""}
     </div></div>`;
 }
@@ -2160,6 +2167,90 @@ function rlDeliver(){
   </div>`;
 }
 
+
+/* ---------- blocking blueprint: the geography of every scene, decided before a single prompt is written ---------- */
+const RL_BP_SCHEMA=`"blueprint": {"zones":[{"id":"in","name":"Apartment entrance hallway (INTERIOR)","x":0,"y":0,"w":62,"h":100}], "openings":[{"name":"Front door","x1":62,"y1":38,"x2":62,"y2":62,"hinge":"left","opens":"inward into the hallway"}], "people":[{"tag":"@img1","name":"Sara","zone":"in","x":52,"y":50,"facing":90,"action":"pulls the door open"}], "props":[{"name":"phone","x":0,"y":0,"state":"in Lina's right hand, screen facing her"}], "cameras":[{"shot":1,"x":20,"y":58,"facing":80,"fov":54,"height":"eye level 1.6 m","zone":"in","move":"slow push-in"}], "light":{"source":"daylight through the open door + warm ceiling practicals","x":96,"y":50,"temp":"5600K outside / 3200K inside"}, "axis":"line Sara–Lina; the camera stays on the south side (y > 50)", "time":"late afternoon", "rules":["Sara is INSIDE in every shot","Lina is OUTSIDE until shot 3","exactly two people"]}
+  Plan coordinates: a top-down map, 0–100 on both axes (x left→right, y top→bottom). "facing" is degrees clockwise from up (0 = up, 90 = right, 180 = down, 270 = left). Every person has exactly one zone in the first frame; "cameras" lists where the camera is for each shot.`;
+function rlPlanSVG(bp){
+  if(!bp||!Array.isArray(bp.zones)&&!Array.isArray(bp.people)) return "";
+  const n=v=>Math.max(0,Math.min(100,+v||0)), dir=(a,l)=>[Math.sin((+a||0)*Math.PI/180)*l,-Math.cos((+a||0)*Math.PI/180)*l];
+  const fills=["#F1E9DD","#E3EEF4","#F6E3E7","#EAF1E6"];
+  const zones=(bp.zones||[]).map((z,i)=>`<rect x="${n(z.x)}" y="${n(z.y)}" width="${n(z.w)}" height="${n(z.h)}" fill="${fills[i%4]}" stroke="#CCC3B4" stroke-width=".4"/><text x="${n(z.x)+1.5}" y="${n(z.y)+4}" class="zl">${esc(String(z.name||z.id||"").slice(0,40))}</text>`).join("");
+  const opens=(bp.openings||[]).map(o=>`<line x1="${n(o.x1)}" y1="${n(o.y1)}" x2="${n(o.x2)}" y2="${n(o.y2)}" stroke="#A33755" stroke-width="1.6" stroke-linecap="round"/><text x="${(n(o.x1)+n(o.x2))/2+1.5}" y="${(n(o.y1)+n(o.y2))/2-1.5}" class="ol">${esc(String(o.name||"door").slice(0,18))}</text>`).join("");
+  const cams=(bp.cameras||[]).slice(0,4).map((c,i)=>{ const f=Math.max(10,Math.min(120,+c.fov||50)), a=+c.facing||0, [x1,y1]=dir(a-f/2,26), [x2,y2]=dir(a+f/2,26), x=n(c.x), y=n(c.y);
+    return `<path d="M${x},${y} L${x+x1},${y+y1} A26,26 0 0 1 ${x+x2},${y+y2} Z" fill="rgba(25,24,30,${i?.04:.08})" stroke="rgba(25,24,30,.25)" stroke-width=".3"/><rect x="${x-2.2}" y="${y-1.6}" width="4.4" height="3.2" rx=".6" fill="#19181E" transform="rotate(${a} ${x} ${y})"/><text x="${x+2.6}" y="${y+4.6}" class="cl">${c.shot?"S"+c.shot:"CAM"}</text>`; }).join("");
+  const ppl=(bp.people||[]).map(p=>{ const x=n(p.x), y=n(p.y), [dx,dy]=dir(p.facing,6); return `<line x1="${x}" y1="${y}" x2="${x+dx}" y2="${y+dy}" stroke="#A33755" stroke-width=".9" marker-end="url(#rlArr)"/><circle cx="${x}" cy="${y}" r="3.2" fill="#fff" stroke="#A33755" stroke-width=".9"/><text x="${x}" y="${y+1.2}" class="pl">${esc(String(p.tag||"").replace("@img",""))}</text><text x="${x}" y="${y-4.6}" class="pn">${esc(String(p.name||"").slice(0,14))}</text>`; }).join("");
+  const pr=(bp.props||[]).filter(p=>p.x!=null&&(+p.x||+p.y)).map(p=>`<rect x="${n(p.x)-1.2}" y="${n(p.y)-1.2}" width="2.4" height="2.4" fill="#4BBCDF"/><text x="${n(p.x)+2}" y="${n(p.y)+1}" class="ol">${esc(String(p.name||"").slice(0,14))}</text>`).join("");
+  const L=bp.light&&bp.light.x!=null?`<circle cx="${n(bp.light.x)}" cy="${n(bp.light.y)}" r="2.2" fill="#F1C0B6" stroke="#B9516E" stroke-width=".4"/><text x="${Math.min(n(bp.light.x),80)}" y="${Math.min(n(bp.light.y)+5.5,98)}" class="ol">light</text>`:"";
+  return `<svg class="rl-plan" viewBox="0 0 100 100" role="img" aria-label="Top-down blocking plan"><defs><marker id="rlArr" viewBox="0 0 6 6" refX="3" refY="3" markerWidth="4" markerHeight="4" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#A33755"/></marker></defs><rect width="100" height="100" fill="#FFFAF4"/>${zones}${opens}${cams}${pr}${L}${ppl}</svg>`;
+}
+function rlBlockingHTML(sc){
+  const bp=sc.blueprint, ck=sc.check;
+  const zoneName=id=>(bp?.zones||[]).find(z=>z.id===id)?.name||id||"";
+  const pill=sc._checking?`<span class="rl-pill"><span class="spin" aria-hidden="true"></span> Script supervisor is checking…</span>`
+    :ck?.dirty?`<span class="rl-pill warn">Edited — check again</span>`
+    :ck?(ck.issues?.length?`<span class="rl-pill ok">Fixed ${ck.issues.length} issue${ck.issues.length>1?"s":""} · ${ck.passed||0} checks</span>`:`<span class="rl-pill ok">✓ ${ck.passed||0} checks passed</span>`)
+    :`<span class="rl-pill">Not checked yet</span>`;
+  return `<details class="rl-block"${bp?" open":""}><summary><span>Blocking &amp; continuity</span>${pill}</summary>
+    ${bp?`<div class="rl-blockgrid">${rlPlanSVG(bp)}<div class="rl-blocktext" dir="auto">
+      ${(bp.people||[]).map(p=>`<p><b>${esc(p.name||p.tag)}</b> ${esc(p.tag||"")} — <span class="zone">${esc(zoneName(p.zone))}</span>${p.action?` · ${esc(p.action)}`:""}</p>`).join("")}
+      ${(bp.openings||[]).map(o=>`<p class="muted">${esc(o.name||"Door")}: hinge ${esc(o.hinge||"?")}, opens ${esc(o.opens||"?")}</p>`).join("")}
+      ${(bp.cameras||[]).slice(0,5).map(c=>`<p class="muted">Shot ${esc(c.shot||1)} camera: ${[zoneName(c.zone),c.height,c.fov?c.fov+"° FOV":"",c.move].filter(Boolean).map(esc).join(", ")}</p>`).join("")}
+      ${bp.light?`<p class="muted">Light: ${esc(bp.light.source||"")}${bp.light.temp?` · ${esc(bp.light.temp)}`:""}</p>`:""}
+      ${bp.axis?`<p class="muted">Axis: ${esc(bp.axis)}</p>`:""}
+      ${(bp.rules||[]).length?`<p class="muted">Locks: ${(bp.rules||[]).map(esc).join(" · ")}</p>`:""}
+    </div></div>`:`<p class="muted">No blueprint yet. The script supervisor builds one when it checks the scene.</p>`}
+    ${ck?.issues?.length?`<ul class="rl-issues">${ck.issues.map(i=>`<li><b>${esc(i.problem||"")}</b>${i.fix?` → ${esc(i.fix)}`:""}</li>`).join("")}</ul>`:""}
+    ${ck?.err?`<p class="rl-status bad">${esc(ck.err)}</p>`:""}
+    <div class="rl-btns"><button class="a-btn" type="button" data-rl="check" data-n="${sc.n}" ${sc._checking?"disabled":""}>${ck?"Check again":"Check this scene"}</button></div>
+  </details>`;
+}
+/* The script supervisor: an independent pass that checks every scene against the blueprint, the brain's cinematography and AI-video rules, and fixes the prompts */
+async function rlCheckScenes(ns,{quiet}={}){
+  if(!RL||!sample) return;
+  const list=RL.scenes.filter(s=>!ns||ns.map(String).includes(String(s.n))); if(!list.length) return;
+  list.forEach(s=>s._checking=true); if(!quiet) rlBoard(); else rlBoardSoon();
+  await brLoad();
+  const sec=id=>BR.sections.find(s=>s.id===id)?.text||"";
+  const kb=[sec("cinematography"),sec("ai_video_rules")].filter(Boolean).join("\n\n")||"Use professional film grammar: zones for every person, door logic, 180° rule, one action per shot, motivated light, exact head-count.";
+  const set=rlSet();
+  try{
+    const out=await sample.json(`You are a meticulous SCRIPT SUPERVISOR and DIRECTOR OF PHOTOGRAPHY reviewing AI-video scenes for a Bank al Etihad reel (${set.aspect}, Seedance 2.5 with a Nano Banana first frame) before any credits are spent. Your job: make every scene physically, spatially and cinematically correct and unambiguous, so the AI cannot misread it.
+
+KNOWLEDGE (follow it):
+${kb}
+
+${RL_BAE}
+
+PROJECT:
+- Script: ${trimJSON(RL.script,5000)}
+- Characters: ${trimJSON(RL.characters.map(({tag,name,description,wardrobe})=>({tag,name,description,wardrobe})),3000)}
+- Locations & props: ${trimJSON(RL.locations.map(({tag,name,kind,description})=>({tag,name,kind,description})),2500)}
+- Lessons from the team: ${(BR.sections.find(s=>s.id==="lessons")?.text||"").slice(0,1500)}
+
+SCENES TO CHECK: ${trimJSON(list.map(({n,title,duration_s,refs,blueprint,frame_prompt,prompt})=>({n,title,duration_s,refs,blueprint:blueprint||null,frame_prompt,prompt})),40000)}
+
+FOR EACH SCENE:
+1. Read the script beat and decide the true geography. If the blueprint is missing or wrong, write a correct one. Every person gets one zone; doors get hinge and opening direction; the camera of every shot gets a position, zone, facing, field of view and move; light gets its motivated source; write the axis and the locks.
+2. Run THE CHECK from the AI-video rules in order (geography → who is where in every shot → camera side → one action per shot → props and hands → screen directions and eyelines → light and time → people count and identity → dialogue ownership → timing adds up → brand rules). Count the checks that pass.
+3. Rewrite frame_prompt and prompt ONLY where needed so they state the geography explicitly: name the INTERIOR/EXTERIOR zones, say who is where ("Sara @img1 is INSIDE the apartment…"), where the camera stands and which way it looks, door opening direction, exact head-count, screen sides, light source and direction, one action per shot with timestamps that add up to duration_s. Keep the @img tags exactly. Keep the prompts' structure (GLOBAL STYLE, REFERENCES, SCENE, CHARACTERS, LOCATION, FIRST FRAME & BLOCKING, shots with Hard cut, PHYSICS, LIGHTING, CONSISTENCY, AUDIO). The frame_prompt must describe exactly the blocking of the first moment of shot 1.
+
+Blueprint format: ${RL_BP_SCHEMA}
+
+Reply with only JSON: {"scenes":[{"n":1,"passed":12,"issues":[{"problem":"short, specific","fix":"what you changed"}],"blueprint":{...},"frame_prompt":"full text or null if unchanged","prompt":"full text or null if unchanged"}]}`,{modelTier:"complex",cache:false});
+    for(const r of (out?.scenes||[])){
+      const sc=RL.scenes.find(x=>+x.n===+r.n); if(!sc) continue;
+      if(r.blueprint&&typeof r.blueprint==="object") sc.blueprint=r.blueprint;
+      const fixedF=r.frame_prompt&&r.frame_prompt!==sc.frame_prompt, fixedP=r.prompt&&r.prompt!==sc.prompt;
+      if(fixedF){ sc.frame_prompt=String(r.frame_prompt); if(sc.frame?.id) sc.frame.stale=true; }
+      if(fixedP){ sc.prompt=String(r.prompt); if(sc.clip) sc.stale=true; }
+      sc.check={at:Date.now(),passed:+r.passed||0,issues:Array.isArray(r.issues)?r.issues.slice(0,12):[],dirty:false};
+    }
+    for(const s of list) if(!s.check||s.check.at<Date.now()-5000) s.check={...(s.check||{}),err:"The supervisor didn't return this scene. Press Check again.",dirty:true};
+  }catch(e){ list.forEach(s=>{ s.check={...(s.check||{}),err:sampleCopy(e),dirty:true}; }); }
+  finally{ list.forEach(s=>delete s._checking); rlSave(); rlBoard(); }
+}
+async function rlEnsureChecked(sc){ if(!sc.check||sc.check.dirty||!sc.blueprint){ await rlCheckScenes([sc.n],{quiet:true}); } }
 /* ---------- Magnific: images for cast, locations and first frames ---------- */
 async function rlImage({prompt,aspect,refs=[],label}){
   const model=$("selNano").value||null;
@@ -2187,14 +2278,15 @@ async function rlGenFrame(n){
   if(!S.connected) await connect(true);
   const f=sc.frame=sc.frame||{}; f.status="run"; f.err=null; rlBoard();
   try{
+    await rlEnsureChecked(sc);
     if(!(sc.frame_prompt||"").trim()){
-      const o=await sample.json(`Write ONE photorealistic still-image prompt (Google Nano Banana 2.1) for the exact FIRST FRAME of this Seedance 2.5 scene: shot size, lens, camera height, blocking and screen sides, wardrobe, props, light and grade, as in its first shot. Name people, places and props with their @imgN tags exactly as the scene does ("the man @img1 stands…") and say "use @imgN only for identity / place, not its background or panel layout". No motion words. ${RL_BAE}\n\nScene prompt:\n${sc.prompt}\n\nReply with only JSON: {"frame_prompt":"..."}`,{modelTier:"default"});
+      const o=await sample.json(`Write ONE photorealistic still-image prompt (Google Nano Banana 2.1) for the exact FIRST FRAME of this Seedance 2.5 scene: shot size, lens, camera height, blocking and screen sides, wardrobe, props, light and grade, as in its first shot. Name people, places and props with their @imgN tags exactly as the scene does ("the man @img1 stands…") and say "use @imgN only for identity / place, not its background or panel layout". State the geography explicitly from the blueprint: zones (INTERIOR/EXTERIOR…), who is in which zone, door direction, where the camera stands and looks, exact head-count, light source. No motion words. ${RL_BAE}\n\nBlueprint: ${trimJSON(sc.blueprint||null,4000)}\n\nScene prompt:\n${sc.prompt}\n\nReply with only JSON: {"frame_prompt":"..."}`,{modelTier:"default"});
       sc.frame_prompt=String(o?.frame_prompt||"").trim(); if(!sc.frame_prompt) throw {code:"invalid_json",message:"Claude didn't return a first-frame prompt."};
     }
     const {prompt,refs,missing}=rlSceneRefs(sc,"frame_prompt");
     if(missing.length) throw {code:"tool_error",message:`Generate ${missing.join(", ")} first, so the first frame can use them.`};
     const out=await rlImage({prompt,aspect:rlSet().aspect,refs,label:"first frame"});
-    Object.assign(f,{id:out.id,web:out.web,status:"ok"});
+    Object.assign(f,{id:out.id,web:out.web,status:"ok",stale:false});
   }catch(err){ f.status="err"; f.err=mcpCopy(err); }
   rlSave(); rlBoard();
 }
@@ -2222,6 +2314,7 @@ function rlSceneRefs(sc,field="prompt"){
 async function rlRenderScene(n){
   const sc=RL.scenes.find(x=>+x.n===+n); if(!sc||!mcp||!sample||sc.status==="run") return;
   if(!S.connected) await connect(true);
+  if(!sc.check||sc.check.dirty||!sc.blueprint){ sc.status="run"; sc.note="The script supervisor is checking the scene first…"; rlBoard(); await rlEnsureChecked(sc); sc.status=null; }
   const {prompt:p0,refs,missing}=rlSceneRefs(sc);
   if(missing.length){ sc.status="err"; sc.note=`Generate ${missing.join(", ")} first (Cast / Locations), so they can be attached.`; rlBoard(); return; }
   const start=sc.useFrame!==false&&sc.frame?.id?sc.frame.id:null;
@@ -2241,7 +2334,7 @@ async function rlRenderScene(n){
     sc.clip=rr.ids[0]||id; sc.web=rr.webUrl||sc.web;
     const all=[...rr.urls,...rr.links]; sc.url=all.find(u=>/\.(mp4|mov|webm)(\?|#|$)/i.test(u))||all.find(u=>/video|render|output/i.test(u)&&!/magnific\.com\/app\//i.test(u))||null;
     await rlLoadVideo(sc,sc.clip);
-    sc.status="done"; sc.note=`Ready in ${fmtTime(t0)}${start?" · animated from the first frame":""}${set.res==="draft"?" · draft 480p: generate again at 720p or 1080p when you like it":""}.`;
+    sc.status="done"; sc.stale=false; sc.note=`Ready in ${fmtTime(t0)}${start?" · animated from the first frame":""}${set.res==="draft"?" · draft 480p: generate again at 720p or 1080p when you like it":""}.`;
   }catch(err){ sc.status="err"; sc.note=mcpCopy(err); }
   rlSave(); rlBoard();
 }
@@ -2294,7 +2387,8 @@ function rlNotes(){
   if(RL.script?.scenes?.length) n.push({title:`02 · Script — ${RL.script.title||RL.title}`,text:RL.script.scenes.map(s=>`[${s.time||""}] ${s.title||""}\n${s.action||""}${(s.dialogue||[]).map(d=>`\n${d.who}: "${d.line}"`).join("")}${s.on_screen_text?`\n【${s.on_screen_text}】`:""}${s.sound?`\nSound: ${s.sound}`:""}`).join("\n\n")});
   if(RL.characters.length) n.push({title:"03 · Cast",text:RL.characters.map(e=>`${e.tag} ${e.name}${e.lib?` (BAE library: ${e.lib})`:""}\n${e.description||""}${e.wardrobe?`\nWardrobe: ${e.wardrobe}`:""}\nPROMPT: ${e.prompt||""}`).join("\n\n")});
   if(RL.locations.length) n.push({title:"04 · Locations & props",text:RL.locations.map(e=>`${e.tag} ${e.name} (${e.kind||"location"})\n${e.description||""}\nPROMPT: ${e.prompt||""}`).join("\n\n")});
-  RL.scenes.forEach(s=>{ const r=rlSceneRefs(s); n.push({title:`Shot ${s.n} · ${s.title||""} · ${s.duration_s||""} s`,text:`References: ${r.refs.map(x=>`${x.tag} = ${x.name} (${x.global})`).join(", ")||"none"}\n\nFIRST FRAME (Nano Banana 2.1):\n${rlSceneRefs(s,"frame_prompt").prompt||"—"}\n\nSEEDANCE 2.5:\n${r.prompt}`}); });
+  const bpText=bp=>{ if(!bp) return "—"; const z=id=>(bp.zones||[]).find(q=>q.id===id)?.name||id; return [...(bp.people||[]).map(p=>`${p.name} ${p.tag||""}: ${z(p.zone)}${p.action?` — ${p.action}`:""}`),...(bp.openings||[]).map(o=>`${o.name}: hinge ${o.hinge||"?"}, opens ${o.opens||"?"}`),...(bp.cameras||[]).map(c=>`Shot ${c.shot||1} camera: ${z(c.zone)}, facing ${c.facing}°, ${c.fov}° FOV, ${c.height||""} ${c.move||""}`),bp.light?`Light: ${bp.light.source||""} ${bp.light.temp||""}`:"",bp.axis?`Axis: ${bp.axis}`:"",(bp.rules||[]).length?`Locks: ${bp.rules.join(" · ")}`:""].filter(Boolean).join("\n"); };
+  RL.scenes.forEach(s=>{ const r=rlSceneRefs(s); n.push({title:`Shot ${s.n} · ${s.title||""} · ${s.duration_s||""} s`,text:`References: ${r.refs.map(x=>`${x.tag} = ${x.name} (${x.global})`).join(", ")||"none"}\n\nBLOCKING (checked by the script supervisor${s.check?.passed?`: ${s.check.passed} checks passed`:""}):\n${bpText(s.blueprint)}\n\nFIRST FRAME (Nano Banana 2.1):\n${rlSceneRefs(s,"frame_prompt").prompt||"—"}\n\nSEEDANCE 2.5:\n${r.prompt}`}); });
   return n;
 }
 async function rlFind(r,what){
@@ -2363,9 +2457,10 @@ GOAL — for EACH shot below:
 2. Connect the shot's first-frame image node (the node made from first_frame_creation) into the video node's start / first-frame image input.
 3. If the node also takes reference images, connect the reference image nodes (made from reference_creations, in order) to them.
 Find the existing image nodes with spaces_state (match them by creation identifier). Describe each tool once before using it. Batch independent calls in the same round. Never run, delete or regenerate anything.
+4. VERIFY at the end with spaces_state or spaces_get_nodes: every shot has exactly one Seedance 2.5 video node whose prompt equals the shot's prompt, whose start-frame input is connected to that shot's first-frame node, and whose reference inputs (if any) are connected in order. Name each video node "Shot <n> · <title>". Fix anything missing or wrong, then verify again.
 SHOTS (JSON): ${trimJSON(shots,20000)}
-When finished, reply with only JSON: {"nodes_created":0,"connections":0,"summary":"one short line"}`,{modelTier:"default",tools});
-  return out?.summary||`${out?.nodes_created||0} video nodes, ${out?.connections||0} connections`;
+When finished, reply with only JSON: {"nodes_created":0,"connections":0,"verified_shots":0,"summary":"one short line"}`,{modelTier:"default",tools});
+  return (out?.summary||`${out?.nodes_created||0} video nodes, ${out?.connections||0} connections`)+(out?.verified_shots!=null?` · ${out.verified_shots}/${shots.length} shots verified`:"");
 }
 function rlBibleText(){ const set=rlSet(); return `# ${RL.title}\n\nBank al Etihad · Reels production · ${set.aspect} · ${set.length} s · ${new Date().toLocaleDateString()}\n\n`+rlNotes().map(n=>`## ${n.title}\n\n${n.text}`).join("\n\n")+"\n"; }
 async function rlBible(){
@@ -2438,6 +2533,7 @@ async function rlBible(){
     else if(a==="add"){ RL._adding=b.dataset.k; rlBoard(); setTimeout(()=>B.querySelector(".rl-addform input")?.focus(),30); }
     else if(a==="addcancel"){ RL._adding=null; rlBoard(); }
     else if(a==="cast"){ rlAddElement("character",b.dataset.n,"BAE character from the library",b.dataset.n); }
+    else if(a==="check") rlCheckScenes([b.dataset.n]);
     else if(a==="frame"){ const sc=RL.scenes.find(x=>String(x.n)===b.dataset.n); if(sc?.frame?.id) brSignal("shot","frame_regenerated",-1,{item:`Scene ${sc.n} first frame: ${String(sc.frame_prompt||"").slice(0,700)}`,key:"f"+sc.frame.id}); rlGenFrame(b.dataset.n); }
     else if(a==="render"){ const sc=RL.scenes.find(x=>String(x.n)===b.dataset.n); if(sc?.clip) brSignal("shot","video_regenerated",-1,{item:`Scene ${sc.n}: ${String(sc.prompt||"").slice(0,800)}`,key:"v"+sc.clip}); rlRenderScene(b.dataset.n); }
     else if(a==="allframes") RL.scenes.filter(s=>!s.frame?.id).forEach(s=>rlGenFrame(s.n));
