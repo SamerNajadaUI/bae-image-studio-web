@@ -1673,12 +1673,9 @@ $("lightbox").addEventListener("click",e=>{ if(e.target.id==="lightbox") closeLi
 document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&!$("lightbox").hidden) closeLightbox(); });
 
 /* =====================================================================
-   REELS PRODUCTION — chat with Claude, stage by stage, then Seedance 2.5 via Magnific
-   Idea → Script → Characters → Locations & props → Directing → Render
+   REELS PRODUCTION — projects library · stage workspace · Seedance 2.5 · Magnific Spaces
    ===================================================================== */
-const RL_KEY="bae_reels_v1";
-const RL_STAGES=[["idea","Idea"],["script","Script"],["characters","Characters"],["locations","Locations & props"],["directing","Directing"],["render","Render"]];
-/* House method for AI film, distilled from the Higgsfield Seedance 2.5 guide and Adil's ad workflow (football ad tutorial). */
+const RL_STAGES=[["idea","Idea"],["script","Script"],["characters","Cast"],["locations","Locations"],["directing","Shots"],["render","Deliver"]];
 const RL_METHOD=`PRODUCTION METHOD (follow it exactly):
 1. IDEA — 3 distinct concepts built to go viral as short-form reels: a scroll-stopping HOOK in the first 1–2 seconds (visual surprise, relatable pain, pattern break), ONE clear emotion, a simple turn, the product moment as the payoff (never a lecture), and a loop-able or punchy ending + BAE end card. Cinematic production value. Each: title, hook, logline, beats, why it will travel, product moment.
 2. SCRIPT — scene by scene with timecodes summing to the target length: action, dialogue (who, language, exact line), on-screen text, sound. Short lines; dialogue sparse and natural.
@@ -1705,60 +1702,135 @@ const RL_BAE=`BANK AL ETIHAD HOUSE STYLE (non-negotiable in every image and vide
 - Phones are always a modern iPhone 18 with no visible logo. No brand logos, no readable text in the scene except 【on-screen text】 written in the script.
 - End every reel on a clean BAE end card moment (soft light stone or BAE gradient background) — the logo itself is added in the edit, never generated.`;
 let RL=null, rlBusy=false, rlPending=[];
-const rlNew=()=>({id:Date.now().toString(36),title:"New reel",stage:"idea",chat:[],notes:"",ideas:[],pickedIdea:null,script:null,characters:[],locations:[],scenes:[],final:null});
-function rlLoad(){ try{ RL=JSON.parse(localStorage.getItem(RL_KEY)||"null"); }catch{} if(!RL||!RL.chat) RL=rlNew(); }
-const rlJSON=()=>JSON.stringify(RL,(k,v)=>k.startsWith("_")?undefined:v);
-function rlSave(){ try{ localStorage.setItem(RL_KEY,rlJSON()); }catch(e){ /* storage full: drop old thumbnails */ try{ RL.chat.forEach(m=>{ if(m.thumbs) m.thumbs=m.thumbs.slice(0,2); }); localStorage.setItem(RL_KEY,rlJSON()); }catch{} } }
-const rlSet=()=>({length:+$("rlLen").value||30,aspect:$("rlAspect").value||"9:16",lang:$("rlLang").value,res:$("rlRes").value});
-/* Global tags: characters first, then locations and props, in board order → @img1, @img2… */
-function rlRetag(){ let n=0; for(const e of [...RL.characters,...RL.locations]) e.tag="@img"+(++n); }
+const rlStageIx=k=>RL_STAGES.findIndex(([x])=>x===k);
+const RL_DEF_SET={length:30,aspect:"9:16",lang:"Jordanian Arabic",res:"720p"};
+const rlNew=()=>({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),kind:"reel",title:"Untitled reel",stage:"idea",view:"idea",chat:[],notes:"",ideas:[],ideasPrev:[],picked:null,script:null,characters:[],locations:[],scenes:[],final:null,space:null,settings:{...RL_DEF_SET},nextTag:1,createdAt:Date.now(),updatedAt:Date.now()});
+const rlSet=()=>({...RL_DEF_SET,...(RL?.settings||{})});
 const rlEls=()=>[...RL.characters,...RL.locations];
 const rlElByTag=t=>rlEls().find(e=>e.tag===t);
-async function rlThumb(src,max=360){ try{ const im=new Image(); im.src=src; await im.decode(); const k=Math.min(1,max/Math.max(im.width,im.height)); const c=document.createElement("canvas"); c.width=Math.round(im.width*k); c.height=Math.round(im.height*k); c.getContext("2d").drawImage(im,0,0,c.width,c.height); return c.toDataURL("image/jpeg",.78); }catch{ return null; } }
+const rlAr=()=>RL.chat.some(m=>m.role==="u"&&/[؀-ۿ]/.test(m.text||""));
+async function rlThumb(src,max=480){ try{ const im=new Image(); im.src=src; await im.decode(); const k=Math.min(1,max/Math.max(im.width,im.height)); const c=document.createElement("canvas"); c.width=Math.round(im.width*k); c.height=Math.round(im.height*k); c.getContext("2d").drawImage(im,0,0,c.width,c.height); return c.toDataURL("image/jpeg",.78); }catch{ return null; } }
+function rlAgo(t){ if(!t) return ""; const s=Math.max(1,Math.round((Date.now()-t)/1000)); if(s<60) return "just now"; const m=Math.round(s/60); if(m<60) return m+" min ago"; const h=Math.round(m/60); if(h<24) return h+" h ago"; const d=Math.round(h/24); return d<7?d+" d ago":new Date(t).toLocaleDateString(); }
 
-/* ---------- chat ---------- */
-function rlState(){ /* what Claude sees of the project, without images */
-  return {title:RL.title,stage:RL.stage,settings:rlSet(),notes:RL.notes,ideas:RL.ideas,picked_idea:RL.pickedIdea,script:RL.script,
-    characters:RL.characters.map(({name,tag,role,description,wardrobe,prompt,id,lib})=>({name,tag,role,description,wardrobe,prompt,generated:!!id,library:lib||null})),
-    locations:RL.locations.map(({name,tag,kind,description,prompt,id})=>({name,tag,kind,description,prompt,generated:!!id})),
-    scenes:RL.scenes.map(({n,title,duration_s,refs,prompt,frame_prompt,frame,status})=>({n,title,duration_s,refs,frame_prompt,prompt,first_frame_generated:!!frame?.id,video_rendered:status==="done"}))}; }
+/* ---------- storage: your account (db, private to you) with this browser as a mirror ---------- */
+const RLS={db:null,uid:null,mode:"local",ready:null};
+const RL_IDX="bae_reels_v3_index", RL_P="bae_reels_v3_p_", RL_T="bae_rlt_";
+const lsGet=(k,d)=>{ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):d; }catch{ return d; } };
+const lsSet=(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); return true; }catch{ return false; } };
+function rlStoreInit(){
+  if(RLS.ready) return RLS.ready;
+  RLS.ready=(async()=>{
+    try{ const C=window.claude; if(C?.use){ const [db,user]=await Promise.all([C.use("db"),C.use("user")]); const uid=user?await user.id():null; if(db&&uid){ RLS.db=db; RLS.uid=uid; RLS.mode="account"; } } }catch{}
+    /* the single project of the first version becomes the first saved project */
+    const old=lsGet("bae_reels_v1",null);
+    if(old&&old.chat&&(old.chat.length||old.scenes?.length)){ const p={...rlNew(),...old,id:old.id||rlNew().id,kind:"reel",view:old.stage||"idea"}; rlUpgrade(p); RL=p; await rlFlush(); RL=null; try{ localStorage.removeItem("bae_reels_v1"); }catch{} }
+  })();
+  return RLS.ready;
+}
+const rlCol=()=>RLS.db.collection("data/users/"+RLS.uid);
+const rlDocId=id=>"reel_"+String(id).replace(/[^A-Za-z0-9_-]/g,"");
+function rlClean(p){ const o=JSON.parse(JSON.stringify(p,(k,v)=>(k.startsWith("_")||k==="thumbs"||k==="thumb")?undefined:v)); o.chat=(o.chat||[]).slice(-80); o.kind="reel"; return o; }
+function rlCover(p){ const f=(p.scenes||[]).find(s=>s.frame?.id); if(f) return f.frame.id; const e=[...(p.characters||[]),...(p.locations||[])].find(x=>x.id&&!x.lib); if(e) return e.id; const l=(p.characters||[]).find(x=>x.lib); return l?"lib:ch_"+String(l.lib).toLowerCase():null; }
+const rlMeta=p=>({id:p.id,title:p.title||"Untitled reel",stage:p.stage||"idea",updatedAt:p.updatedAt||0,createdAt:p.createdAt||0,cover:rlCover(p),n:{cast:(p.characters||[]).length,loc:(p.locations||[]).length,shots:(p.scenes||[]).length,done:(p.scenes||[]).filter(s=>s.status==="done").length}});
+async function rlList(){
+  await rlStoreInit();
+  let list=[];
+  if(RLS.mode==="account"){ try{ const snap=await rlCol().where("kind","==","reel").get(); list=snap.docs.map(d=>d.data()).filter(Boolean).map(rlMeta); }catch(e){ log("✕","reels list",{code:e?.code}); } }
+  const m=new Map(); for(const x of [...lsGet(RL_IDX,[]),...list]){ const o=m.get(x.id); if(!o||(x.updatedAt||0)>=(o.updatedAt||0)) m.set(x.id,x); }
+  return [...m.values()].filter(x=>!lsGet("bae_reels_v3_del",[]).includes(x.id)).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+}
+async function rlLoadProject(id){
+  await rlStoreInit(); let p=null;
+  if(RLS.mode==="account"){ try{ const s=await rlCol().doc(rlDocId(id)).get(); if(s.exists) p=JSON.parse(JSON.stringify(s.data())); }catch{} }
+  const lp=lsGet(RL_P+id,null); if(lp&&(!p||(lp.updatedAt||0)>(p.updatedAt||0))) p=lp;
+  if(p) rlUpgrade(p); return p;
+}
+function rlUpgrade(p){
+  p.settings={...RL_DEF_SET,...(p.settings||{})}; p.ideas=p.ideas||[]; p.ideasPrev=p.ideasPrev||[]; p.characters=p.characters||[]; p.locations=p.locations||[]; p.scenes=p.scenes||[]; p.chat=p.chat||[];
+  if(p.picked==null&&p.pickedIdea!=null&&p.ideas[p.pickedIdea]) p.picked=p.ideas[p.pickedIdea]; delete p.pickedIdea;
+  /* tags are permanent: an element keeps its @img number for the life of the project */
+  let n=0; for(const e of [...p.characters,...p.locations]){ const k=+String(e.tag||"").replace("@img","")||0; n=Math.max(n,k); }
+  p.nextTag=Math.max(p.nextTag||1,n+1);
+  for(const e of [...p.characters,...p.locations]) if(!e.tag) e.tag="@img"+(p.nextTag++);
+  if(!p.view) p.view=p.stage||"idea";
+}
+let rlSaveT=null, rlChain=Promise.resolve();
+function rlSave(){ if(!RL) return; RL.updatedAt=Date.now(); rlSavedState("saving"); clearTimeout(rlSaveT); rlSaveT=setTimeout(rlFlush,600); }
+async function rlFlush(){
+  if(!RL) return; const body=rlClean(RL);
+  const okLocal=lsSet(RL_P+body.id,body);
+  const idx=lsGet(RL_IDX,[]).filter(x=>x.id!==body.id); idx.unshift(rlMeta(body)); lsSet(RL_IDX,idx.slice(0,80));
+  if(RLS.mode!=="account"){ rlSavedState(okLocal?"local":"fail"); return; }
+  rlChain=rlChain.then(()=>rlCol().doc(rlDocId(body.id)).set(body)).then(()=>rlSavedState("saved"),e=>{ log("✕","reel save",{code:e?.code,message:e?.message}); rlSavedState(okLocal?"local":"fail"); });
+  return rlChain;
+}
+function rlSavedState(s){ const el=$("rlSaved"); if(!el) return; el.dataset.s=s; el.textContent={saving:"Saving…",saved:"Saved to your account",local:"Saved in this browser",fail:"Couldn't save — storage is full"}[s]||""; }
+async function rlDelete(id){
+  lsSet("bae_reels_v3_del",[...lsGet("bae_reels_v3_del",[]),id].slice(-200));
+  try{ localStorage.removeItem(RL_P+id); }catch{} lsSet(RL_IDX,lsGet(RL_IDX,[]).filter(x=>x.id!==id));
+  if(RLS.mode==="account"){ try{ await rlCol().doc(rlDocId(id)).delete(); }catch{} }
+}
+async function rlDuplicate(id){ const p=await rlLoadProject(id); if(!p) return; const c=JSON.parse(JSON.stringify(p)); c.id=rlNew().id; c.title=(p.title||"Untitled reel")+" copy"; c.space=null; c.createdAt=c.updatedAt=Date.now(); const keep=RL; RL=c; await rlFlush(); RL=keep; }
+
+/* ---------- thumbnails: cached in this browser by Magnific creation id, fetched again when missing ---------- */
+const rlTmem={}, rlFull={}, rlTQ=new Set(), rlTTried=new Set(); let rlTBusy=0;
+function rlTGet(cid){ if(!cid) return null; if(String(cid).startsWith("lib:")) return refById(String(cid).slice(4))?.src||null; if(rlTmem[cid]) return rlTmem[cid]; try{ const v=localStorage.getItem(RL_T+cid); if(v) return rlTmem[cid]=v; }catch{} return null; }
+function rlTSet(cid,data){ if(!cid||!data) return; rlTmem[cid]=data; try{ localStorage.setItem(RL_T+cid,data); }catch{ try{ const ks=Object.keys(localStorage).filter(k=>k.startsWith(RL_T)); ks.slice(0,Math.ceil(ks.length/3)).forEach(k=>localStorage.removeItem(k)); localStorage.setItem(RL_T+cid,data); }catch{} } }
+function rlNeed(cid){ if(!cid||String(cid).startsWith("lib:")||rlTGet(cid)||rlTTried.has(cid)||!mcp||!S.connected) return; rlTQ.add(cid); rlPump(); }
+async function rlPump(){
+  while(rlTBusy<2&&rlTQ.size){ const cid=rlTQ.values().next().value; rlTQ.delete(cid); rlTTried.add(cid); rlTBusy++;
+    preview(cid).then(async pv=>{ if(pv.image){ const src=`data:${pv.image.mime};base64,${pv.image.data}`; rlFull[cid]=src; rlTSet(cid,await rlThumb(src)); rlBoardSoon(); } }).catch(()=>{}).finally(()=>{ rlTBusy--; rlPump(); }); }
+}
+let rlSoonT=null; function rlBoardSoon(){ clearTimeout(rlSoonT); rlSoonT=setTimeout(()=>{ if(RL&&!$("rlProjView").hidden) rlBoard(); else if(!$("rlLib").hidden) rlShowLib(); },120); }
+const rlImgOf=e=>e?.lib&&e.fromLib?"lib:ch_"+String(e.lib).toLowerCase():e?.id||null;
+
+/* ---------- Claude: the director in the chat ---------- */
+function rlState(){
+  const set=rlSet();
+  return {title:RL.title,stage:RL.stage,viewing_tab:RL.view,settings:set,notes:RL.notes,ideas:RL.ideas,picked_idea:RL.picked,script:RL.script,next_free_tag:"@img"+RL.nextTag,
+    characters:RL.characters.map(({name,tag,role,description,wardrobe,prompt,id,lib})=>({tag,name,role,description,wardrobe,prompt,image_generated:!!id,library:lib||null})),
+    locations:RL.locations.map(({name,tag,kind,description,prompt,id})=>({tag,name,kind,description,prompt,image_generated:!!id})),
+    scenes:RL.scenes.map(({n,title,duration_s,refs,prompt,frame_prompt,frame,status})=>({n,title,duration_s,refs,frame_prompt,prompt,first_frame_generated:!!frame?.id,video_rendered:status==="done"}))};
+}
 function rlPromptFor(text){
   const set=rlSet();
-  const hist=RL.chat.filter(m=>m.role!=="sys").slice(-14).map(m=>`${m.role==="u"?"USER":"YOU"}: ${m.text}${m.thumbs?.length?` [attached ${m.thumbs.length} image(s)]`:""}`).join("\n");
+  const hist=RL.chat.filter(m=>m.role!=="sys").slice(-14).map(m=>`${m.role==="u"?"USER":"YOU"}: ${m.text}${m.n?` [attached ${m.n} image(s)]`:""}`).join("\n");
   return `You are the creative director and AI film director of Bank al Etihad (Jordan) in a reels production studio. You talk with a BAE designer in a chat and build the production with them, one stage at a time. Answer in the user's language (Arabic or English, Jordanian tone is fine), warm and direct, short paragraphs.
 
 ${RL_METHOD}
 
 ${RL_BAE}
 
-TARGET: ${set.aspect} vertical-first reel, about ${set.length} seconds in total, dialogue language: ${set.lang}. BAE characters already in the user's Magnific library (they can be cast): Wissam (man, early 30s), Lina (young woman, dark braided ponytail), Sara (woman, light-blonde low bun), Omar (man in his 40s, heavy build).
+TARGET: ${set.aspect} reel, about ${set.length} seconds in total, dialogue language: ${set.lang}. BAE characters already in the user's Magnific library (they can be cast): Wissam (man, early 30s), Lina (young woman, dark braided ponytail), Sara (woman, light-blonde low bun), Omar (man in his 40s, heavy build).
 
-STAGE FLOW: idea → script → characters → locations → directing → render. Work ONLY on the current stage unless the user asks otherwise; when the user approves ("تمام", "ok", "approve", picks an idea…), move to the next stage AND deliver it in the same answer. Never skip ahead without approval. If attachments are given (storyboards, characters, places, scripts), analyse them carefully and record the useful facts in "notes" (faces, wardrobe, locations, shot order, text) because you will not see the images again.
+STAGE FLOW: idea → script → characters → locations → directing → render. Work on what the user asks; by default the current stage. When the user approves ("تمام", "ok", "approve", picks an idea…), move to the next stage AND deliver it in the same answer. The user can come back at any time to change an earlier stage (a new idea, a new or edited character, a new location, a rewritten scene): do exactly that change, keep everything else, and update later stages only where the change requires it. If attachments are given (storyboards, characters, places, scripts), analyse them carefully and record the useful facts in "notes" because you will not see the images again.
 
-PROJECT STATE (JSON): ${trimJSON(rlState(),24000)}
+TAGS: every character, location and prop has a permanent tag (@img1, @img2…) shown in the project state. Keep each existing element's tag. A NEW element you add gets the next free tag (${"@img"+RL.nextTag}, then the following numbers, characters before locations). Scenes refer to elements only by these tags.
+
+PROJECT STATE (JSON): ${trimJSON(rlState(),26000)}
 
 CONVERSATION SO FAR:
 ${hist||"(none)"}
 
 USER NOW: ${text||"(attachments only)"}
 
-Reply with ONLY one JSON object. Always include "reply" (the chat message, no markdown tables) and "stage" (the current stage after this turn). Include a key ONLY when you create or change it, and then give its COMPLETE new value:
+Reply with ONLY one JSON object. Always include "reply" (the chat message, no markdown tables) and "stage" (the furthest stage the production has reached after this turn). Include a key ONLY when you create or change it, and then give its COMPLETE new value (the full list, including the elements you did not change, with their tags):
 - "title": short reel title
 - "notes": everything learned from attachments and decisions (append to existing notes)
-- "ideas": [{"title","hook","logline","beats","why_viral","product_moment"}]  (exactly 3 at the idea stage)
-- "picked_idea": index (0-based) when the user picks one
+- "ideas": [{"title","hook","logline","beats","why_viral","product_moment"}]  (3 per request)
+- "picked_idea": index (0-based) into "ideas" when the user picks one
 - "script": {"title","duration_s","scenes":[{"n","time","title","action","dialogue":[{"who","line"}],"on_screen_text","sound"}]}
-- "characters": [{"name","role","description","wardrobe","library":null|"Wissam"|"Lina"|"Sara"|"Omar","prompt"}]  — prompt = the full image prompt for the character reference sheet; set "library" only when the user wants that BAE character
-- "locations": [{"name","kind":"location"|"prop","description","prompt"}]  — full image prompt; locations empty of people
-- "scenes": [{"n","title","duration_s","refs":["@img1",...],"frame_prompt","prompt"}]  — frame_prompt = the still-image prompt (Nano Banana 2.1) for the scene's first frame, using the same tags ("the man @img1 sits…"); prompt = full Seedance 2.5 prompt per scene that continues from that first frame, following the DIRECTING structure, using the global tags: they are assigned by position — characters in your list order get @img1, @img2…, then locations/props continue the numbering (so with 2 characters, the first location is @img3), duration 4–15 s, ${set.aspect}
+- "characters": [{"tag","name","role","description","wardrobe","library":null|"Wissam"|"Lina"|"Sara"|"Omar","prompt"}]  — prompt = the full image prompt for the character reference sheet; set "library" only when the user wants that BAE character
+- "locations": [{"tag","name","kind":"location"|"prop","description","prompt"}]  — full image prompt; locations empty of people
+- "scenes": [{"n","title","duration_s","refs":["@img1",...],"frame_prompt","prompt"}]  — frame_prompt = the still-image prompt (Nano Banana 2.1) for the scene's first frame, using the tags ("the man @img1 sits…"); prompt = the full Seedance 2.5 prompt that continues from that first frame, following the DIRECTING structure; duration 4–15 s, ${set.aspect}
 - "chips": 2–4 short suggested next replies for the user, in their language`;
 }
 async function rlSend(text){
-  if(rlBusy) return; text=(text||"").trim(); const atts=rlPending.slice(); if(!text&&!atts.length) return;
+  if(rlBusy||!RL) return; text=(text||"").trim(); const atts=rlPending.slice(); if(!text&&!atts.length) return;
   if(!sample){ rlSys("Claude isn't available in this view. Open the page in claude.ai and allow Claude.",true); return; }
   rlBusy=true; $("rlSend").disabled=true;
   const thumbs=[]; for(const a of atts){ const t=await rlThumb(a.url,160); if(t) thumbs.push(t); }
-  RL.chat.push({role:"u",text,thumbs,t:Date.now()}); rlPending=[]; rlRenderAtt(); $("rlInput").value=""; rlRender(); rlTyping(true);
+  RL.chat.push({role:"u",text,thumbs,n:atts.length,t:Date.now()}); rlPending=[]; rlRenderAtt(); $("rlInput").value=""; rlRenderChat(); rlTyping(true);
   try{
     const opts={modelTier:"complex",cache:false};
     if(atts.length){ if(sampleImages) opts.images=atts.map(a=>a.blob).slice(0,10); else rlSys("This view can't send images to Claude, so only your text was used.",true); }
@@ -1770,105 +1842,247 @@ async function rlSend(text){
 function rlApply(o){
   if(o.title) RL.title=String(o.title);
   if(o.notes) RL.notes=String(o.notes);
-  if(Array.isArray(o.ideas)) RL.ideas=o.ideas;
-  if(o.picked_idea!=null&&RL.ideas[o.picked_idea]) RL.pickedIdea=+o.picked_idea;
+  if(Array.isArray(o.ideas)&&o.ideas.length){ if(RL.ideas.length) RL.ideasPrev=[...RL.ideas.filter(x=>x.title!==RL.picked?.title),...RL.ideasPrev].slice(0,12); RL.ideas=o.ideas; }
+  if(o.picked_idea!=null&&RL.ideas[o.picked_idea]) RL.picked=RL.ideas[+o.picked_idea];
   if(o.script&&typeof o.script==="object") RL.script=o.script;
-  /* keep generated images when an element keeps its name */
-  const keep=(oldL,newL)=>newL.map(n=>{ const o2=oldL.find(x=>x.name&&n.name&&x.name.toLowerCase()===String(n.name).toLowerCase()); return o2?{...o2,...n,id:o2.id,thumb:o2.thumb,lib:n.library||o2.lib||null,status:o2.status}:{...n,lib:n.library||null}; });
-  if(Array.isArray(o.characters)) RL.characters=keep(RL.characters,o.characters);
-  if(Array.isArray(o.locations)) RL.locations=keep(RL.locations,o.locations);
-  rlRetag(); rlLinkLibrary();
-  /* a scene keeps its first frame and its video unless the prompt behind them changed */
+  /* elements keep their tag, image and edits; new ones take the next free tag */
+  const merge=(oldL,newL)=>newL.map(n=>{ const o2=oldL.find(x=>n.tag&&x.tag===n.tag)||oldL.find(x=>x.name&&n.name&&x.name.toLowerCase()===String(n.name).toLowerCase());
+    if(o2){ const m={...o2,...n,tag:o2.tag,id:o2.id,web:o2.web,lib:n.library!==undefined?n.library:o2.lib,status:o2.status}; if(o2.id&&n.prompt&&n.prompt!==o2.prompt) m.stale=true; delete m.library; return m; }
+    const m={...n,lib:n.library||null,tag:"@img"+(RL.nextTag++)}; delete m.library; return m; });
+  if(Array.isArray(o.characters)) RL.characters=merge(RL.characters,o.characters);
+  if(Array.isArray(o.locations)) RL.locations=merge(RL.locations,o.locations);
+  rlLinkLibrary();
   if(Array.isArray(o.scenes)) RL.scenes=o.scenes.map(sc=>{ const old=RL.scenes.find(x=>+x.n===+sc.n); if(!old) return {...sc};
-    const m={...old,...sc}; if(sc.prompt&&sc.prompt!==old.prompt){ Object.assign(m,{status:null,clip:null,url:null,thumb:null,note:null,_src:null,web:null}); } return m; });
-  if(o.stage&&RL_STAGES.some(([k])=>k===o.stage)) RL.stage=o.stage;
+    const m={...old,...sc}; if(sc.prompt&&sc.prompt!==old.prompt) Object.assign(m,{status:null,clip:null,url:null,note:null,_src:null,web:null}); return m; });
+  if(o.stage&&rlStageIx(o.stage)>=0){ if(rlStageIx(o.stage)!==rlStageIx(RL.stage)) RL.view=o.stage; RL.stage=o.stage; }
   RL.chat.push({role:"a",text:String(o.reply||"…"),chips:Array.isArray(o.chips)?o.chips.slice(0,4):[]});
 }
-/* A character cast from the BAE library uses the photo already in Magnific */
-function rlLinkLibrary(){ for(const c of RL.characters){ if(!c.lib) continue; const id="ch_"+String(c.lib).toLowerCase(); const mid=S.magIds?.[id]; if(mid&&!c.id){ c.id=mid; c.thumb=refById(id)?.src||null; c.fromLib=true; } } }
-function rlSys(t,bad){ RL.chat.push({role:"sys",text:t,err:!!bad}); rlRender(); }
+function rlLinkLibrary(){ for(const c of RL.characters){ if(!c.lib){ if(c.fromLib){ c.fromLib=false; c.id=null; } continue; } const id="ch_"+String(c.lib).toLowerCase(); const mid=S.magIds?.[id]; if(refById(id)){ c.fromLib=true; if(mid) c.id=mid; } } }
+function rlSys(t,bad){ RL.chat.push({role:"sys",text:t,err:!!bad}); rlRenderChat(); }
 function rlTyping(on){ const b=$("rlMsgs"); b.querySelector(".rl-typing-m")?.remove(); if(on){ const d=document.createElement("div"); d.className="rl-m a rl-typing-m"; d.innerHTML='<span class="rl-typing" aria-label="Claude is thinking"><i></i><i></i><i></i></span>'; b.appendChild(d); b.scrollTop=b.scrollHeight; } }
 
+/* Claude writes or revises ONE element without touching the rest of the project */
+async function rlWriteElement(kind,base,instruction){
+  const set=rlSet();
+  const o=await sample.json(`You write production assets for a Bank al Etihad reel (${set.aspect}, ${set.length} s).
+${kind==="character"?"Write a CHARACTER: the image prompt is a reference sheet — \"Character reference sheet, two panels side by side on a seamless light stone backdrop: left full body front view, right close-up of the face\" — plus exact age, face, hair, build, skin (natural texture, visible pores, lightly retouched even tone), wardrobe and expression.":kind==="prop"?"Write a PROP / PRODUCT: the image prompt is a product sheet with front, back and top views on a seamless light stone backdrop, studio light, exact materials.":"Write a LOCATION: the image prompt is an EMPTY establishing image (no people) — place, time of day, motivated light, anamorphic lens, shallow depth of field, fine film grain."}
+${RL_BAE}
+
+Reel so far: ${trimJSON({title:RL.title,idea:RL.picked,notes:RL.notes,script:RL.script},6000)}
+Current element (JSON): ${trimJSON(base,4000)}
+User request: ${instruction||"Write it well from the name and description."}
+
+Reply with only JSON: {"name":"","role":"","description":"one or two lines","wardrobe":"${kind==="character"?"the outfit":""}","prompt":"the full image prompt"}`,{modelTier:"default"});
+  if(!o||!o.prompt) throw {code:"invalid_json",message:"Claude didn't return a prompt."};
+  return o;
+}
+async function rlAddElement(kind,name,desc,lib){
+  const list=kind==="character"?RL.characters:RL.locations;
+  const e={tag:"@img"+(RL.nextTag++),name:name||(kind==="character"?"New character":kind==="prop"?"New prop":"New location"),description:desc||"",kind:kind==="character"?undefined:kind,lib:lib||null,prompt:""};
+  list.push(e); rlLinkLibrary(); RL._adding=null;
+  if(e.fromLib){ e.prompt=`BAE character ${lib} from the Magnific library.`; rlSave(); rlBoard(); return; }
+  e.status="write"; rlBoard();
+  try{ const o=await rlWriteElement(kind,e,null); Object.assign(e,{name:o.name||e.name,role:o.role||e.role,description:o.description||e.description,wardrobe:o.wardrobe||e.wardrobe,prompt:o.prompt}); e.status=null; }
+  catch(err){ e.status="err"; e.err=sampleCopy(err); e._edit=true; }
+  rlSave(); rlBoard();
+}
+async function rlReviseElement(tag,instruction){
+  const e=rlElByTag(tag); if(!e||!instruction) return;
+  e.status="write"; e.err=null; rlBoard();
+  try{ const kind=RL.characters.includes(e)?"character":e.kind==="prop"?"prop":"location";
+    const o=await rlWriteElement(kind,{name:e.name,role:e.role,description:e.description,wardrobe:e.wardrobe,prompt:e.prompt},instruction);
+    Object.assign(e,{name:o.name||e.name,role:o.role||e.role,description:o.description||e.description,wardrobe:o.wardrobe||e.wardrobe,prompt:o.prompt}); if(e.id) e.stale=true; e.status=null; }
+  catch(err){ e.status="err"; e.err=sampleCopy(err); }
+  rlSave(); rlBoard();
+}
+
 /* ---------- rendering ---------- */
-function rlRender(){
-  $("rlProj").textContent=RL.title||"New reel";
+function rlShowLib(){
+  $("rlLib").hidden=false; $("rlProjView").hidden=true; $("reels").dataset.mode="lib";
+  rlStoreInit().then(()=>{ $("rlStore").textContent=RLS.mode==="account"?"Projects save to your account automatically. Only you can see them.":"Projects save in this browser automatically."; });
+  rlList().then(list=>{
+    const box=$("rlProjects");
+    const card=p=>{ const im=rlTGet(p.cover); if(!im&&p.cover) rlNeed(p.cover); const st=RL_STAGES.find(([k])=>k===p.stage)?.[1]||"Idea";
+      return `<article class="rl-pc"><button type="button" class="rl-pc-open" data-open="${esc(p.id)}"><span class="rl-pc-cover">${im?`<img src="${im}" alt="">`:`<i aria-hidden="true">${esc((p.title||"R").trim().slice(0,1).toUpperCase())}</i>`}</span><span class="rl-pc-meta"><b dir="auto">${esc(p.title)}</b><span>${esc(st)} · ${p.n?.cast||0} cast · ${p.n?.shots||0} shots${p.n?.done?` · ${p.n.done} filmed`:""}</span><span class="t12 muted">Edited ${rlAgo(p.updatedAt)}</span></span></button>
+        <div class="rl-pc-act"><button type="button" class="a-btn" data-dup="${esc(p.id)}">Duplicate</button><button type="button" class="a-btn" data-del="${esc(p.id)}">Delete</button></div></article>`; };
+    box.innerHTML=`<button type="button" class="rl-pc rl-pc-new" id="rlNewCard"><span class="plus" aria-hidden="true">+</span><b>New reel</b><span class="t12 muted">Start from an idea, a brief or a storyboard</span></button>`+list.map(card).join("");
+  });
+}
+async function rlOpen(id){
+  const p=id?await rlLoadProject(id):null;
+  RL=p||rlNew(); if(!p) rlSave();
+  $("rlLib").hidden=true; $("rlProjView").hidden=false; $("reels").dataset.mode="proj"; $("reels").dataset.view="chat";
+  rlLinkLibrary(); rlSyncSettings(); rlSavedState(p?(RLS.mode==="account"?"saved":"local"):"saving"); rlRender();
+  $("reels").scrollTop=0; setTimeout(()=>$("rlInput").focus({preventScroll:true}),60);
+}
+function rlSyncSettings(){ const s=rlSet(); $("rlLen").value=String(s.length); $("rlAspect").value=s.aspect; $("rlLang").value=s.lang; $("rlRes").value=s.res; }
+function rlRender(){ if(!RL) return; const t=$("rlTitle"); if(document.activeElement!==t) t.value=RL.title||""; rlRenderNav(); rlRenderChat(); rlBoard(); }
+function rlRenderNav(){
+  const si=rlStageIx(RL.stage);
+  const done=k=>({idea:!!RL.picked,script:!!RL.script?.scenes?.length,characters:RL.characters.length>0&&RL.characters.every(e=>e.id),locations:RL.locations.length>0&&RL.locations.every(e=>e.id),directing:RL.scenes.length>0&&RL.scenes.every(s=>s.status==="done"),render:!!RL.space?.url||!!RL.final?.id})[k];
+  $("rlStages").innerHTML=RL_STAGES.map(([k,l],i)=>`<button type="button" role="tab" aria-selected="${RL.view===k}" data-tab="${k}" class="${done(k)?"done":""}${i===si?" cur":""}${i>si+1&&!done(k)?" later":""}"><span class="n" aria-hidden="true">${done(k)?"✓":i+1}</span><span>${l}</span></button>`).join("");
+}
+function rlChipsFor(){
+  const ar=rlAr();
+  const D={idea:ar?["اعطيني 3 أفكار فايرال","أفكار جديدة بزاوية مختلفة"]:["Give me 3 viral ideas","New ideas, different angle"],
+    script:ar?["تمام السيناريو","خلّي الهوك أقوى"]:["Script approved","Make the hook stronger"],
+    characters:ar?["تمام الشخصيات","ضيف شخصية ثانية"]:["Cast approved","Add a second character"],
+    locations:ar?["تمام الأماكن","ضيف مكان جديد"]:["Locations approved","Add another location"],
+    directing:ar?["خلّي الكاميرا أجرأ","قصّر المشهد الأول"]:["Bolder camera work","Shorten scene 1"],render:[]};
+  return D[RL.view]||[];
+}
+function rlRenderChat(){
   const b=$("rlMsgs");
-  if(!RL.chat.length){ b.innerHTML=`<div class="rl-m a">Hi! Tell me the reel you need — the product, the message, who it's for. You can attach a storyboard, character photos, places or a script and I'll analyse them.\n\nWe'll go step by step: idea → script → characters → locations → directing → render with Seedance 2.5.</div>`; }
-  else b.innerHTML=RL.chat.map(m=>`<div class="rl-m ${m.role==="u"?"u":m.role==="a"?"a":"sys"}${m.err?" err":""}" dir="auto">${esc(m.text||"")}${m.thumbs?.length?`<div class="imgs">${m.thumbs.map(t=>`<img src="${t}" alt="">`).join("")}</div>`:""}</div>`).join("");
+  if(!RL.chat.length) b.innerHTML=`<div class="rl-m a" dir="auto">Hi! Tell me the reel you need — the product, the message, who it's for. Attach a storyboard, character photos, places or a script and I'll analyse them.\n\nYou can come back to this project any time to change an idea, a character, a location or a shot.</div>`;
+  else b.innerHTML=RL.chat.map(m=>`<div class="rl-m ${m.role==="u"?"u":m.role==="a"?"a":"sys"}${m.err?" err":""}" dir="auto">${esc(m.text||"")}${m.thumbs?.length?`<div class="imgs">${m.thumbs.map(t=>`<img src="${t}" alt="">`).join("")}</div>`:m.n?`<div class="t12" style="opacity:.7;margin-top:6px">${m.n} image${m.n>1?"s":""} attached</div>`:""}</div>`).join("");
   b.scrollTop=b.scrollHeight;
   const last=[...RL.chat].reverse().find(m=>m.role==="a");
-  const chips=last?.chips?.length?last.chips:(RL.chat.length?[]:["بدي ريلز عن Quick Pay: ادفع كل فواتيرك بكبسة زر","Give me 3 viral ideas for a BAE savings reel"]);
+  const chips=last?.chips?.length?last.chips:(RL.chat.length?rlChipsFor():["بدي ريلز عن Quick Pay: ادفع كل فواتيرك بكبسة زر","Give me 3 viral ideas for a BAE savings reel"]);
   $("rlChips").innerHTML=chips.map(c=>`<button type="button" dir="auto">${esc(c)}</button>`).join("");
-  const si=RL_STAGES.findIndex(([k])=>k===RL.stage);
-  $("rlSteps").innerHTML=RL_STAGES.map(([k,l],i)=>`<li class="${i<si?"done":i===si?"on":""}">${i+1}. ${l}</li>`).join("");
-  rlBoard();
 }
+const rlHead=(title,sub,actions="")=>`<div class="rl-head"><div><h2>${title}</h2>${sub?`<p>${sub}</p>`:""}</div>${actions?`<div class="rl-btns">${actions}</div>`:""}</div>`;
+const rlNext=(k,label)=>`<div class="rl-next"><button class="btn primary" type="button" data-rl="say" data-t="${k}">${label}</button></div>`;
+const rlEmpty=(t,btn)=>`<div class="rl-emptybox"><p>${t}</p>${btn||""}</div>`;
+const RL_SAY={approveScript:["Script approved. Build the characters.","تمام السيناريو، ابنيلي الشخصيات."],approveCast:["Characters approved. Build the locations and props.","تمام الشخصيات، ابنيلي الأماكن والأغراض."],approveLoc:["Locations approved. Start the video directing: one Seedance 2.5 scene prompt (with its first-frame prompt) per scene.","تمام الأماكن، ابدأ الـ Video Directing: لكل مشهد برومبت Seedance 2.5 مع برومبت الفريم الأول."],moreIdeas:["Give me 3 new ideas, clearly different from the ones above.","اعطيني 3 أفكار جديدة ومختلفة عن اللي فوق."],ideas:["Give me 3 viral ideas for this reel.","اعطيني 3 أفكار فايرال لهاد الريلز."]};
 function rlBoard(){
-  const B=$("rlBoard"), out=[];
+  if(!RL) return;
+  const B=$("rlBoard");
   const act=document.activeElement, editing=act&&B.contains(act)&&act.dataset.rlEdit?{key:act.dataset.rlEdit,s:act.selectionStart,e:act.selectionEnd,top:act.scrollTop}:null;
   if(editing) rlCommit(act);
-  if(RL.notes) out.push(`<div class="rl-card"><h3>Brief notes</h3><p class="rl-empty" dir="auto" style="white-space:pre-wrap">${esc(RL.notes)}</p></div>`);
-  if(RL.ideas.length) out.push(`<div class="rl-card"><h3>Ideas</h3><span class="sub">Pick one to write the script</span><div class="rl-grid">${RL.ideas.map((x,i)=>`<div class="rl-item${RL.pickedIdea===i?" picked":""}" dir="auto"><span class="k">Idea ${i+1}</span><b>${esc(x.title||"")}</b><p><b style="font-size:14px">Hook:</b> ${esc(x.hook||"")}</p><p>${esc(x.logline||"")}</p>${x.why_viral?`<p><i>${esc(x.why_viral)}</i></p>`:""}<div class="rl-btns"><button class="btn small${RL.pickedIdea===i?"":" primary"}" type="button" data-rl="pick" data-i="${i}">${RL.pickedIdea===i?"Chosen":"Choose this idea"}</button></div></div>`).join("")}</div></div>`);
-  if(RL.script?.scenes?.length) out.push(`<div class="rl-card"><h3>Script · ${esc(RL.script.title||"")}</h3><span class="sub">${RL.script.duration_s||""} s</span><div>${RL.script.scenes.map(s=>`<div class="rl-beat" dir="auto"><span class="tc">${esc(s.time||"")}</span><div class="ln"><b>${esc(s.title||"")}</b><br>${esc(s.action||"")}${(s.dialogue||[]).map(d=>`<br>${esc(d.who||"")}: “${esc(d.line||"")}”`).join("")}${s.on_screen_text?`<br><i>【${esc(s.on_screen_text)}】</i>`:""}${s.sound?`<br><i>${esc(s.sound)}</i>`:""}</div></div>`).join("")}</div>${RL.stage==="script"?`<div class="rl-btns"><button class="btn small primary" type="button" data-rl="say" data-t="Script approved. Build the characters.">Approve script</button></div>`:""}</div>`);
-  const elCard=(e,kind)=>{ const isProp=e.kind==="prop", busy=e.status==="run";
-    return `<div class="rl-item" dir="auto"><div><span class="rl-tag">${e.tag}</span><b>${esc(e.name||"")}</b></div>
-    <div class="rl-media${busy?" busy":""}" style="aspect-ratio:${isProp?"1 / 1":"16 / 9"}">${e.thumb?`<img src="${e.thumb}" alt="${esc(e.name||"")}" data-zoom="e:${e.tag}">`:`<span class="ph">${busy?"":"No image yet"}</span>`}${busy?`<span class="rl-busy">Generating…</span>`:""}</div>
-    <p>${esc(e.description||e.role||"")}</p>${e.fromLib?`<p class="rl-status">From your BAE characters in Magnific</p>`:`<textarea class="rl-prompt" data-rl-edit="${kind}:${e.tag}" spellcheck="false">${esc(e.prompt||"")}</textarea>`}
-    <div class="rl-btns">${e.fromLib?"":`<button class="btn small${e.id?"":" primary"}" type="button" data-rl="gen" data-tag="${e.tag}" ${busy?"disabled":""}>${busy?"Generating…":e.id?"Regenerate":"Generate image"}</button>`}<button class="btn small" type="button" data-rl="copy" data-tag="${e.tag}">Copy prompt</button>${e.web?`<a class="btn small" href="${esc(e.web)}" target="_blank" rel="noopener">Open in Magnific</a>`:""}</div>${e.err?`<p class="rl-status bad">${esc(e.err)}</p>`:""}</div>`; };
-  const genAll=list=>list.some(e=>!e.id&&!e.fromLib)?`<button class="btn small" type="button" data-rl="genall" data-list="${list===RL.characters?"c":"l"}">Generate all missing</button>`:"";
-  if(RL.characters.length) out.push(`<div class="rl-card"><h3>Characters</h3><span class="sub">Reference sheets. Each one is attached to the video as its tag.</span><div class="rl-btns">${genAll(RL.characters)}</div><div class="rl-grid">${RL.characters.map(c=>elCard(c,"c")).join("")}</div>${RL.stage==="characters"?`<div class="rl-btns"><button class="btn small primary" type="button" data-rl="say" data-t="Characters approved. Build the locations and props.">Approve characters</button></div>`:""}</div>`);
-  if(RL.locations.length) out.push(`<div class="rl-card"><h3>Locations &amp; props</h3><span class="sub">Empty establishing images and product sheets. The video inherits their light.</span><div class="rl-btns">${genAll(RL.locations)}</div><div class="rl-grid">${RL.locations.map(l=>elCard(l,"l")).join("")}</div>${RL.stage==="locations"?`<div class="rl-btns"><button class="btn small primary" type="button" data-rl="say" data-t="Locations approved. Start the video directing: one Seedance 2.5 prompt per scene.">Approve locations</button></div>`:""}</div>`);
-  if(RL.scenes.length){
+  const v=RL.view, out=[];
+  if(v==="idea"){
+    out.push(rlHead("Idea","Three directions built to stop the scroll. Choose one, or ask for more.",`${RL.ideas.length?`<button class="a-btn" type="button" data-rl="say" data-t="moreIdeas">More ideas</button>`:""}`));
+    if(RL.notes) out.push(`<details class="rl-notes"><summary>Brief notes from Claude</summary><p dir="auto">${esc(RL.notes)}</p></details>`);
+    if(!RL.ideas.length) out.push(rlEmpty("Describe the reel in the chat — the product, the message, the audience — or attach a storyboard. Claude answers with three viral ideas.",`<button class="btn primary" type="button" data-rl="say" data-t="ideas">Suggest 3 ideas</button>`));
+    else out.push(`<div class="rl-grid">${RL.ideas.map((x,i)=>{ const on=RL.picked&&RL.picked.title===x.title; return `<div class="rl-item rl-idea${on?" picked":""}" dir="auto"><span class="k">Idea ${i+1}${on?" · chosen":""}</span><b>${esc(x.title||"")}</b><p><span class="lbl2">Hook</span>${esc(x.hook||"")}</p><p>${esc(x.logline||"")}</p>${x.why_viral?`<p class="muted"><span class="lbl2">Why it travels</span>${esc(x.why_viral)}</p>`:""}${x.product_moment?`<p class="muted"><span class="lbl2">Product moment</span>${esc(x.product_moment)}</p>`:""}<div class="rl-btns">${on?`<span class="rl-pill">Chosen</span>`:`<button class="btn small primary" type="button" data-rl="pick" data-i="${i}">Choose</button>`}</div></div>`; }).join("")}</div>`);
+    if(RL.ideasPrev.length) out.push(`<details class="rl-notes"><summary>Earlier ideas (${RL.ideasPrev.length})</summary>${RL.ideasPrev.map((x,i)=>`<div class="rl-prev" dir="auto"><b>${esc(x.title||"")}</b> — ${esc(x.hook||x.logline||"")} <button class="a-btn" type="button" data-rl="pickprev" data-i="${i}">Use this</button></div>`).join("")}</details>`);
+  }
+  if(v==="script"){
+    out.push(rlHead("Script",RL.script?`${esc(RL.script.title||"")} · ${RL.script.duration_s||rlSet().length} s · edit any line, or ask Claude for changes in the chat`:"Scene by scene, with timing, dialogue, on-screen text and sound."));
+    if(!RL.script?.scenes?.length) out.push(rlEmpty(RL.picked?"Ask Claude to write the script for the chosen idea.":"Choose an idea first.",RL.picked?`<button class="btn primary" type="button" data-rl="sayraw" data-t="${esc(rlAr()?"اكتبلي السيناريو للفكرة المختارة.":"Write the script for the chosen idea.")}">Write the script</button>`:`<button class="btn" type="button" data-tab="idea">Go to Idea</button>`));
+    else{ out.push(`<div class="rl-card">${RL.script.scenes.map((s,i)=>`<div class="rl-beat" dir="auto"><span class="tc">${esc(s.time||"")}</span><div class="ln"><b>${esc(s.title||"")}</b>
+      <textarea class="rl-field" rows="2" data-rl-edit="b:${i}:action" aria-label="Action">${esc(s.action||"")}</textarea>
+      <textarea class="rl-field" rows="${Math.max(1,(s.dialogue||[]).length)}" data-rl-edit="b:${i}:dialogue" aria-label="Dialogue, one line per speaker as Name: line" placeholder="Name: line">${esc((s.dialogue||[]).map(d=>`${d.who||""}: ${d.line||""}`).join("\n"))}</textarea>
+      <div class="rl-two"><input class="rl-field" data-rl-edit="b:${i}:on_screen_text" value="${esc(s.on_screen_text||"")}" placeholder="On-screen text" aria-label="On-screen text"><input class="rl-field" data-rl-edit="b:${i}:sound" value="${esc(s.sound||"")}" placeholder="Sound" aria-label="Sound"></div></div></div>`).join("")}</div>`);
+      if(rlStageIx(RL.stage)<=rlStageIx("script")) out.push(rlNext("approveScript","Approve script · build the cast"));
+    }
+  }
+  if(v==="characters"||v==="locations"){
+    const isC=v==="characters", list=isC?RL.characters:RL.locations;
+    out.push(rlHead(isC?"Cast":"Locations & props",isC?"Reference sheets keep every face the same in every shot.":"Empty establishing images and product sheets. Every shot inherits their light.",
+      `${list.some(e=>!e.id&&!e.fromLib&&e.prompt)?`<button class="a-btn" type="button" data-rl="genall" data-list="${isC?"c":"l"}">Generate all missing</button>`:""}`));
+    const add=RL._adding&&((isC&&RL._adding==="character")||(!isC&&RL._adding!=="character"))?rlAddForm(RL._adding):"";
+    out.push(`<div class="rl-grid">${list.map(e=>rlElCard(e,isC?"c":"l")).join("")}${add||`<div class="rl-addcard">${isC?`<button type="button" class="rl-add" data-rl="add" data-k="character"><span aria-hidden="true">+</span>Add character</button><div class="rl-libcast"><span class="t12 muted">Or cast a BAE character</span><div>${["Wissam","Lina","Sara","Omar"].map(n=>{ const r=refById("ch_"+n.toLowerCase()); return `<button type="button" class="rl-castchip" data-rl="cast" data-n="${n}" ${RL.characters.some(c=>c.lib===n)?"disabled":""}>${r?`<img src="${r.src}" alt="">`:""}${n}</button>`; }).join("")}</div></div>`:`<button type="button" class="rl-add" data-rl="add" data-k="location"><span aria-hidden="true">+</span>Add location</button><button type="button" class="rl-add" data-rl="add" data-k="prop"><span aria-hidden="true">+</span>Add prop</button>`}</div>`}</div>`);
+    if(isC&&rlStageIx(RL.stage)<=rlStageIx("characters")&&list.length) out.push(rlNext("approveCast","Approve cast · build the locations"));
+    if(!isC&&rlStageIx(RL.stage)<=rlStageIx("locations")&&list.length) out.push(rlNext("approveLoc","Approve locations · direct the shots"));
+  }
+  if(v==="directing"){
     const set=rlSet(), ar=set.aspect.replace(":"," / ");
     const missing=rlEls().filter(e=>!e.id).map(e=>e.tag);
-    const sb=RL.scenes.map(sc=>{ const im=sc.thumb||sc.frame?.thumb; return `<button type="button" class="rl-sbi" data-rl="goto" data-n="${sc.n}" style="aspect-ratio:${ar}" aria-label="Scene ${sc.n}">${im?`<img src="${im}" alt="">`:""}<span>${sc.n}</span>${sc.status==="done"?'<i aria-hidden="true">▶</i>':""}${sc.status==="run"||sc.frame?.status==="run"?'<em class="dot" aria-hidden="true"></em>':""}</button>`; }).join("");
-    out.push(`<div class="rl-card"><h3>Directing · Seedance 2.5</h3><span class="sub">${RL.scenes.length} scenes · ${set.aspect} · ${set.res}${missing.length?` · generate ${missing.join(", ")} first so they can be attached`:""}</span>
-      <div class="rl-sb">${sb}</div>
-      <div class="rl-btns"><button class="btn small" type="button" data-rl="allframes">Generate all first frames</button><button class="btn small" type="button" data-rl="allvideos">Generate all videos</button></div>
-      ${RL.scenes.map(rlShotCard).join("")}
-      ${RL.scenes.filter(s=>s.clip).length>1?`<div class="rl-btns"><button class="btn small primary" type="button" data-rl="join">Join all clips into one reel</button>${RL.final?.url?`<a class="btn small" href="${esc(RL.final.url)}" target="_blank" rel="noopener">Open final MP4</a>`:""}${RL.final?.web?`<a class="btn small" href="${esc(RL.final.web)}" target="_blank" rel="noopener">Open in Magnific</a>`:""}<span class="rl-status${RL.final?.err?" bad":""}">${esc(RL.final?.note||"")}</span></div>`:""}</div>`);
+    out.push(rlHead("Shots",`${RL.scenes.length?RL.scenes.length+" scenes · ":""}${set.aspect} · ${set.res==="draft"?"Draft 480p":set.res} · first frame, then Seedance 2.5 animates it`,RL.scenes.length?`<button class="a-btn" type="button" data-rl="allframes">All first frames</button><button class="a-btn" type="button" data-rl="allvideos">All videos</button>`:""));
+    if(missing.length&&RL.scenes.length) out.push(`<p class="rl-warn">Generate ${missing.join(", ")} first (Cast / Locations) so every shot can use them.</p>`);
+    if(!RL.scenes.length) out.push(rlEmpty("Claude writes one Seedance 2.5 prompt per scene, with its first frame, from the script, cast and locations.",`<button class="btn primary" type="button" data-rl="say" data-t="approveLoc">Direct the shots</button>`));
+    else{ out.push(`<div class="rl-sb">${RL.scenes.map(sc=>{ const im=rlTGet(sc.clip)||rlTGet(sc.frame?.id); return `<button type="button" class="rl-sbi" data-rl="goto" data-n="${sc.n}" style="aspect-ratio:${ar}" aria-label="Scene ${sc.n}">${im?`<img src="${im}" alt="">`:""}<span>${sc.n}</span>${sc.status==="done"?'<i aria-hidden="true">▶</i>':""}${sc.status==="run"||sc.frame?.status==="run"?'<em class="dot" aria-hidden="true"></em>':""}</button>`; }).join("")}</div>`);
+      out.push(RL.scenes.map(rlShotCard).join("")); }
   }
-  if(!out.length) out.push(`<div class="rl-card"><h3>Production board</h3><p class="rl-empty">Ideas, script, characters, locations and the Seedance prompts appear here as you build them in the chat. Every prompt stays editable.</p></div>`);
+  if(v==="render") out.push(rlDeliver());
   B.innerHTML=out.join("");
   if(editing){ const t=B.querySelector(`[data-rl-edit="${editing.key}"]`); if(t){ t.focus({preventScroll:true}); try{ t.setSelectionRange(editing.s,editing.e); }catch{} t.scrollTop=editing.top; } }
-  /* outside video files can be blocked by the page; then fall back to the poster */
-  B.querySelectorAll("video[data-rl-vid]").forEach(v=>v.addEventListener("error",()=>{ const sc=RL.scenes.find(x=>String(x.n)===v.dataset.rlVid); if(!sc) return;
-    const src=v.getAttribute("src"); if(sc._src&&src===sc._src){ sc._src=null; if(!sc.url) sc._blocked=true; } else sc._blocked=true; rlBoard(); },{once:true}));
+  B.querySelectorAll("video[data-rl-vid]").forEach(vd=>vd.addEventListener("error",()=>{ const sc=vd.dataset.rlVid==="final"?RL.final:RL.scenes.find(x=>String(x.n)===vd.dataset.rlVid); if(!sc) return;
+    const src=vd.getAttribute("src"); if(sc._src&&src===sc._src){ sc._src=null; if(!sc.url) sc._blocked=true; } else sc._blocked=true; rlBoard(); },{once:true}));
+  rlRenderNav();
 }
-function rlCommit(t){ const [k,key]=t.dataset.rlEdit.split(":");
-  if(k==="s"||k==="f"){ const sc=RL.scenes.find(x=>String(x.n)===key); if(sc){ if(k==="s") sc.prompt=t.value; else sc.frame_prompt=t.value; } }
-  else { const el=rlElByTag(key); if(el) el.prompt=t.value; } }
-/* One scene: the frame on the left (first frame image, then the video), prompts and actions on the right */
+function rlAddForm(k){
+  const label={character:"New character",location:"New location",prop:"New prop"}[k];
+  return `<form class="rl-item rl-addform" data-addform="${k}"><b>${label}</b>
+    <input class="rl-field" name="name" placeholder="Name" aria-label="Name" required dir="auto">
+    <textarea class="rl-field" name="desc" rows="3" placeholder="${k==="character"?"Who they are, age, look, role in the story":k==="prop"?"The object and why it matters":"The place, time of day, mood"}" aria-label="Description" dir="auto"></textarea>
+    <p class="t12 muted">Claude writes the image prompt in the bank's style. You can edit it after.</p>
+    <div class="rl-btns"><button class="btn small primary" type="submit">Create</button><button class="btn small" type="button" data-rl="addcancel">Cancel</button></div></form>`;
+}
+function rlElCard(e,kind){
+  const isProp=e.kind==="prop", busy=e.status==="run", writing=e.status==="write", img=rlImgOf(e), th=rlTGet(img); if(img&&!th) rlNeed(img);
+  if(e._edit) return `<div class="rl-item rl-edit" dir="auto"><div><span class="rl-tag">${e.tag}</span><b>Edit</b></div>
+    <label class="rl-lab">Name<input class="rl-field" data-rl-edit="${kind}:${e.tag}:name" value="${esc(e.name||"")}"></label>
+    <label class="rl-lab">Description<textarea class="rl-field" rows="2" data-rl-edit="${kind}:${e.tag}:description">${esc(e.description||e.role||"")}</textarea></label>
+    ${kind==="c"?`<label class="rl-lab">Wardrobe<textarea class="rl-field" rows="2" data-rl-edit="${kind}:${e.tag}:wardrobe">${esc(e.wardrobe||"")}</textarea></label>`:""}
+    <label class="rl-lab">Image prompt<textarea class="rl-prompt" data-rl-edit="${kind}:${e.tag}:prompt" spellcheck="false" dir="ltr">${esc(e.prompt||"")}</textarea></label>
+    ${e.err?`<p class="rl-status bad">${esc(e.err)}</p>`:""}
+    <div class="rl-btns"><button class="btn small primary" type="button" data-rl="editdone" data-tag="${e.tag}">Done</button><button class="btn small" type="button" data-rl="remove" data-tag="${e.tag}">Remove</button></div></div>`;
+  return `<div class="rl-item" dir="auto"><div class="rl-ihead"><span class="rl-tag">${e.tag}</span><b>${esc(e.name||"")}</b>${e.stale?`<span class="rl-pill warn" title="The prompt changed after this image was made">Changed</span>`:""}</div>
+    <div class="rl-media${busy||writing?" busy":""}" style="aspect-ratio:${isProp?"1 / 1":"16 / 9"}">${th?`<img src="${th}" alt="${esc(e.name||"")}" data-zoom="${esc(img)}">`:`<span class="ph">${busy||writing?"":img?"Loading image…":"No image yet"}</span>`}${busy?`<span class="rl-busy">Generating…</span>`:writing?`<span class="rl-busy">Claude is writing…</span>`:""}</div>
+    <p>${esc(e.description||e.role||"")}</p>
+    ${e.fromLib?`<p class="rl-status${e.id?"":" bad"}">${e.id?"BAE character from your Magnific library":"Link your Magnific library first (Photography → References → Link library), so this character can be attached."}</p>`:""}
+    <div class="rl-btns">${e.fromLib?"":`<button class="btn small${e.id&&!e.stale?"":" primary"}" type="button" data-rl="gen" data-tag="${e.tag}" ${busy||writing||!e.prompt?"disabled":""}>${busy?"Generating…":e.id?"Regenerate":"Generate image"}</button>`}<button class="btn small" type="button" data-rl="edit" data-tag="${e.tag}">Edit</button>${e.web?`<a class="btn small" href="${esc(e.web)}" target="_blank" rel="noopener">Magnific</a>`:""}</div>
+    ${e.fromLib?"":`<form class="rl-revise" data-revise="${e.tag}"><input class="rl-field" name="q" placeholder="Ask for a change… e.g. older, navy blazer" aria-label="Ask Claude to change ${esc(e.name||"")}" dir="auto"><button class="a-btn" type="submit" ${writing?"disabled":""}>Revise</button></form>`}
+    ${e.err?`<p class="rl-status bad">${esc(e.err)}</p>`:""}</div>`;
+}
+function rlCommit(t){ const parts=t.dataset.rlEdit.split(":"); const k=parts[0];
+  if(k==="s"||k==="f"){ const sc=RL.scenes.find(x=>String(x.n)===parts[1]); if(sc){ if(k==="s") sc.prompt=t.value; else sc.frame_prompt=t.value; } return; }
+  if(k==="b"){ const s=RL.script?.scenes?.[+parts[1]]; if(!s) return; const f=parts[2];
+    if(f==="dialogue") s.dialogue=t.value.split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{ const i=l.indexOf(":"); return i>0?{who:l.slice(0,i).trim(),line:l.slice(i+1).trim()}:{who:"",line:l}; }); else s[f]=t.value; return; }
+  const el=rlElByTag(parts[1]); if(!el) return; const f=parts[2]||"prompt"; if(f==="prompt"&&el.id&&el.prompt!==t.value) el.stale=true; el[f]=t.value; }
+
+/* One scene: the frame on the left (first frame, then the video), prompts and actions on the right */
 function rlShotCard(sc){
   const set=rlSet(), ar=set.aspect.replace(":"," / "), f=sc.frame||{};
   const {refs}=rlSceneRefs(sc), fr=rlSceneRefs(sc,"frame_prompt").refs;
   const used=[...new Map([...fr,...refs].map(r=>[r.global,r])).values()].sort((x,y)=>+x.global.slice(4)-+y.global.slice(4));
-  const vsrc=sc._src||(!sc._blocked&&sc.url)||null, poster=sc.thumb||f.thumb||"";
+  const vsrc=sc._src||(!sc._blocked&&sc.url)||null, poster=rlTGet(sc.clip)||rlTGet(f.id)||"";
+  if(f.id&&!rlTGet(f.id)) rlNeed(f.id);
   const busy=f.status==="run"?"Generating first frame…":sc.status==="run"?(sc.note||"Rendering video…"):"";
   const media=vsrc&&sc.status==="done"?`<video src="${esc(vsrc)}" ${poster?`poster="${poster}"`:""} controls playsinline loop preload="metadata" data-rl-vid="${sc.n}"></video>`
-    :poster?`<img src="${poster}" alt="Scene ${sc.n}" data-zoom="s:${sc.n}">`:`<span class="ph">${busy?"":"Generate the first frame"}</span>`;
+    :poster?`<img src="${poster}" alt="Scene ${sc.n}" data-zoom="${esc(f.id||sc.clip)}">`:`<span class="ph">${busy?"":"Generate the first frame"}</span>`;
   const startOK=!!f.id, useStart=startOK&&sc.useFrame!==false;
   return `<div class="rl-shot" id="rlShot${sc.n}" dir="auto">
     <div class="rl-shot-l">
       <div class="rl-media dark${busy?" busy":""}" style="aspect-ratio:${ar}">${media}${busy?`<span class="rl-busy">${esc(busy)}</span>`:""}${sc.status==="done"?`<span class="rl-badge">Video</span>`:f.id?`<span class="rl-badge">First frame</span>`:""}</div>
-      ${used.length?`<div class="rl-refs" aria-label="References attached">${used.map(r=>{ const e=rlElByTag(r.global); return `<span class="rl-ref" title="${esc(e?.name||"")}">${e?.thumb?`<img src="${e.thumb}" alt="" data-zoom="e:${r.global}">`:`<i></i>`}<b>${r.global}</b></span>`; }).join("")}</div>`:""}
+      ${used.length?`<div class="rl-refs" aria-label="References attached">${used.map(r=>{ const e=rlElByTag(r.global), im=rlTGet(rlImgOf(e)); return `<span class="rl-ref" title="${esc(e?.name||"")}">${im?`<img src="${im}" alt="" data-zoom="${esc(rlImgOf(e))}">`:`<i></i>`}<b>${r.global}</b></span>`; }).join("")}</div>`:""}
     </div>
     <div class="rl-shot-r">
-      <div><span class="rl-tag">Scene ${sc.n}</span><b>${esc(sc.title||"")}</b> <span class="sub">${sc.duration_s||""} s</span></div>
+      <div class="rl-ihead"><span class="rl-tag">Scene ${sc.n}</span><b>${esc(sc.title||"")}</b> <span class="sub">${sc.duration_s||""} s</span></div>
       <label class="rl-lab" for="rlF${sc.n}">1 · First frame <span>Nano Banana 2.1 · ${set.aspect}</span></label>
       <textarea class="rl-prompt" id="rlF${sc.n}" data-rl-edit="f:${sc.n}" spellcheck="false" dir="ltr" placeholder="Written from the scene when you generate the first frame">${esc(sc.frame_prompt||"")}</textarea>
-      <div class="rl-btns"><button class="btn small${f.id?"":" primary"}" type="button" data-rl="frame" data-n="${sc.n}" ${f.status==="run"?"disabled":""}>${f.status==="run"?"Generating…":f.id?"Regenerate first frame":"Generate first frame"}</button>${f.web?`<a class="btn small" href="${esc(f.web)}" target="_blank" rel="noopener">Open in Magnific</a>`:""}</div>
+      <div class="rl-btns"><button class="btn small${f.id?"":" primary"}" type="button" data-rl="frame" data-n="${sc.n}" ${f.status==="run"?"disabled":""}>${f.status==="run"?"Generating…":f.id?"Regenerate first frame":"Generate first frame"}</button>${f.web?`<a class="btn small" href="${esc(f.web)}" target="_blank" rel="noopener">Magnific</a>`:""}</div>
       ${f.err?`<p class="rl-status bad">${esc(f.err)}</p>`:""}
       <details class="rl-vp"${sc.status==="done"?"":" open"}><summary>2 · Video <span>Seedance 2.5 · ${Math.max(4,Math.min(15,+sc.duration_s||8))} s</span></summary>
         <textarea class="rl-prompt tall" data-rl-edit="s:${sc.n}" spellcheck="false" dir="ltr">${esc(sc.prompt||"")}</textarea></details>
       <label class="rl-chk"><input type="checkbox" data-rl-start="${sc.n}" ${useStart?"checked":""} ${startOK?"":"disabled"}> Animate from the first frame${startOK?"":" (generate it first)"}</label>
-      <div class="rl-btns"><button class="btn small${sc.status!=="done"&&(startOK||sc.useFrame===false)?" primary":""}" type="button" data-rl="render" data-n="${sc.n}" ${sc.status==="run"?"disabled":""}>${sc.status==="run"?"Rendering…":sc.status==="done"?"Generate video again":"Generate video"}</button>${sc.status==="done"&&!vsrc&&!sc._blocked?`<button class="btn small" type="button" data-rl="play" data-n="${sc.n}">Play here</button>`:""}<button class="btn small" type="button" data-rl="copys" data-n="${sc.n}">Copy prompt</button>${sc.url?`<a class="btn small" href="${esc(sc.url)}" target="_blank" rel="noopener">Open MP4</a>`:""}${sc.web?`<a class="btn small" href="${esc(sc.web)}" target="_blank" rel="noopener">Open in Magnific</a>`:""}</div>
+      <div class="rl-btns"><button class="btn small${sc.status!=="done"&&(startOK||sc.useFrame===false)?" primary":""}" type="button" data-rl="render" data-n="${sc.n}" ${sc.status==="run"?"disabled":""}>${sc.status==="run"?"Rendering…":sc.status==="done"?"Generate video again":"Generate video"}</button>${sc.status==="done"&&!vsrc&&!sc._blocked?`<button class="btn small" type="button" data-rl="play" data-n="${sc.n}">Play here</button>`:""}<button class="btn small" type="button" data-rl="copys" data-n="${sc.n}">Copy prompt</button>${sc.url?`<a class="btn small" href="${esc(sc.url)}" target="_blank" rel="noopener">MP4</a>`:""}${sc.web?`<a class="btn small" href="${esc(sc.web)}" target="_blank" rel="noopener">Magnific</a>`:""}</div>
       ${sc.note&&sc.status!=="run"?`<p class="rl-status${sc.status==="err"?" bad":""}">${esc(sc.note)}</p>`:""}
-      ${sc._blocked&&!vsrc&&sc.status==="done"?`<p class="rl-status">The video file can't play inside this page, so the frame is shown. Use Open MP4 or Open in Magnific to watch it.</p>`:""}
+      ${sc._blocked&&!vsrc&&sc.status==="done"?`<p class="rl-status">The video file can't play inside this page, so the frame is shown. Open the MP4 or Magnific to watch it.</p>`:""}
     </div></div>`;
 }
+/* Deliver: the Magnific Space, the joined reel and the production bible */
+function rlDeliver(){
+  const sp=RL.space||{}, steps=sp.steps||[], clips=RL.scenes.filter(s=>s.clip), imgs=rlAllCreations();
+  const icon=s=>s==="ok"?"✓":s==="run"?'<span class="spin" aria-hidden="true"></span>':s==="err"?"!":s==="skip"?"–":"";
+  const fin=RL.final||{}, fsrc=fin._src||(!fin._blocked&&fin.url)||null, fposter=rlTGet(fin.id)||"";
+  return rlHead("Deliver","Collect the whole production in a Magnific Space, join the clips into one reel, and keep a copy of every prompt.")+
+  `<div class="rl-card rl-space">
+    <div class="rl-ihead"><b>Magnific Space</b>${sp.url?`<span class="rl-pill">${sp.builtAt?"Built "+rlAgo(sp.builtAt):"Created"}</span>`:""}</div>
+    <p class="muted">One canvas with every character sheet, location, first frame and video as nodes, the brief, script and every prompt pinned as notes, and a Seedance 2.5 node per shot wired to its first frame so you can re-run any shot inside Spaces.</p>
+    <p class="t12 muted">${imgs.filter(c=>c.type==="image").length} images · ${imgs.filter(c=>c.type==="video").length} videos · ${RL.scenes.length} shot prompts ready</p>
+    ${steps.length?`<ol class="rl-steps2">${steps.map(s=>`<li class="${s.state}"><span class="ic">${icon(s.state)}</span><span><b>${esc(s.label)}</b>${s.note?`<span class="t12 muted">${esc(s.note)}</span>`:""}</span></li>`).join("")}</ol>`:""}
+    ${sp.live?`<p class="t12 muted" aria-live="polite">${esc(sp.live)}</p>`:""}
+    ${sp.err?`<p class="rl-status bad">${esc(sp.err)}</p>`:""}
+    <div class="rl-btns"><button class="btn primary" type="button" data-rl="space" ${sp.status==="run"||!imgs.length?"disabled":""}>${sp.status==="run"?"Building…":sp.id?"Update the Space":"Build in Magnific Space"}</button>${sp.url||sp.id?`<a class="btn" href="${esc(sp.url||"https://www.magnific.com/spaces")}" target="_blank" rel="noopener">Open Space</a>`:""}</div>
+    ${!imgs.length?`<p class="t12 muted">Generate at least the cast and locations first.</p>`:""}
+  </div>
+  <div class="rl-card">
+    <div class="rl-ihead"><b>Final reel</b><span class="sub">${clips.length}/${RL.scenes.length} scenes filmed</span></div>
+    ${fin.id?`<div class="rl-media dark rl-final" style="aspect-ratio:${rlSet().aspect.replace(":"," / ")}">${fsrc?`<video src="${esc(fsrc)}" ${fposter?`poster="${fposter}"`:""} controls playsinline preload="metadata" data-rl-vid="final"></video>`:fposter?`<img src="${fposter}" alt="Final reel">`:`<span class="ph">Ready in Magnific</span>`}</div>`:""}
+    <div class="rl-btns"><button class="btn${clips.length>1?" primary":""}" type="button" data-rl="join" ${clips.length<2||fin.status==="run"?"disabled":""}>${fin.status==="run"?"Joining…":fin.id?"Join again":"Join clips into one reel"}</button>${fin.url?`<a class="btn small" href="${esc(fin.url)}" target="_blank" rel="noopener">MP4</a>`:""}${fin.web?`<a class="btn small" href="${esc(fin.web)}" target="_blank" rel="noopener">Magnific</a>`:""}</div>
+    ${fin.note?`<p class="rl-status${fin.err?" bad":""}">${esc(fin.note)}</p>`:""}
+  </div>
+  <div class="rl-card">
+    <div class="rl-ihead"><b>Production bible</b></div>
+    <p class="muted">The idea, script, cast, locations and every image and Seedance prompt in one document.</p>
+    <div class="rl-btns"><button class="btn" type="button" data-rl="bible">Download</button><button class="btn" type="button" data-rl="copyall">Copy all prompts</button></div>
+  </div>`;
+}
 
-/* ---------- Magnific: images for characters, locations and first frames ---------- */
+/* ---------- Magnific: images for cast, locations and first frames ---------- */
 async function rlImage({prompt,aspect,refs=[],label}){
   const model=$("selNano").value||null;
   const plan=await buildArgs("images_generate",`Generate exactly 1 photorealistic image with model "${model||"Nano Banana 2.1"}" (Google Nano Banana 2.1). Use the prompt verbatim. Aspect ratio ${aspect}. Highest quality, 2K or 4K if offered. ${refs.length?"Attach EVERY item of Data.references as image references, in exactly this order (the first is @img1, the second @img2…), using each item's identifier.":"No references."}`,
@@ -1879,18 +2093,15 @@ async function rlImage({prompt,aspect,refs=[],label}){
   if(!rr.images.length&&!DONE.test(rr.status)&&id0) rr=await waitFor([id0],label||"image");
   const id=rr.ids[0]||id0; if(!id) throw {code:"tool_error",message:"Magnific returned no creation."};
   let shot=rr.images[0]; if(!shot){ const pv=await preview(id); shot=pv.image; }
-  const src=shot?`data:${shot.mime};base64,${shot.data}`:null;
-  return {id, web:rr.webUrl||web, full:src, thumb:src?await rlThumb(src,640):null};
+  if(shot){ const src=`data:${shot.mime};base64,${shot.data}`; rlFull[id]=src; rlTSet(id,await rlThumb(src)); }
+  return {id, web:rr.webUrl||web};
 }
 async function rlGenElement(tag){
-  const e=rlElByTag(tag); if(!e||!mcp||!sample||e.status==="run") return;
+  const e=rlElByTag(tag); if(!e||!mcp||!sample||e.status==="run"||!e.prompt) return;
   if(!S.connected) await connect(true);
   e.status="run"; e.err=null; rlBoard();
-  try{
-    const isChar=RL.characters.includes(e), isProp=e.kind==="prop";
-    const out=await rlImage({prompt:e.prompt,aspect:isProp?"1:1":"16:9",label:"reference image"});
-    Object.assign(e,{id:out.id,web:out.web,thumb:out.thumb||e.thumb,_full:out.full,status:"ok"});
-  }catch(err){ e.status="err"; e.err=mcpCopy(err); }
+  try{ const out=await rlImage({prompt:e.prompt,aspect:e.kind==="prop"?"1:1":"16:9",label:"reference image"}); Object.assign(e,{id:out.id,web:out.web,status:"ok",stale:false}); }
+  catch(err){ e.status="err"; e.err=mcpCopy(err); }
   rlSave(); rlBoard();
 }
 async function rlGenFrame(n){
@@ -1905,23 +2116,22 @@ async function rlGenFrame(n){
     const {prompt,refs,missing}=rlSceneRefs(sc,"frame_prompt");
     if(missing.length) throw {code:"tool_error",message:`Generate ${missing.join(", ")} first, so the first frame can use them.`};
     const out=await rlImage({prompt,aspect:rlSet().aspect,refs,label:"first frame"});
-    Object.assign(f,{id:out.id,web:out.web,thumb:out.thumb,_full:out.full,status:"ok"});
-    if(sc.status!=="done") sc.thumb=null;
+    Object.assign(f,{id:out.id,web:out.web,status:"ok"});
   }catch(err){ f.status="err"; f.err=mcpCopy(err); }
   rlSave(); rlBoard();
 }
-function rlZoom(src){ if(!src) return; let lb=$("rlLb");
+function rlZoom(cid){ const src=rlFull[cid]||rlTGet(cid); if(!src) return; let lb=$("rlLb");
   if(!lb){ lb=document.createElement("div"); lb.id="rlLb"; lb.className="rl-lb"; lb.hidden=true; lb.setAttribute("role","dialog"); lb.setAttribute("aria-label","Image preview"); lb.innerHTML='<button type="button" aria-label="Close">×</button><img alt="">'; lb.onclick=()=>{ lb.hidden=true; }; $("reels").appendChild(lb); }
   lb.querySelector("img").src=src; lb.hidden=false; lb.querySelector("button").focus(); }
 
 /* ---------- Magnific: Seedance 2.5 video per scene ---------- */
 async function rlModel(){
-  if(RL._model) return RL._model;
+  if(rlModel.m) return rlModel.m;
   let r; try{ r=await callMag("video_models_list",{}); }catch(e){ const a=await buildArgs("video_models_list","List the video models, searching for Seedance 2.5.",{query:"Seedance 2.5"}); r=await callMag("video_models_list",a.args); }
   const raw=r.payload??r.content; let id=null, name="Seedance 2.5";
   walk(raw,(k,v,o)=>{ if(id) return; if(typeof v==="string"&&/seedance[\s._-]*2[\s._-]*5/i.test(v)){ id=o.id||o.slug||o.identifier||o.model||o.key||v; name=o.name||o.label||v; } });
   if(!id&&typeof raw==="string"){ const m=raw.match(/([a-z0-9._-]*seedance[a-z0-9._-]*2[._-]?5[a-z0-9._-]*)/i); if(m) id=m[1]; }
-  RL._model={id,name,raw:trimJSON(raw,6000)}; return RL._model;
+  return rlModel.m={id,name,raw:trimJSON(raw,6000)};
 }
 /* Per scene, the tags it uses are attached in ascending order and renumbered @img1…: the prompt and the attachments always agree */
 function rlSceneRefs(sc,field="prompt"){
@@ -1935,7 +2145,7 @@ async function rlRenderScene(n){
   const sc=RL.scenes.find(x=>+x.n===+n); if(!sc||!mcp||!sample||sc.status==="run") return;
   if(!S.connected) await connect(true);
   const {prompt:p0,refs,missing}=rlSceneRefs(sc);
-  if(missing.length){ sc.status="err"; sc.note=`Generate ${missing.join(", ")} first (Characters / Locations), so they can be attached.`; rlBoard(); return; }
+  if(missing.length){ sc.status="err"; sc.note=`Generate ${missing.join(", ")} first (Cast / Locations), so they can be attached.`; rlBoard(); return; }
   const start=sc.useFrame!==false&&sc.frame?.id?sc.frame.id:null;
   const prompt=start?`START FRAME: the video begins exactly on the provided start image and animates from it; keep its composition, faces, wardrobe, place and light.\n\n${p0}`:p0;
   sc.status="run"; sc.note="Finding Seedance 2.5…"; sc._blocked=false; rlBoard();
@@ -1952,31 +2162,32 @@ async function rlRenderScene(n){
     if(!DONE.test(rr.status)&&id){ sc.note="Rendering in Magnific… a few minutes"; rlBoard(); rr=await waitFor([id],"Seedance 2.5 video",30,true); }
     sc.clip=rr.ids[0]||id; sc.web=rr.webUrl||sc.web;
     const all=[...rr.urls,...rr.links]; sc.url=all.find(u=>/\.(mp4|mov|webm)(\?|#|$)/i.test(u))||all.find(u=>/video|render|output/i.test(u)&&!/magnific\.com\/app\//i.test(u))||null;
-    await rlLoadVideo(sc);
+    await rlLoadVideo(sc,sc.clip);
     sc.status="done"; sc.note=`Ready in ${fmtTime(t0)}${start?" · animated from the first frame":""}${set.res==="draft"?" · draft 480p: generate again at 720p or 1080p when you like it":""}.`;
   }catch(err){ sc.status="err"; sc.note=mcpCopy(err); }
   rlSave(); rlBoard();
 }
 /* Ask Magnific for the finished video itself (playable in the page), else a poster frame and the file link */
-async function rlLoadVideo(sc){
-  if(!sc.clip) return;
+async function rlLoadVideo(o,cid){
+  if(!cid) return;
   const b64Url=(d,mime)=>{ try{ const bin=atob(d); const u=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return URL.createObjectURL(new Blob([u],{type:mime})); }catch{ return null; } };
   try{
-    const a=await buildArgs("creations_read","Read this finished VIDEO creation so its media is returned: the video file itself if the tool can, otherwise a poster frame and the video file URL.",{identifier:sc.clip});
+    const a=await buildArgs("creations_read","Read this finished VIDEO creation so its media is returned: the video file itself if the tool can, otherwise a poster frame and the video file URL.",{identifier:cid});
     const r=await callMag("creations_read",a.args);
     for(const b of (r?.content||[])){
       const rs=b.type==="resource"?b.resource:null;
-      if(rs?.blob&&/^video\//.test(rs.mimeType||"")&&!sc._src) sc._src=b64Url(rs.blob,rs.mimeType);
-      if(b.type==="video"&&b.data&&!sc._src) sc._src=b64Url(b.data,b.mimeType||"video/mp4");
+      if(rs?.blob&&/^video\//.test(rs.mimeType||"")&&!o._src) o._src=b64Url(rs.blob,rs.mimeType);
+      if(b.type==="video"&&b.data&&!o._src) o._src=b64Url(b.data,b.mimeType||"video/mp4");
     }
     const x=readResult(r);
-    if(!sc.url) sc.url=[...x.urls,...x.links].find(u=>/\.(mp4|mov|webm)(\?|#|$)/i.test(u))||null;
-    if(x.images[0]) sc.thumb=await rlThumb(`data:${x.images[0].mime};base64,${x.images[0].data}`,640);
+    if(!o.url) o.url=[...x.urls,...x.links].find(u=>/\.(mp4|mov|webm)(\?|#|$)/i.test(u))||null;
+    if(x.images[0]) rlTSet(cid,await rlThumb(`data:${x.images[0].mime};base64,${x.images[0].data}`));
   }catch(e){ log("✕","creations_read (video) skipped",{code:e?.code}); }
 }
 async function rlJoin(){
-  const clips=RL.scenes.filter(s=>s.clip).sort((a,b)=>+a.n-+b.n);
-  RL.final={note:"Joining clips in Magnific…"}; rlBoard();
+  const clips=RL.scenes.filter(s=>s.clip).sort((a,b)=>+a.n-+b.n); if(clips.length<2) return;
+  if(!S.connected) await connect(true);
+  RL.final={status:"run",note:"Joining clips in Magnific…"}; rlBoard();
   try{
     const a=await buildArgs("video_concatenate","Join these finished video clips into one MP4, in exactly this order.",{identifiers:clips.map(c=>c.clip)},"default");
     const r=await callMag("video_concatenate",a.args);
@@ -1984,57 +2195,171 @@ async function rlJoin(){
     if(!DONE.test(rr.status)&&id) rr=await waitFor([id],"joined reel",20,true);
     const all=[...rr.urls,...rr.links];
     RL.final={id:rr.ids[0]||id,web:rr.webUrl||null,url:all.find(u=>/\.(mp4|mov|webm)(\?|#|$)/i.test(u))||null,note:"Final reel ready."};
+    await rlLoadVideo(RL.final,RL.final.id);
   }catch(err){ RL.final={err:true,note:mcpCopy(err)}; }
   rlSave(); rlBoard();
+}
+
+/* ---------- Magnific Spaces: the whole production on one canvas ---------- */
+function rlAllCreations(){
+  const out=[], add=(id,type,label)=>{ if(id&&!out.some(x=>x.id===id)) out.push({id,type,label}); };
+  RL.characters.forEach(e=>add(e.id,"image",`${e.tag} ${e.name} · character`));
+  RL.locations.forEach(e=>add(e.id,"image",`${e.tag} ${e.name} · ${e.kind||"location"}`));
+  RL.scenes.forEach(s=>add(s.frame?.id,"image",`Scene ${s.n} · first frame`));
+  RL.scenes.forEach(s=>add(s.clip,"video",`Scene ${s.n} · video`));
+  add(RL.final?.id,"video","Final reel");
+  return out;
+}
+function rlNotes(){
+  const set=rlSet(), I=RL.picked, n=[];
+  n.push({title:`01 · Brief — ${RL.title}`,text:[`Bank al Etihad reel · ${set.aspect} · ${set.length} s · dialogue ${set.lang}`,I?`IDEA: ${I.title}\nHook: ${I.hook||""}\n${I.logline||""}\nBeats: ${Array.isArray(I.beats)?I.beats.join(" / "):I.beats||""}\nWhy it travels: ${I.why_viral||""}\nProduct moment: ${I.product_moment||""}`:"",RL.notes?`NOTES:\n${RL.notes}`:""].filter(Boolean).join("\n\n")});
+  if(RL.script?.scenes?.length) n.push({title:`02 · Script — ${RL.script.title||RL.title}`,text:RL.script.scenes.map(s=>`[${s.time||""}] ${s.title||""}\n${s.action||""}${(s.dialogue||[]).map(d=>`\n${d.who}: "${d.line}"`).join("")}${s.on_screen_text?`\n【${s.on_screen_text}】`:""}${s.sound?`\nSound: ${s.sound}`:""}`).join("\n\n")});
+  if(RL.characters.length) n.push({title:"03 · Cast",text:RL.characters.map(e=>`${e.tag} ${e.name}${e.lib?` (BAE library: ${e.lib})`:""}\n${e.description||""}${e.wardrobe?`\nWardrobe: ${e.wardrobe}`:""}\nPROMPT: ${e.prompt||""}`).join("\n\n")});
+  if(RL.locations.length) n.push({title:"04 · Locations & props",text:RL.locations.map(e=>`${e.tag} ${e.name} (${e.kind||"location"})\n${e.description||""}\nPROMPT: ${e.prompt||""}`).join("\n\n")});
+  RL.scenes.forEach(s=>{ const r=rlSceneRefs(s); n.push({title:`Shot ${s.n} · ${s.title||""} · ${s.duration_s||""} s`,text:`References: ${r.refs.map(x=>`${x.tag} = ${x.name} (${x.global})`).join(", ")||"none"}\n\nFIRST FRAME (Nano Banana 2.1):\n${rlSceneRefs(s,"frame_prompt").prompt||"—"}\n\nSEEDANCE 2.5:\n${r.prompt}`}); });
+  return n;
+}
+async function rlFind(r,what){
+  const p=r?.payload??r?.content; let id=null,url=null;
+  const scanStr=s=>{ const m=String(s).match(/https:\/\/[^\s"'<>)\]]*magnific\.com\/[^\s"'<>)\]]*spaces?\/[^\s"'<>)\]]+/i); if(m&&!url) url=m[0].replace(/[).,;]+$/,""); };
+  if(p&&typeof p==="object") walk(p,(k,v)=>{ if(typeof v!=="string") return; scanStr(v); if(!id&&/^(space_?id|spaceId|space_?reference|spaceReference|space_?identifier|identifier|id|uuid|reference)$/i.test(k)&&v.length>=2&&!/^https?:/.test(v)) id=v; });
+  else if(p) scanStr(p);
+  for(const b of r?.content||[]) if(b.type==="text") scanStr(b.text);
+  if(!id&&sample){ try{ const o=await sample.json(`From this Magnific MCP result, extract ${what}. Result:\n${trimJSON(p,8000)}\nReply with only JSON {"id":"","url":""}`,{modelTier:"quick"}); id=o?.id||null; url=url||(/^https:\/\//.test(o?.url||"")?o.url:null); }catch{} }
+  return {id,url};
+}
+async function rlBuildSpace(){
+  if(!RL||!mcp||!sample) return;
+  const sp=RL.space=RL.space||{}; sp.steps=[]; sp.status="run"; sp.err=null; sp.live=""; sp.added=sp.added||[]; rlBoard();
+  const step=async(label,fn,optional)=>{ const s={label,state:"run"}; sp.steps.push(s); rlBoard();
+    try{ const r=await fn(); s.state="ok"; s.note=r||""; }catch(e){ s.state=optional?"skip":"err"; s.note=e?.code==="tools_unavailable"?e.message:mcpCopy(e); if(!optional) throw e; } finally{ sp.live=""; rlSave(); rlBoard(); } };
+  try{
+    if(!S.connected) await connect(true);
+    await step("Create the Space",async()=>{
+      if(sp.id) return "Updating the existing Space";
+      const a=await buildArgs("spaces_create","Create a new empty Magnific Space named exactly Data.name.",{name:`BAE · ${RL.title||"Reel"}`},"default");
+      const r=await callMag("spaces_create",a.args); const x=await rlFind(r,"the identifier of the new Space and its web URL");
+      if(!x.id) throw {code:"tool_error",message:"Magnific didn't return the Space id."};
+      sp.id=x.id; sp.url=x.url||sp.url||null; sp.added=[]; return `BAE · ${RL.title||"Reel"}`; });
+    await step("Add every image and video",async()=>{
+      const items=rlAllCreations().filter(c=>!sp.added.includes(c.id)); if(!items.length) return "Everything is already there";
+      const add=async(list,what)=>{ const a=await buildArgs("spaces_add_creations",`Add these ${what} creations to the Space (Data.space) as nodes, in this order.`,{space:sp.id,identifiers:list.map(c=>c.id),labels:list.map(c=>c.label)},"default"); const r=await callMag("spaces_add_creations",a.args); if(!sp.url){ const x=await rlFind(r,"the Space web URL"); sp.url=x.url||null; } sp.added.push(...list.map(c=>c.id)); };
+      const im=items.filter(c=>c.type==="image"), vd=items.filter(c=>c.type==="video"); let note="";
+      if(im.length) await add(im,"image");
+      if(vd.length){ try{ await add(vd,"video"); }catch(e){ note=` · videos stay in your Magnific library (${mcpCopy(e)})`; } }
+      return `${im.length} image${im.length===1?"":"s"}, ${vd.length} video${vd.length===1?"":"s"}${note}`; });
+    await step("Pin the brief, script and every prompt",async()=>{
+      const notes=rlNotes();
+      const a=await buildArgs("spaces_pin_asset","Pin a text planning note to the board of the Space Data.space. Copy the placeholder strings __TITLE__ and __TEXT__ verbatim into the note's title and its text/content fields; the page fills them in for each note.",{space:sp.id,title:"__TITLE__",text:"__TEXT__"},"default");
+      const tpl=JSON.stringify(a.args).includes("__TEXT__");
+      for(const [i,nt] of notes.entries()){ sp.live=`Pinning ${i+1} of ${notes.length}: ${nt.title}`; rlBoard();
+        const args=tpl?replaceDeep(replaceDeep(a.args,"__TITLE__",nt.title),"__TEXT__",nt.text):(await buildArgs("spaces_pin_asset","Pin this text planning note to the Space board.",{space:sp.id,title:nt.title,text:nt.text},"quick")).args;
+        await callMag("spaces_pin_asset",args); }
+      return `${notes.length} notes`; });
+    if(RL.scenes.some(s=>s.frame?.id)) await step("Wire a Seedance 2.5 node for each shot",rlWireSpace,true);
+    await step("Tidy the layout",async()=>{ const a=await buildArgs("spaces_arrange_nodes","Tidy every workflow of the Space Data.space into left-to-right rows.",{space:sp.id}); await callMag("spaces_arrange_nodes",a.args); return ""; },true);
+    sp.status="done"; sp.builtAt=Date.now();
+  }catch(e){ sp.status="err"; sp.err=mcpCopy(e); }
+  rlSave(); rlBoard();
+}
+/* Claude works the Space step by step through page tools: it reads the node catalogue, adds a video node per shot and connects it */
+async function rlWireSpace(){
+  const sp=RL.space;
+  const lim=await sample.limits().catch(()=>null);
+  if(!lim?.tools) throw {code:"tools_unavailable",message:"Skipped: this view can't let Claude work in Spaces step by step. The shot prompts are pinned, so you can add the nodes in Spaces."};
+  const ALLOW=["spaces_state","spaces_get_nodes","spaces_node_types_search","spaces_create_node","spaces_patch_node","spaces_add_connection"];
+  let calls=0;
+  const tools=[
+    {name:"describe_tool",description:"Returns the description and JSON input schema of one Magnific Spaces tool. Describe a tool before its first use.",inputSchema:{type:"object",properties:{tool:{type:"string",enum:ALLOW}},required:["tool"]},execute:async({tool})=>{ const s=await schemaOf(String(tool)); return s?{description:s.description,inputSchema:s.inputSchema}:"No schema available"; }},
+    {name:"magnific",description:"Calls one Magnific Spaces tool with JSON arguments and returns its result (trimmed). Allowed: "+ALLOW.join(", ")+". It never runs generations.",inputSchema:{type:"object",properties:{tool:{type:"string",enum:ALLOW},args:{type:"object"}},required:["tool","args"]},
+      execute:async({tool,args},ctx)=>{ tool=String(tool); if(!ALLOW.includes(tool)) throw new Error("Tool not allowed here"); if(++calls>70) throw new Error("Call budget used up: stop and give the final JSON now.");
+        sp.live=({spaces_state:"Reading the Space",spaces_get_nodes:"Reading nodes",spaces_node_types_search:"Looking up node types",spaces_create_node:"Adding a node",spaces_patch_node:"Setting a node",spaces_add_connection:"Connecting nodes"})[tool]+"…"; rlBoard();
+        if(ctx?.signal?.aborted) throw new Error("Stopped");
+        const r=await callMag(tool,args&&typeof args==="object"?args:{}); return trimJSON(r.payload??r.content,12000); }}];
+  const set=rlSet();
+  const shots=RL.scenes.map(sc=>{ const r=rlSceneRefs(sc); return {scene:sc.n,title:sc.title,duration_s:Math.max(4,Math.min(15,+sc.duration_s||8)),first_frame_creation:sc.frame?.id||null,reference_creations:r.refs.map(x=>({tag:x.tag,creation:x.id,name:x.name})),prompt:(sc.frame?.id?"START FRAME: the video begins exactly on the connected start image.\n\n":"")+r.prompt}; });
+  const out=await sample.json(`You are wiring a Magnific Space (Space id: ${sp.id}) for a Bank al Etihad reel. The board already holds the images (added from these creations) and pinned notes.
+GOAL — for EACH shot below:
+1. Add ONE video generation node set to the Seedance 2.5 model (find the right node type, its ports and settings with spaces_node_types_search), with the shot's prompt as its prompt, duration ${"<duration_s>"} seconds and aspect ratio ${set.aspect}.
+2. Connect the shot's first-frame image node (the node made from first_frame_creation) into the video node's start / first-frame image input.
+3. If the node also takes reference images, connect the reference image nodes (made from reference_creations, in order) to them.
+Find the existing image nodes with spaces_state (match them by creation identifier). Describe each tool once before using it. Batch independent calls in the same round. Never run, delete or regenerate anything.
+SHOTS (JSON): ${trimJSON(shots,20000)}
+When finished, reply with only JSON: {"nodes_created":0,"connections":0,"summary":"one short line"}`,{modelTier:"default",tools});
+  return out?.summary||`${out?.nodes_created||0} video nodes, ${out?.connections||0} connections`;
+}
+function rlBibleText(){ const set=rlSet(); return `# ${RL.title}\n\nBank al Etihad · Reels production · ${set.aspect} · ${set.length} s · ${new Date().toLocaleDateString()}\n\n`+rlNotes().map(n=>`## ${n.title}\n\n${n.text}`).join("\n\n")+"\n"; }
+async function rlBible(){
+  const name=(RL.title||"reel").replace(/[^\w؀-ۿ -]+/g,"").trim().replace(/\s+/g,"-")||"reel";
+  const blob=new Blob([rlBibleText()],{type:"text/plain"});
+  if(downloads){ try{ await downloads.save({filename:`BAE-${name}-production.txt`,data:blob}); return; }catch(e){ if(e?.code==="declined") return; } }
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`BAE-${name}-production.txt`; a.click();
 }
 
 /* ---------- wiring ---------- */
 (function(){
   if(!$("reels")) return;
-  rlLoad(); rlRetag();
   const R=$("reels");
-  const open=()=>{ R.hidden=false; R.dataset.view="chat"; rlLinkLibrary(); rlRender(); setTimeout(()=>$("rlInput").focus(),60); };
-  $("openReels").addEventListener("click",open);
+  const openLib=()=>{ R.hidden=false; R.scrollTop=0; rlShowLib(); setTimeout(()=>$("rlNewCard")?.focus({preventScroll:true}),120); };
+  $("openReels").addEventListener("click",openLib);
   $("closeReels").onclick=()=>{ R.hidden=true; $("openReels")?.focus(); };
-  document.addEventListener("keydown",e=>{ if(e.key!=="Escape"||R.hidden) return; const lb=$("rlLb"); if(lb&&!lb.hidden){ lb.hidden=true; return; } if(document.activeElement?.id!=="rlInput") R.hidden=true; });
+  $("rlBack").onclick=async()=>{ clearTimeout(rlSaveT); if(RL) await rlFlush(); RL=null; R.scrollTop=0; rlShowLib(); };
+  $("rlProjects").addEventListener("click",async e=>{
+    if(e.target.closest("#rlNewCard")) return rlOpen(null);
+    const o=e.target.closest("[data-open]"); if(o) return rlOpen(o.dataset.open);
+    const d=e.target.closest("[data-dup]"); if(d){ d.disabled=true; await rlDuplicate(d.dataset.dup); return rlShowLib(); }
+    const x=e.target.closest("[data-del]"); if(x){ if(x.dataset.sure){ await rlDelete(x.dataset.del); return rlShowLib(); } x.dataset.sure="1"; x.textContent="Delete for good?"; x.classList.add("danger"); setTimeout(()=>{ if(x.isConnected){ delete x.dataset.sure; x.textContent="Delete"; x.classList.remove("danger"); } },3500); }
+  });
+  $("rlTitle").addEventListener("input",()=>{ if(!RL) return; RL.title=$("rlTitle").value.trim()||"Untitled reel"; rlSave(); });
+  $("rlStages").addEventListener("click",e=>{ const b=e.target.closest("[data-tab]"); if(!b||!RL) return; RL.view=b.dataset.tab; R.dataset.view="board"; rlSave(); rlBoard(); rlRenderChat(); $("rlBoardPane").scrollIntoView({block:"start"}); });
+  document.addEventListener("keydown",e=>{ if(e.key!=="Escape"||R.hidden) return; const lb=$("rlLb"); if(lb&&!lb.hidden){ lb.hidden=true; return; } });
   $("rlForm").onsubmit=e=>{ e.preventDefault(); rlSend($("rlInput").value); };
   $("rlInput").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing){ e.preventDefault(); rlSend($("rlInput").value); } });
   $("rlChips").onclick=e=>{ const b=e.target.closest("button"); if(b) rlSend(b.textContent); };
   $("rlFile").onchange=e=>{ for(const f of [...e.target.files].slice(0,10-rlPending.length)) rlPending.push({blob:f,url:URL.createObjectURL(f),name:f.name}); e.target.value=""; rlRenderAtt(); };
-  /* paste or drop images straight into the chat */
   $("rlInput").addEventListener("paste",e=>{ const fs=[...(e.clipboardData?.files||[])].filter(f=>/^image\//.test(f.type)); if(fs.length){ fs.forEach(f=>rlPending.push({blob:f,url:URL.createObjectURL(f),name:f.name})); rlRenderAtt(); } });
   $("rlChatPane").addEventListener("dragover",e=>e.preventDefault());
   $("rlChatPane").addEventListener("drop",e=>{ e.preventDefault(); [...(e.dataTransfer?.files||[])].filter(f=>/^image\//.test(f.type)).slice(0,10).forEach(f=>rlPending.push({blob:f,url:URL.createObjectURL(f),name:f.name})); rlRenderAtt(); });
   $("rlAtt").onclick=e=>{ const b=e.target.closest("[data-i]"); if(b){ rlPending.splice(+b.dataset.i,1); rlRenderAtt(); } };
   $("rlSettingsBtn").onclick=()=>{ const s=$("rlSettings"); s.hidden=!s.hidden; $("rlSettingsBtn").setAttribute("aria-expanded",String(!s.hidden)); };
-  for(const id of ["rlLen","rlAspect","rlLang","rlRes"]){ try{ const v=localStorage.getItem("bae_"+id); if(v) $(id).value=v; }catch{} $(id).onchange=()=>{ try{ localStorage.setItem("bae_"+id,$(id).value); }catch{} rlBoard(); }; }
-  $("rlNew").onclick=()=>{ if(RL.chat.length&&!confirmNew()) return; RL=rlNew(); rlSave(); rlRender(); };
-  function confirmNew(){ const b=$("rlNew"); if(b.dataset.sure){ delete b.dataset.sure; b.textContent="New reel"; return true; } b.dataset.sure="1"; b.textContent="Start over? Press again"; setTimeout(()=>{ delete b.dataset.sure; b.textContent="New reel"; },3000); return false; }
+  const keyOf={rlLen:"length",rlAspect:"aspect",rlLang:"lang",rlRes:"res"};
+  for(const id of Object.keys(keyOf)) $(id).onchange=()=>{ if(!RL) return; RL.settings={...rlSet(),[keyOf[id]]:id==="rlLen"?+$(id).value:$(id).value}; rlSave(); rlBoard(); };
   document.querySelectorAll("[data-rlview]").forEach(b=>b.onclick=()=>{ R.dataset.view=b.dataset.rlview; document.querySelectorAll("[data-rlview]").forEach(x=>x.setAttribute("aria-pressed",String(x===b))); });
-  $("rlBoard").addEventListener("click",async e=>{
-    const b=e.target.closest("[data-rl]"); if(!b) return; const a=b.dataset.rl;
-    const ar=RL.chat.some(m=>m.role==="u"&&/[\u0600-\u06FF]/.test(m.text||""));
-    const AR={"Script approved. Build the characters.":"تمام السيناريو، ابنيلي الشخصيات.","Characters approved. Build the locations and props.":"تمام الشخصيات، ابنيلي الأماكن والأغراض.","Locations approved. Start the video directing: one Seedance 2.5 prompt per scene.":"تمام الأماكن، ابدأ الـ Video Directing: برومبت Seedance 2.5 لكل مشهد."};
+  const B=$("rlBoard");
+  B.addEventListener("click",async e=>{
+    const tab=e.target.closest("[data-tab]"); if(tab&&B.contains(tab)){ RL.view=tab.dataset.tab; rlSave(); rlRender(); return; }
+    const z=e.target.closest("[data-zoom]"); if(z){ rlZoom(z.dataset.zoom); return; }
+    const b=e.target.closest("[data-rl]"); if(!b) return; const a=b.dataset.rl, ar=rlAr();
     if(a==="pick") rlSend(ar?`اخترت الفكرة ${+b.dataset.i+1}: ${RL.ideas[+b.dataset.i]?.title||""}. اكتبلي السيناريو.`:`I choose idea ${+b.dataset.i+1}: ${RL.ideas[+b.dataset.i]?.title||""}. Write the script.`);
-    else if(a==="say") rlSend(ar&&AR[b.dataset.t]||b.dataset.t);
+    else if(a==="pickprev"){ const x=RL.ideasPrev[+b.dataset.i]; if(x){ RL.ideas=[x,...RL.ideas.filter(y=>y.title!==x.title)].slice(0,4); RL.ideasPrev.splice(+b.dataset.i,1); rlSend(ar?`اخترت الفكرة: ${x.title}. اكتبلي السيناريو.`:`I choose the idea "${x.title}". Write the script.`); } }
+    else if(a==="say"){ const t=RL_SAY[b.dataset.t]; rlSend(t?t[ar?1:0]:b.dataset.t); }
+    else if(a==="sayraw") rlSend(b.dataset.t);
     else if(a==="gen") rlGenElement(b.dataset.tag);
-    else if(a==="genall") (b.dataset.list==="c"?RL.characters:RL.locations).filter(x=>!x.id&&!x.fromLib).forEach(x=>rlGenElement(x.tag));
+    else if(a==="genall") (b.dataset.list==="c"?RL.characters:RL.locations).filter(x=>!x.id&&!x.fromLib&&x.prompt).forEach(x=>rlGenElement(x.tag));
+    else if(a==="edit"){ const el=rlElByTag(b.dataset.tag); if(el){ el._edit=true; rlBoard(); } }
+    else if(a==="editdone"){ const el=rlElByTag(b.dataset.tag); if(el){ el._edit=false; el.err=null; if(el.status==="err") el.status=null; rlSave(); rlBoard(); } }
+    else if(a==="remove"){ if(!b.dataset.sure){ b.dataset.sure="1"; b.textContent="Remove for good?"; b.classList.add("danger"); return; } RL.characters=RL.characters.filter(x=>x.tag!==b.dataset.tag); RL.locations=RL.locations.filter(x=>x.tag!==b.dataset.tag); rlSave(); rlBoard(); }
+    else if(a==="add"){ RL._adding=b.dataset.k; rlBoard(); setTimeout(()=>B.querySelector(".rl-addform input")?.focus(),30); }
+    else if(a==="addcancel"){ RL._adding=null; rlBoard(); }
+    else if(a==="cast"){ rlAddElement("character",b.dataset.n,"BAE character from the library",b.dataset.n); }
     else if(a==="frame") rlGenFrame(b.dataset.n);
     else if(a==="render") rlRenderScene(b.dataset.n);
     else if(a==="allframes") RL.scenes.filter(s=>!s.frame?.id).forEach(s=>rlGenFrame(s.n));
     else if(a==="allvideos") RL.scenes.filter(s=>s.status!=="done").forEach(s=>rlRenderScene(s.n));
-    else if(a==="play"){ const sc=RL.scenes.find(x=>String(x.n)===b.dataset.n); if(sc){ b.disabled=true; b.textContent="Loading…"; if(!S.connected) await connect(true); await rlLoadVideo(sc); if(!sc._src&&!sc.url) sc._blocked=true; rlBoard(); } }
+    else if(a==="play"){ const sc=RL.scenes.find(x=>String(x.n)===b.dataset.n); if(sc){ b.disabled=true; b.textContent="Loading…"; if(!S.connected) await connect(true); await rlLoadVideo(sc,sc.clip); if(!sc._src&&!sc.url) sc._blocked=true; rlBoard(); } }
     else if(a==="goto") $("rlShot"+b.dataset.n)?.scrollIntoView({behavior:"smooth",block:"start"});
     else if(a==="join") rlJoin();
-    else if(a==="copy"||a==="copys"){ const txt=a==="copy"?rlElByTag(b.dataset.tag)?.prompt:rlSceneRefs(RL.scenes.find(x=>+x.n===+b.dataset.n)).prompt; try{ await navigator.clipboard.writeText(txt||""); b.textContent="Copied"; setTimeout(()=>b.textContent="Copy prompt",1400); }catch{} }
+    else if(a==="space") rlBuildSpace();
+    else if(a==="bible") rlBible();
+    else if(a==="copyall"||a==="copys"){ const txt=a==="copyall"?rlBibleText():rlSceneRefs(RL.scenes.find(x=>+x.n===+b.dataset.n)).prompt; try{ await navigator.clipboard.writeText(txt||""); const t=b.textContent; b.textContent="Copied"; setTimeout(()=>b.textContent=t,1400); }catch{} }
   });
-  /* prompts are editable in place */
-  $("rlBoard").addEventListener("change",e=>{
+  B.addEventListener("submit",e=>{
+    const f=e.target.closest("[data-addform]"); if(f){ e.preventDefault(); const fd=new FormData(f); rlAddElement(f.dataset.addform,String(fd.get("name")||"").trim(),String(fd.get("desc")||"").trim(),null); return; }
+    const r=e.target.closest("[data-revise]"); if(r){ e.preventDefault(); const q=String(new FormData(r).get("q")||"").trim(); if(q) rlReviseElement(r.dataset.revise,q); }
+  });
+  B.addEventListener("change",e=>{
     const s=e.target.closest("[data-rl-start]"); if(s){ const sc=RL.scenes.find(x=>String(x.n)===s.dataset.rlStart); if(sc){ sc.useFrame=s.checked; rlSave(); rlBoard(); } return; }
     const t=e.target.closest("[data-rl-edit]"); if(!t) return; rlCommit(t); rlSave(); });
-  /* click any image to see it large */
-  $("rlBoard").addEventListener("click",e=>{ const z=e.target.closest("[data-zoom]"); if(!z) return; const [k,key]=z.dataset.zoom.split(":");
-    if(k==="e"){ const el=rlElByTag(key); rlZoom(el?._full||el?.thumb); } else { const sc=RL.scenes.find(x=>String(x.n)===key); rlZoom(sc?.frame?._full||sc?.thumb||sc?.frame?.thumb); } });
 })();
 function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>`<span class="th"><img src="${a.url}" alt="${esc(a.name||"")}"><button type="button" data-i="${i}" aria-label="Remove">×</button></span>`).join(""); }
 
