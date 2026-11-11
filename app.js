@@ -2569,13 +2569,26 @@ async function rlBuildSpace(){
       if(vd.length){ try{ await add(vd,"video"); }catch(e){ note=` · videos stay in your Magnific library (${mcpCopy(e)})`; } }
       return `${im.length} image${im.length===1?"":"s"}, ${vd.length} video${vd.length===1?"":"s"}${note}`; });
     await step("Pin the brief, script and every prompt",async()=>{
-      const notes=rlNotes();
+      /* Magnific caps a note at 8,000 characters: split long notes at paragraph breaks into parts (1/2, 2/2) */
+      const MAX=7000, notes=[];
+      for(const nt of rlNotes()){ const text=String(nt.text||"");
+        if(text.length<=MAX){ notes.push(nt); continue; }
+        const parts=[]; let cur="";
+        for(const para of text.split(/\n\n/)){ let p=para;
+          while(p.length>MAX){ if(cur){ parts.push(cur); cur=""; } parts.push(p.slice(0,MAX)); p=p.slice(MAX); }
+          if((cur?cur.length+2:0)+p.length>MAX){ parts.push(cur); cur=p; } else cur=cur?cur+"\n\n"+p:p; }
+        if(cur) parts.push(cur);
+        parts.forEach((t,i)=>notes.push({title:`${nt.title} (${i+1}/${parts.length})`,text:t})); }
+      /* on an update, pin only notes that are new or changed */
+      const sig=t=>{ let h=0; for(let i=0;i<t.length;i++) h=(h*31+t.charCodeAt(i))|0; return String(h); };
+      sp.pinned=sp.pinned||{}; const todo=notes.filter(nt=>sp.pinned[nt.title]!==sig(nt.text));
+      if(!todo.length) return "All notes are already pinned";
       const a=await buildArgs("spaces_pin_asset","Pin a text planning note to the board of the Space Data.space. Copy the placeholder strings __TITLE__ and __TEXT__ verbatim into the note's title and its text/content fields; the page fills them in for each note.",{space:sp.id,title:"__TITLE__",text:"__TEXT__"},"default");
       const tpl=JSON.stringify(a.args).includes("__TEXT__");
-      for(const [i,nt] of notes.entries()){ sp.live=`Pinning ${i+1} of ${notes.length}: ${nt.title}`; rlBoard();
+      for(const [i,nt] of todo.entries()){ sp.live=`Pinning ${i+1} of ${todo.length}: ${nt.title}`; rlBoard();
         const args=tpl?replaceDeep(replaceDeep(a.args,"__TITLE__",nt.title),"__TEXT__",nt.text):(await buildArgs("spaces_pin_asset","Pin this text planning note to the Space board.",{space:sp.id,title:nt.title,text:nt.text},"quick")).args;
-        await callMag("spaces_pin_asset",args); }
-      return `${notes.length} notes`; });
+        await callMag("spaces_pin_asset",args); sp.pinned[nt.title]=sig(nt.text); rlFlush(); }
+      return `${todo.length} note${todo.length===1?"":"s"} pinned${notes.length>todo.length?` · ${notes.length-todo.length} already there`:""}`; });
     if(RL.scenes.some(s=>s.frame?.id)) await step("Wire a Seedance 2.5 node for each shot",rlWireSpace,true);
     await step("Tidy the layout",async()=>{ const a=await buildArgs("spaces_arrange_nodes","Tidy every workflow of the Space Data.space into left-to-right rows.",{space:sp.id}); await callMag("spaces_arrange_nodes",a.args); return ""; },true);
     sp.status="done"; sp.builtAt=Date.now();
