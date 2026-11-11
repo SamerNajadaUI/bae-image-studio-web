@@ -144,6 +144,7 @@ body.intro-on .landing .l-choice:nth-child(1){animation-delay:2.6s}
 body.intro-on .landing .l-choice:nth-child(2){animation-delay:2.68s}
 body.intro-on .landing .l-choice:nth-child(3){animation-delay:2.76s}
 body.intro-on .landing .l-choice:nth-child(4){animation-delay:2.84s}
+body.intro-on .landing .l-choice:nth-child(5){animation-delay:2.92s}
 body.intro-on .landing .l-foot{animation-delay:2.95s}
 @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
 body.intro-skip .intro{animation-duration:.35s;animation-delay:0s}
@@ -213,6 +214,76 @@ details.acc[open]>summary::after{content:"–"}
 .ref .tag.ch{background:var(--ink);color:var(--white)}
 .pk{position:relative}
 .pk .pk-name{position:absolute;left:4px;right:4px;bottom:4px;font-size:10px;line-height:1.2;padding:2px 4px;border-radius:6px;background:color-mix(in srgb,var(--ink) 75%,transparent);color:var(--white);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ================= reels production ================= */
+.reels{flex-direction:column}
+.reels:not([hidden]){display:flex}
+.rl-top{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:20px 4% 12px}
+.rl-title{display:flex;flex-direction:column;gap:2px;flex:1;min-width:180px}
+.rl-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.rl-tabs{display:none}
+.rl-settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:0 4% 12px;padding:16px;background:var(--white);border-radius:20px;box-shadow:var(--shadow)}
+.rl-settings[hidden]{display:none}
+.rl-body{flex:1 0 auto;display:grid;grid-template-columns:minmax(340px,5fr) minmax(0,7fr);gap:16px;padding:0 4% 20px}
+.rl-chat{display:flex;flex-direction:column;min-height:0;background:var(--white);border-radius:24px;box-shadow:var(--shadow);overflow:hidden;height:calc(100vh - 120px);position:sticky;top:12px;align-self:start}
+.rl-msgs{flex:1;overflow:auto;padding:20px;display:flex;flex-direction:column;gap:12px}
+.rl-m{max-width:88%;padding:12px 14px;border-radius:18px;font-size:15px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word}
+.rl-m.u{align-self:flex-end;background:var(--ink);color:var(--white);border-bottom-right-radius:6px}
+.rl-m.a{align-self:flex-start;background:var(--orange-light);color:var(--ink);border-bottom-left-radius:6px}
+.rl-m.sys{align-self:center;background:transparent;color:var(--ink-light);font-size:12px;padding:4px}
+.rl-m.err{background:#fdecea;color:var(--warn)}
+.rl-m .imgs{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.rl-m .imgs img{width:64px;height:64px;object-fit:cover;border-radius:10px}
+.rl-typing{display:inline-flex;gap:4px}.rl-typing i{width:6px;height:6px;border-radius:50%;background:var(--ink-light);animation:rlDot 1.2s infinite}.rl-typing i:nth-child(2){animation-delay:.15s}.rl-typing i:nth-child(3){animation-delay:.3s}
+@keyframes rlDot{0%,60%,100%{opacity:.25;transform:none}30%{opacity:1;transform:translateY(-3px)}}
+.rl-chips{display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 8px}
+.rl-chips button{all:unset;cursor:pointer;font-size:12px;padding:7px 12px;border-radius:999px;border:1px solid var(--stone);background:var(--white);color:var(--ink)}
+.rl-chips button:hover{border-color:var(--orange-dark)}
+.rl-chips button:focus-visible{outline:2px solid var(--orange-dark);outline-offset:2px}
+.rl-compose{border-top:1px solid var(--stone-light);padding:12px 16px 14px;display:flex;flex-direction:column;gap:8px}
+.rl-compose textarea{resize:none;border:0;outline:0;font:inherit;font-size:15px;background:transparent;color:var(--ink);min-height:44px;max-height:160px}
+.rl-crow{display:flex;align-items:center;gap:10px}
+.rl-crow .t12{flex:1}
+.rl-att{display:flex;gap:6px;flex-wrap:wrap}
+.rl-att:empty{display:none}
+.rl-att .th{position:relative}.rl-att img{width:52px;height:52px;object-fit:cover;border-radius:10px}
+.rl-att .th button{position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:0;background:var(--ink);color:var(--white);font-size:12px;cursor:pointer;line-height:20px;padding:0}
+.rl-board{min-width:0;display:flex;flex-direction:column;gap:16px}
+.rl-steps{list-style:none;margin:0;padding:12px;display:flex;gap:6px;flex-wrap:wrap;background:var(--white);border-radius:20px;box-shadow:var(--shadow)}
+.rl-steps li{flex:1;min-width:92px;text-align:center;font-size:12px;padding:8px 6px;border-radius:12px;color:var(--ink-light);background:var(--orange-light)}
+.rl-steps li.done{color:var(--ink)}
+.rl-steps li.done::before{content:"✓ ";color:var(--orange-dark)}
+.rl-steps li.on{background:var(--ink);color:var(--white)}
+.rl-card{background:var(--white);border-radius:24px;box-shadow:var(--shadow);padding:20px;display:flex;flex-direction:column;gap:12px}
+.rl-card h3{margin:0;font-weight:400;font-size:24px}
+.rl-card .sub{font-size:12px;color:var(--ink-light)}
+.rl-empty{color:var(--ink-light);font-size:15px;line-height:1.5}
+.rl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.rl-item{border:1px solid var(--stone-light);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:8px;background:var(--white)}
+.rl-item.picked{border-color:var(--orange-dark);box-shadow:0 0 0 2px color-mix(in srgb,var(--orange-dark) 25%,transparent)}
+.rl-item b{font-weight:400;font-size:18px}
+.rl-item p{margin:0;font-size:14px;line-height:1.45;color:var(--ink-med)}
+.rl-item .k{font-size:12px;color:var(--ink-light);text-transform:uppercase;letter-spacing:.06em}
+.rl-tag{display:inline-block;font-size:12px;padding:3px 8px;border-radius:999px;background:var(--ink);color:var(--white);margin-inline-end:6px}
+.rl-prompt{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.5;white-space:pre-wrap;background:var(--orange-light);border-radius:12px;padding:12px;max-height:260px;overflow:auto;color:var(--ink);border:0;width:100%;box-sizing:border-box;resize:vertical;min-height:120px}
+.rl-prompt.tall{max-height:none;min-height:320px}
+.rl-btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.rl-thumb{width:100%;aspect-ratio:16/9;border-radius:12px;object-fit:cover;background:var(--orange-light);display:block}
+.rl-thumb.v{aspect-ratio:9/16;max-height:360px;width:auto;margin:0 auto}
+.rl-status{font-size:12px;color:var(--ink-med)}
+.rl-status.bad{color:var(--warn)}
+.rl-beat{display:grid;grid-template-columns:86px 1fr;gap:10px;padding:10px 0;border-top:1px solid var(--stone-light)}
+.rl-beat:first-of-type{border-top:0}
+.rl-beat .tc{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--orange-dark)}
+.rl-beat .ln{font-size:14px;line-height:1.5}
+.rl-beat .ln i{color:var(--ink-light)}
+@media (max-width:980px){
+  .rl-tabs{display:inline-flex}
+  .rl-body{grid-template-columns:minmax(0,1fr)}
+  .rl-chat{height:calc(100vh - 150px);position:static}
+  .reels[data-view="chat"] .rl-board{display:none}
+  .reels[data-view="board"] .rl-chat{display:none}
+}
 /* ================= guided tour ================= */
 .tour{position:fixed;inset:0;z-index:150}
 .tour[hidden]{display:none}
@@ -251,7 +322,7 @@ body.landing-on{overflow:hidden}
 .l-mid{display:flex;flex-direction:column;gap:32px;max-width:1280px}
 .l-mid h1{margin:0;font-weight:400;font-size:clamp(40px,6vw,64px);line-height:1.05;letter-spacing:-.02em;color:var(--ink)}
 .l-mid h1 span{color:var(--orange-dark)}
-.l-choices{display:grid;grid-template-columns:repeat(4,minmax(0,300px));gap:16px}
+.l-choices{display:grid;grid-template-columns:repeat(3,minmax(0,300px));gap:16px}
 @media (max-width:1300px){.l-choices{grid-template-columns:repeat(2,minmax(0,300px))}}
 @media (max-width:980px){.l-choices{grid-template-columns:repeat(2,minmax(0,300px))}}
 .l-choice{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:24px;padding:24px;border-radius:24px;background:color-mix(in srgb,var(--white) 82%,transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:var(--shadow);border:1px solid color-mix(in srgb,var(--white) 70%,transparent);transition:transform .2s ease,background .2s ease}
@@ -524,11 +595,48 @@ details.log summary{cursor:pointer}
       <div class="l-choices">
         <button class="l-choice" type="button" data-enter="photo"><span class="row"><b>Photography</b><span class="l-arrow" aria-hidden="true">→</span></span><small>4K · Nano Banana 2.1</small></button>
         <button class="l-choice" type="button" data-enter="icon"><span class="row"><b>Icons</b><span class="l-arrow" aria-hidden="true">→</span></span><small>Glassmorphism · GPT 2.5</small></button>
+        <button class="l-choice" type="button" id="openReels"><span class="row"><b>Reels production</b><span class="l-arrow" aria-hidden="true">→</span></span><small>Idea to film · Seedance 2.5</small></button>
         <button class="l-choice" type="button" id="openGallery"><span class="row"><b>Gradient elements</b><span class="l-arrow" aria-hidden="true">→</span></span><small>6 shapes · high-res PNG</small></button>
         <button class="l-choice" type="button" id="openAnim"><span class="row"><b>Animation direction</b><span class="l-arrow" aria-hidden="true">→</span></span><small>After Effects templates · EN + AR</small></button>
       </div>
     </div>
     <div class="l-foot">Bank al Etihad · Creative Studio</div>
+  </div>
+</section>
+<section class="gallery reels" id="reels" hidden aria-label="Reels production">
+  <div class="rl-top">
+    <button class="g-back" type="button" id="closeReels"><i aria-hidden="true">←</i>Home</button>
+    <div class="rl-title"><b class="t18" id="rlProj">New reel</b><span class="t12 muted">Reels production · Seedance 2.5 via Magnific</span></div>
+    <div class="rl-tools">
+      <div class="a-seg rl-tabs" role="group" aria-label="View"><button type="button" data-rlview="chat" aria-pressed="true">Chat</button><button type="button" data-rlview="board" aria-pressed="false">Board</button></div>
+      <button class="a-btn" type="button" id="rlSettingsBtn" aria-expanded="false" aria-controls="rlSettings">Settings</button>
+      <button class="a-btn" type="button" id="rlNew">New reel</button>
+    </div>
+  </div>
+  <div class="rl-settings" id="rlSettings" hidden>
+    <div><label class="lbl" for="rlLen">Length</label><select id="rlLen"><option value="15">15 s</option><option value="30" selected>30 s</option><option value="45">45 s</option><option value="60">60 s</option></select></div>
+    <div><label class="lbl" for="rlAspect">Format</label><select id="rlAspect"><option value="9:16" selected>9:16 · Reels / TikTok</option><option value="4:5">4:5 · Feed</option><option value="16:9">16:9 · Widescreen</option><option value="1:1">1:1 · Square</option></select></div>
+    <div><label class="lbl" for="rlLang">Dialogue</label><select id="rlLang"><option value="Jordanian Arabic" selected>Jordanian Arabic</option><option value="Modern Standard Arabic">Modern Standard Arabic</option><option value="English">English</option><option value="none">No dialogue</option></select></div>
+    <div><label class="lbl" for="rlRes">Video quality</label><select id="rlRes"><option value="draft">Draft 480p · cheap test</option><option value="720p" selected>720p</option><option value="1080p">1080p</option></select></div>
+  </div>
+  <div class="rl-body">
+    <div class="rl-chat" id="rlChatPane">
+      <div class="rl-msgs" id="rlMsgs" aria-live="polite"></div>
+      <div class="rl-chips" id="rlChips"></div>
+      <form class="rl-compose" id="rlForm">
+        <div class="rl-att" id="rlAtt"></div>
+        <textarea id="rlInput" rows="2" dir="auto" placeholder="Describe the reel, or attach a storyboard, characters, places, scripts…"></textarea>
+        <div class="rl-crow">
+          <label class="a-btn rl-clip" for="rlFile" title="Attach images"><span aria-hidden="true">＋</span> Attach</label><input type="file" id="rlFile" accept="image/*" multiple class="sr">
+          <span class="t12 muted" id="rlHint">Enter to send · Shift+Enter for a new line</span>
+          <button class="btn primary small" type="submit" id="rlSend">Send</button>
+        </div>
+      </form>
+    </div>
+    <div class="rl-board" id="rlBoardPane">
+      <ol class="rl-steps" id="rlSteps"></ol>
+      <div id="rlBoard"></div>
+    </div>
   </div>
 </section>
 <section class="gallery anim" id="anim" hidden aria-label="Animation direction">

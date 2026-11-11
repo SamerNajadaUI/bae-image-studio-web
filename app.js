@@ -924,16 +924,16 @@ async function modelDetails(id){
   catch{ S.details[id]=null; }
   return S.details[id];
 }
-async function waitFor(ids,label){
+async function waitFor(ids,label,loops=10,strict=false){
   let last=null;
-  for(let i=0;i<10;i++){
+  for(let i=0;i<loops;i++){
     const a=await buildArgs("creations_wait",`Wait until these creations finish (${label}). Use the longest wait the tool allows.`,{identifiers:ids});
     const r=await callMag("creations_wait",a.args);
     let rr=readResult(r);
     if(!rr.status&&!rr.urls.length&&!rr.images.length) rr=await extractWithClaude(r,"the status, identifiers and image urls of the creations");
     last=rr;
     if(FAIL.test(rr.status)) throw {code:"tool_error",message:"Magnific marked the creation as "+rr.status};
-    if(DONE.test(rr.status)||rr.urls.length||rr.images.length) return rr;
+    if(DONE.test(rr.status)||(!(strict&&rr.status)&&(rr.urls.length||rr.images.length))) return rr;
   }
   throw {code:"tool_error",message:"Still processing after several waits. Check your Magnific creations."};
 }
@@ -1671,6 +1671,271 @@ function closeLightbox(){ $("lightbox").hidden=true; $("lbImg").removeAttribute(
 $("lbClose").onclick=closeLightbox;
 $("lightbox").addEventListener("click",e=>{ if(e.target.id==="lightbox") closeLightbox(); });
 document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&!$("lightbox").hidden) closeLightbox(); });
+
+/* =====================================================================
+   REELS PRODUCTION — chat with Claude, stage by stage, then Seedance 2.5 via Magnific
+   Idea → Script → Characters → Locations & props → Directing → Render
+   ===================================================================== */
+const RL_KEY="bae_reels_v1";
+const RL_STAGES=[["idea","Idea"],["script","Script"],["characters","Characters"],["locations","Locations & props"],["directing","Directing"],["render","Render"]];
+/* House method for AI film, distilled from the Higgsfield Seedance 2.5 guide and Adil's ad workflow (football ad tutorial). */
+const RL_METHOD=`PRODUCTION METHOD (follow it exactly):
+1. IDEA — 3 distinct concepts built to go viral as short-form reels: a scroll-stopping HOOK in the first 1–2 seconds (visual surprise, relatable pain, pattern break), ONE clear emotion, a simple turn, the product moment as the payoff (never a lecture), and a loop-able or punchy ending + BAE end card. Cinematic production value. Each: title, hook, logline, beats, why it will travel, product moment.
+2. SCRIPT — scene by scene with timecodes summing to the target length: action, dialogue (who, language, exact line), on-screen text, sound. Short lines; dialogue sparse and natural.
+3. CHARACTERS — assets come first. One reference sheet per character, generated as an image: "Character reference sheet, two panels side by side on a seamless light stone backdrop: left full body front view, right close-up of the face" + exact face, age, hair, build, skin, wardrobe. Photoreal skin: natural texture and visible pores, lightly retouched even tone (BAE), no plastic or CGI sheen.
+4. LOCATIONS & PROPS — each location as an EMPTY establishing image (no people), the most important image because the video inherits its light and texture: "<place>, empty, <time of day>, <light>, anamorphic lens, shallow depth of field, fine film grain". Props/products as a product sheet: "front, back and top views". For an app moment, an iPhone 18 prop with the phone screen kept for a clean UI composite (screen glow, no readable text) unless the user supplies the UI.
+5. DIRECTING — one Seedance 2.5 prompt per scene (4–15 s each). Structure, in this order, as plain labelled blocks:
+   GLOBAL STYLE: format, look, grade, film texture, frame rate, "photorealistic — no 3D render, no game engine".
+   REFERENCES: one line per tag: "@img1 defines <name>'s face, hair and build. Do not use the image background or panel layout." / "@img3 defines the location: architecture, materials and light."
+   SCENE: one-line logline.
+   CHARACTERS / LOCATION: who is where, wardrobe (from the sheet), props.
+   FIRST FRAME & BLOCKING: exact start positions, screen sides (never swap sides), eyelines.
+   Shot 1 (0:00–0:02): shot size, lens as horizontal FOV in degrees (e.g. 18°, 35°, 47°, 63°), camera height, move (dolly-in, push-in, pull-back, orbit, walking follow, backpedal, handheld 6–10 cm shake, whip-pan, locked-off, gyro, FPV, crane), dutch angle in degrees if any, the action and the performance (objective, subtext, eye life). End with "Hard cut." Shot 2 (…) etc. Time every shot; vary sizes (wide → medium → close-up → insert); one idea per shot.
+   PHYSICS: how fabric, hair, liquid, objects move; real-time unless a speed ramp is written (e.g. 100% → 60% → 100%).
+   LIGHTING: the motivated source, direction, falloff.
+   CONSISTENCY: zero drift on faces, wardrobe and props; exact head-count; no duplicates; product details stay sharp.
+   AUDIO: bracket syntax — (music: …) or (no music, music added in edit), <sfx: … at 0:03>, {Dialogue language: <lang>. <Name>, <delivery>: "<line>"} with timestamps, 【on-screen text】 only when the script asks. Say "no subtitles".
+6. RENDER — each scene renders separately in Seedance 2.5, references attached in tag order.`;
+const RL_BAE=`BANK AL ETIHAD HOUSE STYLE (non-negotiable in every image and video prompt):
+- Cinematic, warm, premium, human. Clean natural light (golden hour, window light, soft daylight), warm neutral grade with orange and burgundy accents, fine grain, gentle halation. Never cold, never neon.
+- Modern Jordan only: today's Amman (Abdali, new towers, sleek cafés, modern homes and offices, modern malls). Modern Scandinavian IKEA-style interiors: light oak, white walls, clean lines.
+- People: modern, contemporary, refined "old money" minimal wardrobe for every age (tailored trousers, crisp shirts, fine knits, clean blazers, loafers or white leather sneakers), colours only from the BAE palette (ink #19181E, white, light stone #ECE8DF, ecru #FFFAF4, stone #CCC3B4, burgundy #A33755, raspberry #B9516E, blush #F1C0B6, sky blue #4BBCDF). NEVER orange clothing, never teal, never streetwear. No hijab, no headscarf, no traditional Arab clothing.
+- Skin: natural texture with visible pores, professionally retouched even tone, soft glow, never plastic.
+- Phones are always a modern iPhone 18 with no visible logo. No brand logos, no readable text in the scene except 【on-screen text】 written in the script.
+- End every reel on a clean BAE end card moment (soft light stone or BAE gradient background) — the logo itself is added in the edit, never generated.`;
+let RL=null, rlBusy=false, rlPending=[];
+const rlNew=()=>({id:Date.now().toString(36),title:"New reel",stage:"idea",chat:[],notes:"",ideas:[],pickedIdea:null,script:null,characters:[],locations:[],scenes:[],final:null});
+function rlLoad(){ try{ RL=JSON.parse(localStorage.getItem(RL_KEY)||"null"); }catch{} if(!RL||!RL.chat) RL=rlNew(); }
+function rlSave(){ try{ localStorage.setItem(RL_KEY,JSON.stringify(RL)); }catch(e){ /* storage full: drop old thumbnails */ try{ RL.chat.forEach(m=>{ if(m.thumbs) m.thumbs=m.thumbs.slice(0,2); }); localStorage.setItem(RL_KEY,JSON.stringify(RL)); }catch{} } }
+const rlSet=()=>({length:+$("rlLen").value||30,aspect:$("rlAspect").value||"9:16",lang:$("rlLang").value,res:$("rlRes").value});
+/* Global tags: characters first, then locations and props, in board order → @img1, @img2… */
+function rlRetag(){ let n=0; for(const e of [...RL.characters,...RL.locations]) e.tag="@img"+(++n); }
+const rlEls=()=>[...RL.characters,...RL.locations];
+const rlElByTag=t=>rlEls().find(e=>e.tag===t);
+async function rlThumb(src,max=360){ try{ const im=new Image(); im.src=src; await im.decode(); const k=Math.min(1,max/Math.max(im.width,im.height)); const c=document.createElement("canvas"); c.width=Math.round(im.width*k); c.height=Math.round(im.height*k); c.getContext("2d").drawImage(im,0,0,c.width,c.height); return c.toDataURL("image/jpeg",.78); }catch{ return null; } }
+
+/* ---------- chat ---------- */
+function rlState(){ /* what Claude sees of the project, without images */
+  return {title:RL.title,stage:RL.stage,settings:rlSet(),notes:RL.notes,ideas:RL.ideas,picked_idea:RL.pickedIdea,script:RL.script,
+    characters:RL.characters.map(({name,tag,role,description,wardrobe,prompt,id,lib})=>({name,tag,role,description,wardrobe,prompt,generated:!!id,library:lib||null})),
+    locations:RL.locations.map(({name,tag,kind,description,prompt,id})=>({name,tag,kind,description,prompt,generated:!!id})),
+    scenes:RL.scenes.map(({n,title,duration_s,refs,prompt,status})=>({n,title,duration_s,refs,prompt,rendered:status==="done"}))}; }
+function rlPromptFor(text){
+  const set=rlSet();
+  const hist=RL.chat.filter(m=>m.role!=="sys").slice(-14).map(m=>`${m.role==="u"?"USER":"YOU"}: ${m.text}${m.thumbs?.length?` [attached ${m.thumbs.length} image(s)]`:""}`).join("\n");
+  return `You are the creative director and AI film director of Bank al Etihad (Jordan) in a reels production studio. You talk with a BAE designer in a chat and build the production with them, one stage at a time. Answer in the user's language (Arabic or English, Jordanian tone is fine), warm and direct, short paragraphs.
+
+${RL_METHOD}
+
+${RL_BAE}
+
+TARGET: ${set.aspect} vertical-first reel, about ${set.length} seconds in total, dialogue language: ${set.lang}. BAE characters already in the user's Magnific library (they can be cast): Wissam (man, early 30s), Lina (young woman, dark braided ponytail), Sara (woman, light-blonde low bun), Omar (man in his 40s, heavy build).
+
+STAGE FLOW: idea → script → characters → locations → directing → render. Work ONLY on the current stage unless the user asks otherwise; when the user approves ("تمام", "ok", "approve", picks an idea…), move to the next stage AND deliver it in the same answer. Never skip ahead without approval. If attachments are given (storyboards, characters, places, scripts), analyse them carefully and record the useful facts in "notes" (faces, wardrobe, locations, shot order, text) because you will not see the images again.
+
+PROJECT STATE (JSON): ${trimJSON(rlState(),24000)}
+
+CONVERSATION SO FAR:
+${hist||"(none)"}
+
+USER NOW: ${text||"(attachments only)"}
+
+Reply with ONLY one JSON object. Always include "reply" (the chat message, no markdown tables) and "stage" (the current stage after this turn). Include a key ONLY when you create or change it, and then give its COMPLETE new value:
+- "title": short reel title
+- "notes": everything learned from attachments and decisions (append to existing notes)
+- "ideas": [{"title","hook","logline","beats","why_viral","product_moment"}]  (exactly 3 at the idea stage)
+- "picked_idea": index (0-based) when the user picks one
+- "script": {"title","duration_s","scenes":[{"n","time","title","action","dialogue":[{"who","line"}],"on_screen_text","sound"}]}
+- "characters": [{"name","role","description","wardrobe","library":null|"Wissam"|"Lina"|"Sara"|"Omar","prompt"}]  — prompt = the full image prompt for the character reference sheet; set "library" only when the user wants that BAE character
+- "locations": [{"name","kind":"location"|"prop","description","prompt"}]  — full image prompt; locations empty of people
+- "scenes": [{"n","title","duration_s","refs":["@img1",...],"prompt"}]  — full Seedance 2.5 prompt per scene following the DIRECTING structure, using the global tags: they are assigned by position — characters in your list order get @img1, @img2…, then locations/props continue the numbering (so with 2 characters, the first location is @img3), duration 4–15 s, ${set.aspect}
+- "chips": 2–4 short suggested next replies for the user, in their language`;
+}
+async function rlSend(text){
+  if(rlBusy) return; text=(text||"").trim(); const atts=rlPending.slice(); if(!text&&!atts.length) return;
+  if(!sample){ rlSys("Claude isn't available in this view. Open the page in claude.ai and allow Claude.",true); return; }
+  rlBusy=true; $("rlSend").disabled=true;
+  const thumbs=[]; for(const a of atts){ const t=await rlThumb(a.url,160); if(t) thumbs.push(t); }
+  RL.chat.push({role:"u",text,thumbs,t:Date.now()}); rlPending=[]; rlRenderAtt(); $("rlInput").value=""; rlRender(); rlTyping(true);
+  try{
+    const opts={modelTier:"complex",cache:false};
+    if(atts.length){ if(sampleImages) opts.images=atts.map(a=>a.blob).slice(0,10); else rlSys("This view can't send images to Claude, so only your text was used.",true); }
+    const out=await sample.json(rlPromptFor(text),opts);
+    rlApply(out||{});
+  }catch(e){ RL.chat.push({role:"sys",err:true,text:sampleCopy(e)}); }
+  finally{ rlTyping(false); rlBusy=false; $("rlSend").disabled=false; rlSave(); rlRender(); }
+}
+function rlApply(o){
+  if(o.title) RL.title=String(o.title);
+  if(o.notes) RL.notes=String(o.notes);
+  if(Array.isArray(o.ideas)) RL.ideas=o.ideas;
+  if(o.picked_idea!=null&&RL.ideas[o.picked_idea]) RL.pickedIdea=+o.picked_idea;
+  if(o.script&&typeof o.script==="object") RL.script=o.script;
+  /* keep generated images when an element keeps its name */
+  const keep=(oldL,newL)=>newL.map(n=>{ const o2=oldL.find(x=>x.name&&n.name&&x.name.toLowerCase()===String(n.name).toLowerCase()); return o2?{...o2,...n,id:o2.id,thumb:o2.thumb,lib:n.library||o2.lib||null,status:o2.status}:{...n,lib:n.library||null}; });
+  if(Array.isArray(o.characters)) RL.characters=keep(RL.characters,o.characters);
+  if(Array.isArray(o.locations)) RL.locations=keep(RL.locations,o.locations);
+  rlRetag(); rlLinkLibrary();
+  if(Array.isArray(o.scenes)) RL.scenes=o.scenes.map(sc=>{ const old=RL.scenes.find(x=>+x.n===+sc.n); return old&&old.prompt===sc.prompt?{...old,...sc}:{...sc,status:null,clip:null}; });
+  if(o.stage&&RL_STAGES.some(([k])=>k===o.stage)) RL.stage=o.stage;
+  RL.chat.push({role:"a",text:String(o.reply||"…"),chips:Array.isArray(o.chips)?o.chips.slice(0,4):[]});
+}
+/* A character cast from the BAE library uses the photo already in Magnific */
+function rlLinkLibrary(){ for(const c of RL.characters){ if(!c.lib) continue; const id="ch_"+String(c.lib).toLowerCase(); const mid=S.magIds?.[id]; if(mid&&!c.id){ c.id=mid; c.thumb=refById(id)?.src||null; c.fromLib=true; } } }
+function rlSys(t,bad){ RL.chat.push({role:"sys",text:t,err:!!bad}); rlRender(); }
+function rlTyping(on){ const b=$("rlMsgs"); b.querySelector(".rl-typing-m")?.remove(); if(on){ const d=document.createElement("div"); d.className="rl-m a rl-typing-m"; d.innerHTML='<span class="rl-typing" aria-label="Claude is thinking"><i></i><i></i><i></i></span>'; b.appendChild(d); b.scrollTop=b.scrollHeight; } }
+
+/* ---------- rendering ---------- */
+function rlRender(){
+  $("rlProj").textContent=RL.title||"New reel";
+  const b=$("rlMsgs");
+  if(!RL.chat.length){ b.innerHTML=`<div class="rl-m a">Hi! Tell me the reel you need — the product, the message, who it's for. You can attach a storyboard, character photos, places or a script and I'll analyse them.\n\nWe'll go step by step: idea → script → characters → locations → directing → render with Seedance 2.5.</div>`; }
+  else b.innerHTML=RL.chat.map(m=>`<div class="rl-m ${m.role==="u"?"u":m.role==="a"?"a":"sys"}${m.err?" err":""}" dir="auto">${esc(m.text||"")}${m.thumbs?.length?`<div class="imgs">${m.thumbs.map(t=>`<img src="${t}" alt="">`).join("")}</div>`:""}</div>`).join("");
+  b.scrollTop=b.scrollHeight;
+  const last=[...RL.chat].reverse().find(m=>m.role==="a");
+  const chips=last?.chips?.length?last.chips:(RL.chat.length?[]:["بدي ريلز عن Quick Pay: ادفع كل فواتيرك بكبسة زر","Give me 3 viral ideas for a BAE savings reel"]);
+  $("rlChips").innerHTML=chips.map(c=>`<button type="button" dir="auto">${esc(c)}</button>`).join("");
+  const si=RL_STAGES.findIndex(([k])=>k===RL.stage);
+  $("rlSteps").innerHTML=RL_STAGES.map(([k,l],i)=>`<li class="${i<si?"done":i===si?"on":""}">${i+1}. ${l}</li>`).join("");
+  rlBoard();
+}
+function rlBoard(){
+  const B=$("rlBoard"), out=[];
+  if(RL.notes) out.push(`<div class="rl-card"><h3>Brief notes</h3><p class="rl-empty" dir="auto" style="white-space:pre-wrap">${esc(RL.notes)}</p></div>`);
+  if(RL.ideas.length) out.push(`<div class="rl-card"><h3>Ideas</h3><span class="sub">Pick one to write the script</span><div class="rl-grid">${RL.ideas.map((x,i)=>`<div class="rl-item${RL.pickedIdea===i?" picked":""}" dir="auto"><span class="k">Idea ${i+1}</span><b>${esc(x.title||"")}</b><p><b style="font-size:14px">Hook:</b> ${esc(x.hook||"")}</p><p>${esc(x.logline||"")}</p>${x.why_viral?`<p><i>${esc(x.why_viral)}</i></p>`:""}<div class="rl-btns"><button class="btn small${RL.pickedIdea===i?"":" primary"}" type="button" data-rl="pick" data-i="${i}">${RL.pickedIdea===i?"Chosen":"Choose this idea"}</button></div></div>`).join("")}</div></div>`);
+  if(RL.script?.scenes?.length) out.push(`<div class="rl-card"><h3>Script · ${esc(RL.script.title||"")}</h3><span class="sub">${RL.script.duration_s||""} s</span><div>${RL.script.scenes.map(s=>`<div class="rl-beat" dir="auto"><span class="tc">${esc(s.time||"")}</span><div class="ln"><b>${esc(s.title||"")}</b><br>${esc(s.action||"")}${(s.dialogue||[]).map(d=>`<br>${esc(d.who||"")}: “${esc(d.line||"")}”`).join("")}${s.on_screen_text?`<br><i>【${esc(s.on_screen_text)}】</i>`:""}${s.sound?`<br><i>${esc(s.sound)}</i>`:""}</div></div>`).join("")}</div>${RL.stage==="script"?`<div class="rl-btns"><button class="btn small primary" type="button" data-rl="say" data-t="Script approved. Build the characters.">Approve script</button></div>`:""}</div>`);
+  const elCard=(e,kind)=>`<div class="rl-item" dir="auto"><div><span class="rl-tag">${e.tag}</span><b>${esc(e.name||"")}</b></div>${e.thumb?`<img class="rl-thumb" src="${e.thumb}" alt="">`:""}<p>${esc(e.description||e.role||"")}</p>${e.fromLib?`<p class="rl-status">From your BAE characters in Magnific</p>`:`<textarea class="rl-prompt" data-rl-edit="${kind}:${e.tag}" spellcheck="false">${esc(e.prompt||"")}</textarea>`}<div class="rl-btns">${e.fromLib?"":`<button class="btn small${e.id?"":" primary"}" type="button" data-rl="gen" data-tag="${e.tag}" ${e.status==="run"?"disabled":""}>${e.status==="run"?"Generating…":e.id?"Regenerate":"Generate in Magnific"}</button>`}<button class="btn small" type="button" data-rl="copy" data-tag="${e.tag}">Copy prompt</button>${e.web?`<a class="btn small" href="${esc(e.web)}" target="_blank" rel="noopener">Open in Magnific</a>`:""}</div>${e.err?`<p class="rl-status bad">${esc(e.err)}</p>`:""}</div>`;
+  if(RL.characters.length) out.push(`<div class="rl-card"><h3>Characters</h3><span class="sub">Reference sheets. Each one is attached to the video as its tag.</span><div class="rl-grid">${RL.characters.map(c=>elCard(c,"c")).join("")}</div>${RL.stage==="characters"?`<div class="rl-btns"><button class="btn small primary" type="button" data-rl="say" data-t="Characters approved. Build the locations and props.">Approve characters</button></div>`:""}</div>`);
+  if(RL.locations.length) out.push(`<div class="rl-card"><h3>Locations &amp; props</h3><span class="sub">Empty establishing images and product sheets. The video inherits their light.</span><div class="rl-grid">${RL.locations.map(l=>elCard(l,"l")).join("")}</div>${RL.stage==="locations"?`<div class="rl-btns"><button class="btn small primary" type="button" data-rl="say" data-t="Locations approved. Start the video directing: one Seedance 2.5 prompt per scene.">Approve locations</button></div>`:""}</div>`);
+  if(RL.scenes.length){
+    const missing=rlEls().filter(e=>!e.id).map(e=>e.tag);
+    out.push(`<div class="rl-card"><h3>Directing · Seedance 2.5</h3><span class="sub">${RL.scenes.length} scenes · ${rlSet().aspect} · ${rlSet().res}${missing.length?` · generate ${missing.join(", ")} first so they can be attached`:""}</span>${RL.scenes.map(sc=>`<div class="rl-item" dir="auto"><div><span class="rl-tag">Scene ${sc.n}</span><b>${esc(sc.title||"")}</b> <span class="sub">${sc.duration_s||""} s · ${(sc.refs||[]).join(" ")}</span></div>
+      ${sc.thumb?`<img class="rl-thumb${rlSet().aspect==="9:16"?" v":""}" src="${sc.thumb}" alt="">`:""}
+      <textarea class="rl-prompt tall" data-rl-edit="s:${sc.n}" spellcheck="false" dir="ltr">${esc(sc.prompt||"")}</textarea>
+      <div class="rl-btns"><button class="btn small${sc.status==="done"?"":" primary"}" type="button" data-rl="render" data-n="${sc.n}" ${sc.status==="run"?"disabled":""}>${sc.status==="run"?"Rendering…":sc.status==="done"?"Render again":"Render with Seedance 2.5"}</button><button class="btn small" type="button" data-rl="copys" data-n="${sc.n}">Copy prompt</button>${sc.url?`<a class="btn small" href="${esc(sc.url)}" target="_blank" rel="noopener">Open MP4</a>`:""}${sc.web?`<a class="btn small" href="${esc(sc.web)}" target="_blank" rel="noopener">Open in Magnific</a>`:""}</div>
+      ${sc.note?`<p class="rl-status${sc.status==="err"?" bad":""}">${esc(sc.note)}</p>`:""}</div>`).join("")}
+      ${RL.scenes.filter(s=>s.clip).length>1?`<div class="rl-btns"><button class="btn small primary" type="button" data-rl="join">Join all clips into one reel</button>${RL.final?.url?`<a class="btn small" href="${esc(RL.final.url)}" target="_blank" rel="noopener">Open final MP4</a>`:""}${RL.final?.web?`<a class="btn small" href="${esc(RL.final.web)}" target="_blank" rel="noopener">Open in Magnific</a>`:""}<span class="rl-status${RL.final?.err?" bad":""}">${esc(RL.final?.note||"")}</span></div>`:""}</div>`);
+  }
+  if(!out.length) out.push(`<div class="rl-card"><h3>Production board</h3><p class="rl-empty">Ideas, script, characters, locations and the Seedance prompts appear here as you build them in the chat. Every prompt stays editable.</p></div>`);
+  B.innerHTML=out.join("");
+}
+
+/* ---------- Magnific: images for characters and locations ---------- */
+async function rlGenElement(tag){
+  const e=rlElByTag(tag); if(!e||!mcp||!sample) return;
+  if(!S.connected) await connect(true);
+  e.status="run"; e.err=null; rlBoard();
+  try{
+    const isChar=RL.characters.includes(e), isProp=e.kind==="prop";
+    const plan=await buildArgs("images_generate",`Generate exactly 1 photorealistic image with model "${$("selNano").value||"Nano Banana 2.1"}" (Google Nano Banana 2.1). Use the prompt verbatim. Aspect ratio ${isChar?"16:9 (two-panel reference sheet)":isProp?"1:1":"16:9"}. Highest quality, 2K or 4K if offered. No references.`,
+      {model:$("selNano").value||null, model_label:"Nano Banana 2.1", prompt:e.prompt, aspect_ratio:isChar?"16:9":isProp?"1:1":"16:9", num_images:1},"default");
+    const r=await callMag("images_generate",oneImage(plan.args));
+    let rr=readResult(r); if(!rr.ids.length&&!rr.images.length) rr=await extractWithClaude(r,"the creation identifier of the image being generated");
+    const id=rr.ids[0]; e.web=rr.webUrl||null;
+    if(!rr.images.length&&!DONE.test(rr.status)&&id) rr=await waitFor([id],"reference image");
+    e.id=rr.ids[0]||id; if(!e.id) throw {code:"tool_error",message:"Magnific returned no creation."};
+    let shot=rr.images[0]; if(!shot){ const pv=await preview(e.id); shot=pv.image; }
+    if(shot) e.thumb=await rlThumb(`data:${shot.mime};base64,${shot.data}`,520);
+    e.status="ok";
+  }catch(err){ e.status="err"; e.err=mcpCopy(err); }
+  rlSave(); rlBoard();
+}
+
+/* ---------- Magnific: Seedance 2.5 video per scene ---------- */
+async function rlModel(){
+  if(RL._model) return RL._model;
+  let r; try{ r=await callMag("video_models_list",{}); }catch(e){ const a=await buildArgs("video_models_list","List the video models, searching for Seedance 2.5.",{query:"Seedance 2.5"}); r=await callMag("video_models_list",a.args); }
+  const raw=r.payload??r.content; let id=null, name="Seedance 2.5";
+  walk(raw,(k,v,o)=>{ if(id) return; if(typeof v==="string"&&/seedance[\s._-]*2[\s._-]*5/i.test(v)){ id=o.id||o.slug||o.identifier||o.model||o.key||v; name=o.name||o.label||v; } });
+  if(!id&&typeof raw==="string"){ const m=raw.match(/([a-z0-9._-]*seedance[a-z0-9._-]*2[._-]?5[a-z0-9._-]*)/i); if(m) id=m[1]; }
+  RL._model={id,name,raw:trimJSON(raw,6000)}; return RL._model;
+}
+/* Per scene, the tags it uses are attached in ascending order and renumbered @img1…: the prompt and the attachments always agree */
+function rlSceneRefs(sc){
+  const tags=[...new Set([...(sc.refs||[]),...((sc.prompt||"").match(/@img\d+/g)||[])])].filter(t=>rlElByTag(t)).sort((a,b)=>+a.slice(4)-+b.slice(4));
+  const map={}; tags.forEach((t,i)=>map[t]="@img"+(i+1));
+  const prompt=(sc.prompt||"").replace(/@img\d+/g,t=>map[t]||t);
+  return {prompt, refs:tags.map(t=>({tag:map[t],global:t,id:rlElByTag(t).id,name:rlElByTag(t).name})), missing:tags.filter(t=>!rlElByTag(t).id)};
+}
+async function rlRenderScene(n){
+  const sc=RL.scenes.find(x=>+x.n===+n); if(!sc||!mcp||!sample) return;
+  if(!S.connected) await connect(true);
+  const {prompt,refs,missing}=rlSceneRefs(sc);
+  if(missing.length){ sc.status="err"; sc.note=`Generate ${missing.join(", ")} first (Characters / Locations), so they can be attached.`; rlBoard(); return; }
+  sc.status="run"; sc.note="Finding Seedance 2.5…"; rlBoard();
+  const t0=Date.now();
+  try{
+    const m=await rlModel(); const set=rlSet();
+    sc.note="Sending to Seedance 2.5…"; rlBoard();
+    const plan=await buildArgs("video_generate",`Generate ONE video with the Seedance 2.5 model${m.id?` (model id "${m.id}")`:""}. Use the prompt verbatim. Duration ${Math.max(4,Math.min(15,+sc.duration_s||8))} seconds. Aspect ratio ${set.aspect}. ${set.res==="draft"?"Draft mode (480p preview) if the tool offers it.":`Resolution ${set.res}.`} Audio on (the prompt writes the sound). Attach EVERY item of Data.references as image references, in exactly this order, so the first is @img1, the second @img2 and so on; use each item's identifier. If the model id is not in Data, pick the Seedance 2.5 entry from Data.models.`,
+      {model:m.id, model_name:m.name, models:m.id?null:m.raw, prompt, duration_seconds:Math.max(4,Math.min(15,+sc.duration_s||8)), aspect_ratio:set.aspect, resolution:set.res==="draft"?"480p":set.res, mode:set.res==="draft"?"draft":"standard", references:refs.map(r=>({identifier:r.id,type:"image",name:r.tag}))},"default");
+    const args=fixRefs(plan.args,refs.map(r=>({id:r.id})));
+    const r=await callMag("video_generate",args);
+    let rr=readResult(r); if(!rr.ids.length&&!rr.urls.length) rr=await extractWithClaude(r,"the creation identifier of the video being generated");
+    const id=rr.ids[0]; sc.web=rr.webUrl||sc.web||null;
+    if(!DONE.test(rr.status)&&id){ sc.note="Rendering in Magnific… this can take a few minutes."; rlBoard(); rr=await waitFor([id],"Seedance 2.5 video",30,true); }
+    sc.clip=rr.ids[0]||id; sc.web=rr.webUrl||sc.web;
+    const all=[...rr.urls,...rr.links]; sc.url=all.find(u=>/\.(mp4|mov|webm)(\?|#|$)/i.test(u))||all.find(u=>/video|render|output/i.test(u)&&!/magnific\.com\/app\//i.test(u))||sc.url||null;
+    try{ const pv=await preview(sc.clip); if(pv.image) sc.thumb=await rlThumb(`data:${pv.image.mime};base64,${pv.image.data}`,520); if(!sc.url) sc.url=pv.urls.find(u=>/\.(mp4|mov|webm)/i.test(u))||null; }catch{}
+    sc.status="done"; sc.note=`Ready in ${fmtTime(t0)}${set.res==="draft"?" · draft 480p: render again at 720p or 1080p when you like it":""}. claude.ai pages can't play outside videos, so open the MP4 or Magnific to watch it.`;
+  }catch(err){ sc.status="err"; sc.note=mcpCopy(err); }
+  rlSave(); rlBoard();
+}
+async function rlJoin(){
+  const clips=RL.scenes.filter(s=>s.clip).sort((a,b)=>+a.n-+b.n);
+  RL.final={note:"Joining clips in Magnific…"}; rlBoard();
+  try{
+    const a=await buildArgs("video_concatenate","Join these finished video clips into one MP4, in exactly this order.",{identifiers:clips.map(c=>c.clip)},"default");
+    const r=await callMag("video_concatenate",a.args);
+    let rr=readResult(r); const id=rr.ids[0];
+    if(!DONE.test(rr.status)&&id) rr=await waitFor([id],"joined reel",20,true);
+    const all=[...rr.urls,...rr.links];
+    RL.final={id:rr.ids[0]||id,web:rr.webUrl||null,url:all.find(u=>/\.(mp4|mov|webm)(\?|#|$)/i.test(u))||null,note:"Final reel ready."};
+  }catch(err){ RL.final={err:true,note:mcpCopy(err)}; }
+  rlSave(); rlBoard();
+}
+
+/* ---------- wiring ---------- */
+(function(){
+  if(!$("reels")) return;
+  rlLoad(); rlRetag();
+  const R=$("reels");
+  const open=()=>{ R.hidden=false; R.dataset.view="chat"; rlLinkLibrary(); rlRender(); setTimeout(()=>$("rlInput").focus(),60); };
+  $("openReels").addEventListener("click",open);
+  $("closeReels").onclick=()=>{ R.hidden=true; $("openReels")?.focus(); };
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&!R.hidden&&document.activeElement?.id!=="rlInput") R.hidden=true; });
+  $("rlForm").onsubmit=e=>{ e.preventDefault(); rlSend($("rlInput").value); };
+  $("rlInput").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing){ e.preventDefault(); rlSend($("rlInput").value); } });
+  $("rlChips").onclick=e=>{ const b=e.target.closest("button"); if(b) rlSend(b.textContent); };
+  $("rlFile").onchange=e=>{ for(const f of [...e.target.files].slice(0,10-rlPending.length)) rlPending.push({blob:f,url:URL.createObjectURL(f),name:f.name}); e.target.value=""; rlRenderAtt(); };
+  /* paste or drop images straight into the chat */
+  $("rlInput").addEventListener("paste",e=>{ const fs=[...(e.clipboardData?.files||[])].filter(f=>/^image\//.test(f.type)); if(fs.length){ fs.forEach(f=>rlPending.push({blob:f,url:URL.createObjectURL(f),name:f.name})); rlRenderAtt(); } });
+  $("rlChatPane").addEventListener("dragover",e=>e.preventDefault());
+  $("rlChatPane").addEventListener("drop",e=>{ e.preventDefault(); [...(e.dataTransfer?.files||[])].filter(f=>/^image\//.test(f.type)).slice(0,10).forEach(f=>rlPending.push({blob:f,url:URL.createObjectURL(f),name:f.name})); rlRenderAtt(); });
+  $("rlAtt").onclick=e=>{ const b=e.target.closest("[data-i]"); if(b){ rlPending.splice(+b.dataset.i,1); rlRenderAtt(); } };
+  $("rlSettingsBtn").onclick=()=>{ const s=$("rlSettings"); s.hidden=!s.hidden; $("rlSettingsBtn").setAttribute("aria-expanded",String(!s.hidden)); };
+  for(const id of ["rlLen","rlAspect","rlLang","rlRes"]){ try{ const v=localStorage.getItem("bae_"+id); if(v) $(id).value=v; }catch{} $(id).onchange=()=>{ try{ localStorage.setItem("bae_"+id,$(id).value); }catch{} rlBoard(); }; }
+  $("rlNew").onclick=()=>{ if(RL.chat.length&&!confirmNew()) return; RL=rlNew(); rlSave(); rlRender(); };
+  function confirmNew(){ const b=$("rlNew"); if(b.dataset.sure){ delete b.dataset.sure; b.textContent="New reel"; return true; } b.dataset.sure="1"; b.textContent="Start over? Press again"; setTimeout(()=>{ delete b.dataset.sure; b.textContent="New reel"; },3000); return false; }
+  document.querySelectorAll("[data-rlview]").forEach(b=>b.onclick=()=>{ R.dataset.view=b.dataset.rlview; document.querySelectorAll("[data-rlview]").forEach(x=>x.setAttribute("aria-pressed",String(x===b))); });
+  $("rlBoard").addEventListener("click",async e=>{
+    const b=e.target.closest("[data-rl]"); if(!b) return; const a=b.dataset.rl;
+    const ar=RL.chat.some(m=>m.role==="u"&&/[\u0600-\u06FF]/.test(m.text||""));
+    const AR={"Script approved. Build the characters.":"تمام السيناريو، ابنيلي الشخصيات.","Characters approved. Build the locations and props.":"تمام الشخصيات، ابنيلي الأماكن والأغراض.","Locations approved. Start the video directing: one Seedance 2.5 prompt per scene.":"تمام الأماكن، ابدأ الـ Video Directing: برومبت Seedance 2.5 لكل مشهد."};
+    if(a==="pick") rlSend(ar?`اخترت الفكرة ${+b.dataset.i+1}: ${RL.ideas[+b.dataset.i]?.title||""}. اكتبلي السيناريو.`:`I choose idea ${+b.dataset.i+1}: ${RL.ideas[+b.dataset.i]?.title||""}. Write the script.`);
+    else if(a==="say") rlSend(ar&&AR[b.dataset.t]||b.dataset.t);
+    else if(a==="gen") rlGenElement(b.dataset.tag);
+    else if(a==="render") rlRenderScene(b.dataset.n);
+    else if(a==="join") rlJoin();
+    else if(a==="copy"||a==="copys"){ const txt=a==="copy"?rlElByTag(b.dataset.tag)?.prompt:rlSceneRefs(RL.scenes.find(x=>+x.n===+b.dataset.n)).prompt; try{ await navigator.clipboard.writeText(txt||""); b.textContent="Copied"; setTimeout(()=>b.textContent="Copy prompt",1400); }catch{} }
+  });
+  /* prompts are editable in place */
+  $("rlBoard").addEventListener("change",e=>{ const t=e.target.closest("[data-rl-edit]"); if(!t) return; const [k,key]=t.dataset.rlEdit.split(":");
+    if(k==="s"){ const sc=RL.scenes.find(x=>String(x.n)===key); if(sc){ sc.prompt=t.value; sc.status=sc.status==="done"?"done":null; } }
+    else { const el=rlElByTag(key); if(el) el.prompt=t.value; }
+    rlSave(); });
+})();
+function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>`<span class="th"><img src="${a.url}" alt="${esc(a.name||"")}"><button type="button" data-i="${i}" aria-label="Remove">×</button></span>`).join(""); }
 
 boot();
 })();
