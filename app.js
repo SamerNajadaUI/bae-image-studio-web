@@ -1816,6 +1816,17 @@ async function brFeedback(kind,key,verdict,note,item){
   try{ await RLS.db.collection("feedback").add({kind,key,verdict,note:String(note||"").slice(0,800),item:String(item||"").slice(0,1500),project:{id:RL.id,title:RL.title},by:RLS.uid||null,at:Date.now(),day:new Date().toLocaleDateString("en-CA")}); }
   catch(e){ log("✕","feedback save",{code:e?.code}); }
 }
+/* Silent learning: what the team DOES teaches the Director as much as what they say — choices, edits, revisions, regenerations, approvals */
+const brSeen=new Map();
+function brSignal(kind,signal,verdict,{note="",item="",before,after,key}={}){
+  if(!RL||!RLS.db) return;
+  const k=kind+"|"+signal+"|"+(key||item).slice(0,80); const t=brSeen.get(k)||0; if(Date.now()-t<15000) return; brSeen.set(k,Date.now());
+  const cut=(s,n)=>s==null?undefined:String(s).slice(0,n);
+  const doc={kind,signal,verdict,note:cut(note,800)||"",item:cut(item,1200)||"",project:{id:RL.id,title:RL.title,stage:RL.stage},by:RLS.uid||null,at:Date.now(),day:new Date().toLocaleDateString("en-CA"),implicit:true};
+  if(before!==undefined) doc.before=cut(before,900); if(after!==undefined) doc.after=cut(after,900);
+  RLS.db.collection("feedback").add(doc).catch(e=>log("✕","signal save",{code:e?.code}));
+}
+const ideaLine=x=>x?`${x.title} — ${x.hook||""} — ${x.logline||""}`:"";
 function rlRate(kind,key,item){
   const v=RL.rated?.[key];
   if(RL._rateOpen?.key===key) return `<form class="rl-rateform" data-kind="${kind}" data-key="${esc(key)}" data-item="${esc(String(item||"").slice(0,1200))}" data-v="${RL._rateOpen.v}"><span aria-hidden="true">${RL._rateOpen.v===1?"👍":"👎"}</span><input class="rl-field" name="n" dir="auto" placeholder="${RL._rateOpen.v===1?"What works? (optional)":"What's wrong? (optional)"}" aria-label="Why"><button class="a-btn" type="submit">Send</button></form>`;
@@ -1826,15 +1837,15 @@ function rlShowBrain(){
   const box=$("rlBrainBody"); box.innerHTML=`<p class="muted">Loading the Director's memory…</p>`;
   Promise.all([brLoad(true),brLoadFeedback()]).then(()=>{
     if(!RLS.db){ box.innerHTML=rlEmpty("The shared memory needs the page's database, which isn't available in this view. Open the page in claude.ai."); return; }
-    const fb=BR.feedback, up=fb.filter(x=>x.verdict===1).length, down=fb.filter(x=>x.verdict===-1).length, taught=fb.filter(x=>x.kind==="lesson").length;
+    const fb=BR.feedback, up=fb.filter(x=>!x.implicit&&x.verdict===1).length, down=fb.filter(x=>!x.implicit&&x.verdict===-1).length, taught=fb.filter(x=>x.kind==="lesson").length, sig=fb.filter(x=>x.implicit).length;
     box.innerHTML=`
-    <div class="br-stats"><div><b>${BR.sections.length}</b><span>knowledge sections</span></div><div><b>${BR.research.length}</b><span>mornings of research</span></div><div><b>${fb.length}</b><span>recent team notes · ${up} 👍 ${down} 👎 ${taught} lessons</span></div></div>
-    <form class="rl-card br-teach" id="brTeach"><div class="rl-ihead"><b>Teach the Director</b></div><p class="muted">A rule, an insight about Jordanians, a line people really say, an ad you loved and why. Every morning it's condensed into the team's lessons.</p><textarea class="rl-field" name="t" rows="3" dir="auto" placeholder="e.g. Jordanians laugh at the father who forwards every voice note… / Don't use the word 'easy' — say 'بكبسة'"></textarea><div class="rl-btns"><button class="btn primary small" type="submit">Teach</button><span class="t12 muted" id="brTeachMsg"></span></div></form>
+    <div class="br-stats"><div><b>${BR.sections.length}</b><span>knowledge sections</span></div><div><b>${BR.research.length}</b><span>mornings of research</span></div><div><b>${fb.length}</b><span>recent signals · ${up} 👍 ${down} 👎 · ${taught} lessons · ${sig} learned from actions</span></div></div>
+    <form class="rl-card br-teach" id="brTeach"><div class="rl-ihead"><b>Teach the Director</b></div><p class="muted">A rule, an insight about Jordanians, a line people really say, an ad you loved and why. It also learns silently from what everyone does — the ideas you choose and skip, your edits, revisions, regenerations and approvals. Every morning it's all condensed into the team's lessons.</p><textarea class="rl-field" name="t" rows="3" dir="auto" placeholder="e.g. Jordanians laugh at the father who forwards every voice note… / Don't use the word 'easy' — say 'بكبسة'"></textarea><div class="rl-btns"><button class="btn primary small" type="submit">Teach</button><span class="t12 muted" id="brTeachMsg"></span></div></form>
     ${BR.research.length?`<details class="rl-card br-sec" open><summary><b>This morning's research</b><span class="t12 muted">${esc(BR.research[0].date||"")} · runs every day at 5:33 AM Amman time</span></summary><div class="br-text" dir="auto">${esc(BR.research[0].text||"")}</div>${(BR.research[0].sources||[]).length?`<p class="t12 muted">Sources: ${(BR.research[0].sources||[]).slice(0,8).map(u=>`<a href="${esc(u.url||u)}" target="_blank" rel="noopener">${esc(u.title||u.url||u)}</a>`).join(" · ")}</p>`:""}${BR.research.length>1?`<p class="t12 muted">Earlier: ${BR.research.slice(1).map(r=>esc(r.date)).join(" · ")}</p>`:""}</details>`:`<div class="rl-card"><b>Daily research</b><p class="muted">The first morning research arrives at 5:33 AM Amman time.</p></div>`}
     ${BR.sections.map(s=>`<details class="rl-card br-sec"${s.id==="lessons"?" open":""}><summary><b>${esc(s.title||s.id)}</b><span class="t12 muted">${s.updatedAt?"Updated "+rlAgo(s.updatedAt):""}</span></summary>
       <div class="br-text" dir="auto" data-sec="${esc(s.id)}">${esc(s.text||"")}</div>
       ${BR.canEdit?`<div class="rl-btns"><button class="a-btn" type="button" data-bredit="${esc(s.id)}">Edit</button></div>`:""}</details>`).join("")}
-    ${fb.length?`<div class="rl-card"><div class="rl-ihead"><b>Latest team notes</b></div>${fb.slice(0,15).map(x=>`<div class="br-fb" dir="auto"><span>${x.kind==="lesson"?"✎":x.verdict===1?"👍":"👎"}</span><div><b>${esc(x.kind==="lesson"?"Lesson":x.kind)}</b>${x.note?` — ${esc(x.note)}`:""}<br><span class="t12 muted">${esc(x.project?.title||"")}${x.by&&x.by===RLS.uid?" · you":""} · ${rlAgo(x.at)}</span></div></div>`).join("")}</div>`:""}`;
+    ${fb.length?`<div class="rl-card"><div class="rl-ihead"><b>Latest team notes</b></div>${fb.slice(0,15).map(x=>`<div class="br-fb" dir="auto"><span>${x.kind==="lesson"?"✎":x.implicit?"·":x.verdict===1?"👍":"👎"}</span><div><b>${esc(x.kind==="lesson"?"Lesson":x.kind)}${x.signal?` · ${esc(String(x.signal).replace(/_/g," "))}`:""}</b>${x.note?` — ${esc(x.note)}`:""}<br><span class="t12 muted">${esc(x.project?.title||"")}${x.by&&x.by===RLS.uid?" · you":""} · ${rlAgo(x.at)}</span></div></div>`).join("")}</div>`:""}`;
   });
 }
 
@@ -1886,7 +1897,9 @@ async function rlSend(text){
   if(!sample){ rlSys("Claude isn't available in this view. Open the page in claude.ai and allow Claude.",true); return; }
   rlBusy=true; $("rlSend").disabled=true;
   const thumbs=[]; for(const a of atts){ const t=await rlThumb(a.url,160); if(t) thumbs.push(t); }
-  RL.chat.push({role:"u",text,thumbs,n:atts.length,t:Date.now()}); rlPending=[]; rlRenderAtt(); $("rlInput").value=""; rlRenderChat(); rlTyping(true);
+  RL.chat.push({role:"u",text,thumbs,n:atts.length,t:Date.now()});
+  if(text) brSignal("chat","request",0,{note:text,item:`stage ${RL.stage} · viewing ${RL.view}${atts.length?` · ${atts.length} image(s) attached`:""}`,key:text});
+  rlPending=[]; rlRenderAtt(); $("rlInput").value=""; rlRenderChat(); rlTyping(true);
   try{
     const opts={modelTier:"complex",cache:false};
     if(atts.length){ if(sampleImages) opts.images=atts.map(a=>a.blob).slice(0,10); else rlSys("This view can't send images to Claude, so only your text was used.",true); }
@@ -1900,7 +1913,8 @@ function rlApply(o){
   if(o.title) RL.title=String(o.title);
   if(o.notes) RL.notes=String(o.notes);
   if(Array.isArray(o.ideas)&&o.ideas.length){ if(RL.ideas.length) RL.ideasPrev=[...RL.ideas.filter(x=>x.title!==RL.picked?.title),...RL.ideasPrev].slice(0,12); RL.ideas=o.ideas; }
-  if(o.picked_idea!=null&&RL.ideas[o.picked_idea]) RL.picked=RL.ideas[+o.picked_idea];
+  if(o.picked_idea!=null&&RL.ideas[o.picked_idea]){ const was=RL.picked; RL.picked=RL.ideas[+o.picked_idea];
+    if(!was||was.title!==RL.picked.title) brSignal("idea","chosen",1,{item:ideaLine(RL.picked),note:"Rejected in the same set: "+RL.ideas.filter(x=>x!==RL.picked).map(ideaLine).join(" | "),key:RL.picked.title}); }
   if(o.script&&typeof o.script==="object") RL.script=o.script;
   /* elements keep their tag, image and edits; new ones take the next free tag */
   const merge=(oldL,newL)=>newL.map(n=>{ const o2=oldL.find(x=>n.tag&&x.tag===n.tag)||oldL.find(x=>x.name&&n.name&&x.name.toLowerCase()===String(n.name).toLowerCase());
@@ -1945,6 +1959,7 @@ async function rlAddElement(kind,name,desc,lib){
 }
 async function rlReviseElement(tag,instruction){
   const e=rlElByTag(tag); if(!e||!instruction) return;
+  brSignal(RL.characters.includes(e)?"character":e.kind||"location","revised",-1,{note:instruction,item:`${e.name}: ${e.description||""}`,before:e.prompt,key:e.tag+instruction});
   e.status="write"; e.err=null; rlBoard();
   try{ const kind=RL.characters.includes(e)?"character":e.kind==="prop"?"prop":"location";
     const o=await rlWriteElement(kind,{name:e.name,role:e.role,description:e.description,wardrobe:e.wardrobe,prompt:e.prompt},instruction);
@@ -2075,6 +2090,10 @@ function rlElCard(e,kind){
     ${e.fromLib?"":`<form class="rl-revise" data-revise="${e.tag}"><input class="rl-field" name="q" placeholder="Ask for a change… e.g. older, navy blazer" aria-label="Ask Claude to change ${esc(e.name||"")}" dir="auto"><button class="a-btn" type="submit" ${writing?"disabled":""}>Revise</button></form>`}
     ${e.err?`<p class="rl-status bad">${esc(e.err)}</p>`:""}</div>`;
 }
+function rlEditValue(t){ const p=t.dataset.rlEdit.split(":");
+  if(p[0]==="s"||p[0]==="f"){ const sc=RL.scenes.find(x=>String(x.n)===p[1]); return sc?(p[0]==="s"?sc.prompt:sc.frame_prompt)||"":null; }
+  if(p[0]==="b"){ const s=RL.script?.scenes?.[+p[1]]; if(!s) return null; return p[2]==="dialogue"?(s.dialogue||[]).map(d=>`${d.who||""}: ${d.line||""}`).join("\n"):s[p[2]]||""; }
+  const el=rlElByTag(p[1]); return el?el[p[2]||"prompt"]||"":null; }
 function rlCommit(t){ const parts=t.dataset.rlEdit.split(":"); const k=parts[0];
   if(k==="s"||k==="f"){ const sc=RL.scenes.find(x=>String(x.n)===parts[1]); if(sc){ if(k==="s") sc.prompt=t.value; else sc.frame_prompt=t.value; } return; }
   if(k==="b"){ const s=RL.script?.scenes?.[+parts[1]]; if(!s) return; const f=parts[2];
@@ -2318,6 +2337,7 @@ async function rlBuildSpace(){
     if(RL.scenes.some(s=>s.frame?.id)) await step("Wire a Seedance 2.5 node for each shot",rlWireSpace,true);
     await step("Tidy the layout",async()=>{ const a=await buildArgs("spaces_arrange_nodes","Tidy every workflow of the Space Data.space into left-to-right rows.",{space:sp.id}); await callMag("spaces_arrange_nodes",a.args); return ""; },true);
     sp.status="done"; sp.builtAt=Date.now();
+    brSignal("project","delivered",1,{item:`${RL.title} · idea: ${ideaLine(RL.picked)} · ${RL.characters.length} cast, ${RL.locations.length} locations, ${RL.scenes.length} shots, ${RL.scenes.filter(s=>s.status==="done").length} filmed`,note:"The team took this production all the way to a Magnific Space.",key:"delivered"});
   }catch(e){ sp.status="err"; sp.err=mcpCopy(e); }
   rlSave(); rlBoard();
 }
@@ -2402,18 +2422,24 @@ async function rlBible(){
     const b=e.target.closest("[data-rl]"); if(!b) return; const a=b.dataset.rl, ar=rlAr();
     if(a==="pick") rlSend(ar?`اخترت الفكرة ${+b.dataset.i+1}: ${RL.ideas[+b.dataset.i]?.title||""}. اكتبلي السيناريو.`:`I choose idea ${+b.dataset.i+1}: ${RL.ideas[+b.dataset.i]?.title||""}. Write the script.`);
     else if(a==="pickprev"){ const x=RL.ideasPrev[+b.dataset.i]; if(x){ RL.ideas=[x,...RL.ideas.filter(y=>y.title!==x.title)].slice(0,4); RL.ideasPrev.splice(+b.dataset.i,1); rlSend(ar?`اخترت الفكرة: ${x.title}. اكتبلي السيناريو.`:`I choose the idea "${x.title}". Write the script.`); } }
-    else if(a==="say"){ const t=RL_SAY[b.dataset.t]; rlSend(t?t[ar?1:0]:b.dataset.t); }
+    else if(a==="say"){ const k=b.dataset.t, t=RL_SAY[k];
+      if(k==="moreIdeas") brSignal("idea","asked_for_more",-1,{item:RL.ideas.map(ideaLine).join(" | "),note:"None of these was chosen; the user asked for new ideas.",key:"more"});
+      if(k==="approveScript") brSignal("script","approved",1,{item:(RL.script?.scenes||[]).map(s=>`${s.title}: ${s.action}`).join(" / "),key:"script"});
+      if(k==="approveCast") brSignal("character","approved",1,{item:RL.characters.map(e=>`${e.name}: ${e.description||""}`).join(" | "),key:"cast"});
+      if(k==="approveLoc") brSignal("location","approved",1,{item:RL.locations.map(e=>`${e.name}: ${e.description||""}`).join(" | "),key:"loc"});
+      rlSend(t?t[ar?1:0]:k); }
     else if(a==="sayraw") rlSend(b.dataset.t);
-    else if(a==="gen") rlGenElement(b.dataset.tag);
+    else if(a==="gen"){ const el=rlElByTag(b.dataset.tag); if(el?.id) brSignal(RL.characters.includes(el)?"character":el.kind||"location","regenerated",-1,{item:`${el.name}: ${String(el.prompt||"").slice(0,700)}`,note:"The user wasn't satisfied with the image and generated it again.",key:el.tag+el.id}); rlGenElement(b.dataset.tag); }
     else if(a==="genall") (b.dataset.list==="c"?RL.characters:RL.locations).filter(x=>!x.id&&!x.fromLib&&x.prompt).forEach(x=>rlGenElement(x.tag));
     else if(a==="edit"){ const el=rlElByTag(b.dataset.tag); if(el){ el._edit=true; rlBoard(); } }
     else if(a==="editdone"){ const el=rlElByTag(b.dataset.tag); if(el){ el._edit=false; el.err=null; if(el.status==="err") el.status=null; rlSave(); rlBoard(); } }
-    else if(a==="remove"){ if(!b.dataset.sure){ b.dataset.sure="1"; b.textContent="Remove for good?"; b.classList.add("danger"); return; } RL.characters=RL.characters.filter(x=>x.tag!==b.dataset.tag); RL.locations=RL.locations.filter(x=>x.tag!==b.dataset.tag); rlSave(); rlBoard(); }
+    else if(a==="remove"){ if(!b.dataset.sure){ b.dataset.sure="1"; b.textContent="Remove for good?"; b.classList.add("danger"); return; } const el=rlElByTag(b.dataset.tag); if(el) brSignal(RL.characters.includes(el)?"character":el.kind||"location","removed",-1,{item:`${el.name}: ${el.description||""}`,key:el.tag});
+      RL.characters=RL.characters.filter(x=>x.tag!==b.dataset.tag); RL.locations=RL.locations.filter(x=>x.tag!==b.dataset.tag); rlSave(); rlBoard(); }
     else if(a==="add"){ RL._adding=b.dataset.k; rlBoard(); setTimeout(()=>B.querySelector(".rl-addform input")?.focus(),30); }
     else if(a==="addcancel"){ RL._adding=null; rlBoard(); }
     else if(a==="cast"){ rlAddElement("character",b.dataset.n,"BAE character from the library",b.dataset.n); }
-    else if(a==="frame") rlGenFrame(b.dataset.n);
-    else if(a==="render") rlRenderScene(b.dataset.n);
+    else if(a==="frame"){ const sc=RL.scenes.find(x=>String(x.n)===b.dataset.n); if(sc?.frame?.id) brSignal("shot","frame_regenerated",-1,{item:`Scene ${sc.n} first frame: ${String(sc.frame_prompt||"").slice(0,700)}`,key:"f"+sc.frame.id}); rlGenFrame(b.dataset.n); }
+    else if(a==="render"){ const sc=RL.scenes.find(x=>String(x.n)===b.dataset.n); if(sc?.clip) brSignal("shot","video_regenerated",-1,{item:`Scene ${sc.n}: ${String(sc.prompt||"").slice(0,800)}`,key:"v"+sc.clip}); rlRenderScene(b.dataset.n); }
     else if(a==="allframes") RL.scenes.filter(s=>!s.frame?.id).forEach(s=>rlGenFrame(s.n));
     else if(a==="allvideos") RL.scenes.filter(s=>s.status!=="done").forEach(s=>rlRenderScene(s.n));
     else if(a==="play"){ const sc=RL.scenes.find(x=>String(x.n)===b.dataset.n); if(sc){ b.disabled=true; b.textContent="Loading…"; if(!S.connected) await connect(true); await rlLoadVideo(sc,sc.clip); if(!sc._src&&!sc.url) sc._blocked=true; rlBoard(); } }
@@ -2430,7 +2456,9 @@ async function rlBible(){
   });
   B.addEventListener("change",e=>{
     const s=e.target.closest("[data-rl-start]"); if(s){ const sc=RL.scenes.find(x=>String(x.n)===s.dataset.rlStart); if(sc){ sc.useFrame=s.checked; rlSave(); rlBoard(); } return; }
-    const t=e.target.closest("[data-rl-edit]"); if(!t) return; rlCommit(t); rlSave(); });
+    const t=e.target.closest("[data-rl-edit]"); if(!t) return; const before=rlEditValue(t); rlCommit(t); rlSave();
+    if(before!=null&&before!==t.value){ const p=t.dataset.rlEdit.split(":"), kind=p[0]==="b"?"script":p[0]==="s"||p[0]==="f"?"shot":p[0]==="c"?"character":"location";
+      brSignal(kind,"edited_by_user",0,{note:`The user rewrote ${p[0]==="b"?"script "+p[2]:p[0]==="s"?"the Seedance prompt":p[0]==="f"?"the first-frame prompt":(p[2]||"prompt")} by hand — learn from the difference.`,before,after:t.value,key:t.dataset.rlEdit}); } });
 })();
 function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>`<span class="th"><img src="${a.url}" alt="${esc(a.name||"")}"><button type="button" data-i="${i}" aria-label="Remove">×</button></span>`).join(""); }
 
