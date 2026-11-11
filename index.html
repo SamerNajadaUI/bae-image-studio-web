@@ -270,6 +270,42 @@ details.acc[open]>summary::after{content:"–"}
 .rl-btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .rl-thumb{width:100%;aspect-ratio:16/9;border-radius:12px;object-fit:cover;background:var(--orange-light);display:block}
 .rl-thumb.v{aspect-ratio:9/16;max-height:360px;width:auto;margin:0 auto}
+.rl-media{position:relative;width:100%;border-radius:14px;overflow:hidden;background:var(--orange-light);display:grid;place-items:center}
+.rl-media.dark{background:#19181E}
+.rl-media>img,.rl-media>video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.rl-media>img{cursor:zoom-in}
+.rl-media>video{object-fit:contain;background:#19181E}
+.rl-media .ph{font-size:13px;color:var(--ink-light);padding:12px;text-align:center}
+.rl-media.dark .ph{color:#B9B4AC}
+.rl-media.busy::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.22) 50%,transparent 70%);background-size:220% 100%;animation:rlShim 1.4s linear infinite}
+@keyframes rlShim{from{background-position:120% 0}to{background-position:-120% 0}}
+.rl-busy{position:absolute;left:10px;bottom:10px;z-index:1;font-size:12px;background:rgba(25,24,30,.78);color:#fff;border-radius:999px;padding:5px 10px}
+.rl-badge{position:absolute;top:10px;left:10px;font-size:11px;letter-spacing:.04em;background:rgba(255,255,255,.9);color:var(--ink);border-radius:999px;padding:3px 9px;pointer-events:none}
+.rl-shot{display:grid;grid-template-columns:minmax(0,240px) minmax(0,1fr);gap:18px;border:1px solid var(--stone-light);border-radius:18px;padding:14px;margin-top:12px;background:var(--white);scroll-margin-top:16px}
+.rl-shot-l{display:flex;flex-direction:column;gap:10px}
+.rl-shot-r{display:flex;flex-direction:column;gap:10px;min-width:0}
+.rl-shot-r b{font-weight:400;font-size:18px}
+.rl-lab,.rl-vp summary{font-size:13px;color:var(--ink);display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.rl-lab span,.rl-vp summary span{color:var(--ink-light);font-size:12px}
+.rl-vp summary{cursor:pointer;margin-bottom:8px}
+.rl-chk{font-size:13px;color:var(--ink-med);display:flex;gap:8px;align-items:center}
+.rl-refs{display:flex;flex-wrap:wrap;gap:6px}
+.rl-ref{display:flex;align-items:center;gap:5px;background:var(--orange-light);border-radius:999px;padding:3px 8px 3px 3px;font-size:11px}
+.rl-ref img,.rl-ref i{width:26px;height:26px;border-radius:50%;object-fit:cover;cursor:zoom-in;background:var(--stone-light);display:block}
+.rl-ref b{font-weight:400}
+.rl-sb{display:flex;gap:8px;overflow-x:auto;padding:4px 0 10px;margin-top:6px}
+.rl-sbi{position:relative;flex:0 0 76px;border:0;border-radius:10px;overflow:hidden;background:#19181E;padding:0;cursor:pointer}
+.rl-sbi img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.rl-sbi span{position:absolute;left:6px;bottom:5px;font-size:11px;color:#fff;background:rgba(25,24,30,.7);border-radius:999px;padding:1px 7px}
+.rl-sbi i{position:absolute;right:6px;top:5px;font-style:normal;font-size:10px;color:#fff}
+.rl-sbi .dot{position:absolute;right:7px;bottom:8px;width:8px;height:8px;border-radius:50%;background:var(--orange-dark);animation:rlPulse 1s ease-in-out infinite alternate}
+@keyframes rlPulse{from{opacity:.3}to{opacity:1}}
+.rl-lb{position:fixed;inset:0;z-index:300;background:rgba(25,24,30,.9);display:grid;place-items:center;padding:24px;cursor:zoom-out}
+.rl-lb[hidden]{display:none}
+.rl-lb img{max-width:100%;max-height:100%;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.rl-lb button{position:absolute;top:16px;right:16px;width:44px;height:44px;border-radius:50%;border:0;background:#fff;font-size:24px;cursor:pointer}
+@media (max-width:700px){ .rl-shot{grid-template-columns:minmax(0,1fr)} .rl-shot-l{width:min(100%,300px);margin:0 auto} }
+@media (prefers-reduced-motion:reduce){ .rl-media.busy::after,.rl-sbi .dot{animation:none} }
 .rl-status{font-size:12px;color:var(--ink-med)}
 .rl-status.bad{color:var(--warn)}
 .rl-beat{display:grid;grid-template-columns:86px 1fr;gap:10px;padding:10px 0;border-top:1px solid var(--stone-light)}
