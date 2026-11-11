@@ -1784,6 +1784,60 @@ async function rlPump(){
 let rlSoonT=null; function rlBoardSoon(){ clearTimeout(rlSoonT); rlSoonT=setTimeout(()=>{ if(RL&&!$("rlProjView").hidden) rlBoard(); else if(!$("rlLib").hidden) rlShowLib(); },120); }
 const rlImgOf=e=>e?.lib&&e.fromLib?"lib:ch_"+String(e.lib).toLowerCase():e?.id||null;
 
+
+/* ---------- the Director's brain: shared team memory (knowledge, daily research, team feedback) ---------- */
+const BR={sections:[],research:[],feedback:[],loaded:0,canEdit:false,uid:null};
+async function brLoad(force){
+  await rlStoreInit(); const db=RLS.db; if(!db) return BR;
+  if(!force&&Date.now()-BR.loaded<60000) return BR;
+  try{ const [s,r]=await Promise.all([db.collection("brain").get(),db.collection("research").orderBy("date","desc").limit(7).get()]);
+    BR.sections=s.docs.map(d=>({id:d.id,...JSON.parse(JSON.stringify(d.data()))})).sort((a,b)=>(a.order||99)-(b.order||99));
+    BR.research=r.docs.map(d=>({id:d.id,...JSON.parse(JSON.stringify(d.data()))})); BR.loaded=Date.now(); }
+  catch(e){ log("✕","brain load",{code:e?.code}); }
+  try{ const u=await window.claude?.use?.("user"); BR.canEdit=!!u?.canEdit?.(); BR.uid=RLS.uid; }catch{}
+  return BR;
+}
+async function brLoadFeedback(){ if(!RLS.db) return []; try{ const f=await RLS.db.collection("feedback").orderBy("at","desc").limit(30).get(); BR.feedback=f.docs.map(d=>({id:d.id,...JSON.parse(JSON.stringify(d.data()))})); }catch{} return BR.feedback; }
+/* what the Director reads before every answer: knowledge first, then the team's lessons, then this morning's research */
+function brText(){
+  if(!BR.sections.length&&!BR.research.length) return "";
+  const cut=(t,n)=>String(t||"").length>n?String(t).slice(0,n)+"…":String(t||"");
+  const lessons=BR.sections.find(s=>s.id==="lessons"), rest=BR.sections.filter(s=>s.id!=="lessons");
+  const R=BR.research[0];
+  return `DIRECTOR'S BRAIN — the team's shared memory. Think with it on every answer. Where the team's lessons disagree with general knowledge, the lessons win.
+${rest.map(s=>`### ${s.title}\n${cut(s.text,9000)}`).join("\n\n")}
+${lessons?`### ${lessons.title}\n${cut(lessons.text,5000)}`:""}
+${R?`### This morning's research (${R.date})\n${cut(R.text,4000)}`:""}`;
+}
+async function brFeedback(kind,key,verdict,note,item){
+  if(!RL) return;
+  RL.rated=RL.rated||{}; RL.rated[key]=verdict; rlSave();
+  if(!RLS.db) return;
+  try{ await RLS.db.collection("feedback").add({kind,key,verdict,note:String(note||"").slice(0,800),item:String(item||"").slice(0,1500),project:{id:RL.id,title:RL.title},by:RLS.uid||null,at:Date.now(),day:new Date().toLocaleDateString("en-CA")}); }
+  catch(e){ log("✕","feedback save",{code:e?.code}); }
+}
+function rlRate(kind,key,item){
+  const v=RL.rated?.[key];
+  if(RL._rateOpen?.key===key) return `<form class="rl-rateform" data-kind="${kind}" data-key="${esc(key)}" data-item="${esc(String(item||"").slice(0,1200))}" data-v="${RL._rateOpen.v}"><span aria-hidden="true">${RL._rateOpen.v===1?"👍":"👎"}</span><input class="rl-field" name="n" dir="auto" placeholder="${RL._rateOpen.v===1?"What works? (optional)":"What's wrong? (optional)"}" aria-label="Why"><button class="a-btn" type="submit">Send</button></form>`;
+  return `<div class="rl-rate" data-kind="${kind}" data-key="${esc(key)}" data-item="${esc(String(item||"").slice(0,1200))}"><button type="button" data-v="1" aria-pressed="${v===1}" title="Good — teach the Director">👍</button><button type="button" data-v="-1" aria-pressed="${v===-1}" title="Weak — teach the Director">👎</button></div>`;
+}
+function rlShowBrain(){
+  $("rlLib").hidden=true; $("rlProjView").hidden=true; $("rlBrain").hidden=false; $("reels").dataset.mode="brain"; $("reels").scrollTop=0;
+  const box=$("rlBrainBody"); box.innerHTML=`<p class="muted">Loading the Director's memory…</p>`;
+  Promise.all([brLoad(true),brLoadFeedback()]).then(()=>{
+    if(!RLS.db){ box.innerHTML=rlEmpty("The shared memory needs the page's database, which isn't available in this view. Open the page in claude.ai."); return; }
+    const fb=BR.feedback, up=fb.filter(x=>x.verdict===1).length, down=fb.filter(x=>x.verdict===-1).length, taught=fb.filter(x=>x.kind==="lesson").length;
+    box.innerHTML=`
+    <div class="br-stats"><div><b>${BR.sections.length}</b><span>knowledge sections</span></div><div><b>${BR.research.length}</b><span>mornings of research</span></div><div><b>${fb.length}</b><span>recent team notes · ${up} 👍 ${down} 👎 ${taught} lessons</span></div></div>
+    <form class="rl-card br-teach" id="brTeach"><div class="rl-ihead"><b>Teach the Director</b></div><p class="muted">A rule, an insight about Jordanians, a line people really say, an ad you loved and why. Every morning it's condensed into the team's lessons.</p><textarea class="rl-field" name="t" rows="3" dir="auto" placeholder="e.g. Jordanians laugh at the father who forwards every voice note… / Don't use the word 'easy' — say 'بكبسة'"></textarea><div class="rl-btns"><button class="btn primary small" type="submit">Teach</button><span class="t12 muted" id="brTeachMsg"></span></div></form>
+    ${BR.research.length?`<details class="rl-card br-sec" open><summary><b>This morning's research</b><span class="t12 muted">${esc(BR.research[0].date||"")} · runs every day at 5:33 AM Amman time</span></summary><div class="br-text" dir="auto">${esc(BR.research[0].text||"")}</div>${(BR.research[0].sources||[]).length?`<p class="t12 muted">Sources: ${(BR.research[0].sources||[]).slice(0,8).map(u=>`<a href="${esc(u.url||u)}" target="_blank" rel="noopener">${esc(u.title||u.url||u)}</a>`).join(" · ")}</p>`:""}${BR.research.length>1?`<p class="t12 muted">Earlier: ${BR.research.slice(1).map(r=>esc(r.date)).join(" · ")}</p>`:""}</details>`:`<div class="rl-card"><b>Daily research</b><p class="muted">The first morning research arrives at 5:33 AM Amman time.</p></div>`}
+    ${BR.sections.map(s=>`<details class="rl-card br-sec"${s.id==="lessons"?" open":""}><summary><b>${esc(s.title||s.id)}</b><span class="t12 muted">${s.updatedAt?"Updated "+rlAgo(s.updatedAt):""}</span></summary>
+      <div class="br-text" dir="auto" data-sec="${esc(s.id)}">${esc(s.text||"")}</div>
+      ${BR.canEdit?`<div class="rl-btns"><button class="a-btn" type="button" data-bredit="${esc(s.id)}">Edit</button></div>`:""}</details>`).join("")}
+    ${fb.length?`<div class="rl-card"><div class="rl-ihead"><b>Latest team notes</b></div>${fb.slice(0,15).map(x=>`<div class="br-fb" dir="auto"><span>${x.kind==="lesson"?"✎":x.verdict===1?"👍":"👎"}</span><div><b>${esc(x.kind==="lesson"?"Lesson":x.kind)}</b>${x.note?` — ${esc(x.note)}`:""}<br><span class="t12 muted">${esc(x.project?.title||"")}${x.by&&x.by===RLS.uid?" · you":""} · ${rlAgo(x.at)}</span></div></div>`).join("")}</div>`:""}`;
+  });
+}
+
 /* ---------- Claude: the director in the chat ---------- */
 function rlState(){
   const set=rlSet();
@@ -1801,6 +1855,8 @@ ${RL_METHOD}
 
 ${RL_BAE}
 
+${brText()}
+
 TARGET: ${set.aspect} reel, about ${set.length} seconds in total, dialogue language: ${set.lang}. BAE characters already in the user's Magnific library (they can be cast): Wissam (man, early 30s), Lina (young woman, dark braided ponytail), Sara (woman, light-blonde low bun), Omar (man in his 40s, heavy build).
 
 STAGE FLOW: idea → script → characters → locations → directing → render. Work on what the user asks; by default the current stage. When the user approves ("تمام", "ok", "approve", picks an idea…), move to the next stage AND deliver it in the same answer. The user can come back at any time to change an earlier stage (a new idea, a new or edited character, a new location, a rewritten scene): do exactly that change, keep everything else, and update later stages only where the change requires it. If attachments are given (storyboards, characters, places, scripts), analyse them carefully and record the useful facts in "notes" because you will not see the images again.
@@ -1817,7 +1873,7 @@ USER NOW: ${text||"(attachments only)"}
 Reply with ONLY one JSON object. Always include "reply" (the chat message, no markdown tables) and "stage" (the furthest stage the production has reached after this turn). Include a key ONLY when you create or change it, and then give its COMPLETE new value (the full list, including the elements you did not change, with their tags):
 - "title": short reel title
 - "notes": everything learned from attachments and decisions (append to existing notes)
-- "ideas": [{"title","hook","logline","beats","why_viral","product_moment"}]  (3 per request)
+- "ideas": [{"title","hook","logline","beats","why_viral","product_moment","jury"}]  (3 per request). Before answering, silently generate at least 8 directions through different lenses of the masters, score each with THE JURY in the brain, and return only the best 3; "jury" = one line on why it wins (score /35)
 - "picked_idea": index (0-based) into "ideas" when the user picks one
 - "script": {"title","duration_s","scenes":[{"n","time","title","action","dialogue":[{"who","line"}],"on_screen_text","sound"}]}
 - "characters": [{"tag","name","role","description","wardrobe","library":null|"Wissam"|"Lina"|"Sara"|"Omar","prompt"}]  — prompt = the full image prompt for the character reference sheet; set "library" only when the user wants that BAE character
@@ -1834,6 +1890,7 @@ async function rlSend(text){
   try{
     const opts={modelTier:"complex",cache:false};
     if(atts.length){ if(sampleImages) opts.images=atts.map(a=>a.blob).slice(0,10); else rlSys("This view can't send images to Claude, so only your text was used.",true); }
+    await brLoad();
     const out=await sample.json(rlPromptFor(text),opts);
     rlApply(out||{});
   }catch(e){ RL.chat.push({role:"sys",err:true,text:sampleCopy(e)}); }
@@ -1898,7 +1955,7 @@ async function rlReviseElement(tag,instruction){
 
 /* ---------- rendering ---------- */
 function rlShowLib(){
-  $("rlLib").hidden=false; $("rlProjView").hidden=true; $("reels").dataset.mode="lib";
+  $("rlLib").hidden=false; $("rlProjView").hidden=true; $("rlBrain").hidden=true; $("reels").dataset.mode="lib";
   rlStoreInit().then(()=>{ $("rlStore").textContent=RLS.mode==="account"?"Projects save to your account automatically. Only you can see them.":"Projects save in this browser automatically."; });
   rlList().then(list=>{
     const box=$("rlProjects");
@@ -1954,7 +2011,7 @@ function rlBoard(){
     out.push(rlHead("Idea","Three directions built to stop the scroll. Choose one, or ask for more.",`${RL.ideas.length?`<button class="a-btn" type="button" data-rl="say" data-t="moreIdeas">More ideas</button>`:""}`));
     if(RL.notes) out.push(`<details class="rl-notes"><summary>Brief notes from Claude</summary><p dir="auto">${esc(RL.notes)}</p></details>`);
     if(!RL.ideas.length) out.push(rlEmpty("Describe the reel in the chat — the product, the message, the audience — or attach a storyboard. Claude answers with three viral ideas.",`<button class="btn primary" type="button" data-rl="say" data-t="ideas">Suggest 3 ideas</button>`));
-    else out.push(`<div class="rl-grid">${RL.ideas.map((x,i)=>{ const on=RL.picked&&RL.picked.title===x.title; return `<div class="rl-item rl-idea${on?" picked":""}" dir="auto"><span class="k">Idea ${i+1}${on?" · chosen":""}</span><b>${esc(x.title||"")}</b><p><span class="lbl2">Hook</span>${esc(x.hook||"")}</p><p>${esc(x.logline||"")}</p>${x.why_viral?`<p class="muted"><span class="lbl2">Why it travels</span>${esc(x.why_viral)}</p>`:""}${x.product_moment?`<p class="muted"><span class="lbl2">Product moment</span>${esc(x.product_moment)}</p>`:""}<div class="rl-btns">${on?`<span class="rl-pill">Chosen</span>`:`<button class="btn small primary" type="button" data-rl="pick" data-i="${i}">Choose</button>`}</div></div>`; }).join("")}</div>`);
+    else out.push(`<div class="rl-grid">${RL.ideas.map((x,i)=>{ const on=RL.picked&&RL.picked.title===x.title; return `<div class="rl-item rl-idea${on?" picked":""}" dir="auto"><span class="k">Idea ${i+1}${on?" · chosen":""}</span><b>${esc(x.title||"")}</b><p><span class="lbl2">Hook</span>${esc(x.hook||"")}</p><p>${esc(x.logline||"")}</p>${x.why_viral?`<p class="muted"><span class="lbl2">Why it travels</span>${esc(x.why_viral)}</p>`:""}${x.product_moment?`<p class="muted"><span class="lbl2">Product moment</span>${esc(x.product_moment)}</p>`:""}${x.jury?`<p class="rl-jury"><span class="lbl2">Jury</span>${esc(x.jury)}</p>`:""}<div class="rl-btns">${on?`<span class="rl-pill">Chosen</span>`:`<button class="btn small primary" type="button" data-rl="pick" data-i="${i}">Choose</button>`}<span class="rl-sp"></span>${rlRate("idea","idea:"+(x.title||i),`${x.title} — ${x.hook} — ${x.logline}`)}</div></div>`; }).join("")}</div>`);
     if(RL.ideasPrev.length) out.push(`<details class="rl-notes"><summary>Earlier ideas (${RL.ideasPrev.length})</summary>${RL.ideasPrev.map((x,i)=>`<div class="rl-prev" dir="auto"><b>${esc(x.title||"")}</b> — ${esc(x.hook||x.logline||"")} <button class="a-btn" type="button" data-rl="pickprev" data-i="${i}">Use this</button></div>`).join("")}</details>`);
   }
   if(v==="script"){
@@ -1964,6 +2021,7 @@ function rlBoard(){
       <textarea class="rl-field" rows="2" data-rl-edit="b:${i}:action" aria-label="Action">${esc(s.action||"")}</textarea>
       <textarea class="rl-field" rows="${Math.max(1,(s.dialogue||[]).length)}" data-rl-edit="b:${i}:dialogue" aria-label="Dialogue, one line per speaker as Name: line" placeholder="Name: line">${esc((s.dialogue||[]).map(d=>`${d.who||""}: ${d.line||""}`).join("\n"))}</textarea>
       <div class="rl-two"><input class="rl-field" data-rl-edit="b:${i}:on_screen_text" value="${esc(s.on_screen_text||"")}" placeholder="On-screen text" aria-label="On-screen text"><input class="rl-field" data-rl-edit="b:${i}:sound" value="${esc(s.sound||"")}" placeholder="Sound" aria-label="Sound"></div></div></div>`).join("")}</div>`);
+      out.push(`<div class="rl-btns rl-rateline"><span class="t12 muted">How is this script?</span>${rlRate("script","script:"+(RL.script.title||""),RL.script.scenes.map(s=>`${s.title}: ${s.action}`).join(" / "))}</div>`);
       if(rlStageIx(RL.stage)<=rlStageIx("script")) out.push(rlNext("approveScript","Approve script · build the cast"));
     }
   }
@@ -2013,7 +2071,7 @@ function rlElCard(e,kind){
     <div class="rl-media${busy||writing?" busy":""}" style="aspect-ratio:${isProp?"1 / 1":"16 / 9"}">${th?`<img src="${th}" alt="${esc(e.name||"")}" data-zoom="${esc(img)}">`:`<span class="ph">${busy||writing?"":img?"Loading image…":"No image yet"}</span>`}${busy?`<span class="rl-busy">Generating…</span>`:writing?`<span class="rl-busy">Claude is writing…</span>`:""}</div>
     <p>${esc(e.description||e.role||"")}</p>
     ${e.fromLib?`<p class="rl-status${e.id?"":" bad"}">${e.id?"BAE character from your Magnific library":"Link your Magnific library first (Photography → References → Link library), so this character can be attached."}</p>`:""}
-    <div class="rl-btns">${e.fromLib?"":`<button class="btn small${e.id&&!e.stale?"":" primary"}" type="button" data-rl="gen" data-tag="${e.tag}" ${busy||writing||!e.prompt?"disabled":""}>${busy?"Generating…":e.id?"Regenerate":"Generate image"}</button>`}<button class="btn small" type="button" data-rl="edit" data-tag="${e.tag}">Edit</button>${e.web?`<a class="btn small" href="${esc(e.web)}" target="_blank" rel="noopener">Magnific</a>`:""}</div>
+    <div class="rl-btns">${e.fromLib?"":`<button class="btn small${e.id&&!e.stale?"":" primary"}" type="button" data-rl="gen" data-tag="${e.tag}" ${busy||writing||!e.prompt?"disabled":""}>${busy?"Generating…":e.id?"Regenerate":"Generate image"}</button>`}<button class="btn small" type="button" data-rl="edit" data-tag="${e.tag}">Edit</button>${e.web?`<a class="btn small" href="${esc(e.web)}" target="_blank" rel="noopener">Magnific</a>`:""}<span class="rl-sp"></span>${rlRate(kind==="c"?"character":e.kind||"location","el:"+e.tag+":"+(e.id||"p"),`${e.name}: ${e.description||""} | ${String(e.prompt||"").slice(0,600)}`)}</div>
     ${e.fromLib?"":`<form class="rl-revise" data-revise="${e.tag}"><input class="rl-field" name="q" placeholder="Ask for a change… e.g. older, navy blazer" aria-label="Ask Claude to change ${esc(e.name||"")}" dir="auto"><button class="a-btn" type="submit" ${writing?"disabled":""}>Revise</button></form>`}
     ${e.err?`<p class="rl-status bad">${esc(e.err)}</p>`:""}</div>`;
 }
@@ -2049,6 +2107,7 @@ function rlShotCard(sc){
         <textarea class="rl-prompt tall" data-rl-edit="s:${sc.n}" spellcheck="false" dir="ltr">${esc(sc.prompt||"")}</textarea></details>
       <label class="rl-chk"><input type="checkbox" data-rl-start="${sc.n}" ${useStart?"checked":""} ${startOK?"":"disabled"}> Animate from the first frame${startOK?"":" (generate it first)"}</label>
       <div class="rl-btns"><button class="btn small${sc.status!=="done"&&(startOK||sc.useFrame===false)?" primary":""}" type="button" data-rl="render" data-n="${sc.n}" ${sc.status==="run"?"disabled":""}>${sc.status==="run"?"Rendering…":sc.status==="done"?"Generate video again":"Generate video"}</button>${sc.status==="done"&&!vsrc&&!sc._blocked?`<button class="btn small" type="button" data-rl="play" data-n="${sc.n}">Play here</button>`:""}<button class="btn small" type="button" data-rl="copys" data-n="${sc.n}">Copy prompt</button>${sc.url?`<a class="btn small" href="${esc(sc.url)}" target="_blank" rel="noopener">MP4</a>`:""}${sc.web?`<a class="btn small" href="${esc(sc.web)}" target="_blank" rel="noopener">Magnific</a>`:""}</div>
+      ${sc.status==="done"||f.id?`<div class="rl-btns rl-rateline"><span class="t12 muted">${sc.status==="done"?"How is this shot?":"How is this first frame?"}</span>${rlRate("shot","shot:"+sc.n+":"+(sc.clip||f.id),`Scene ${sc.n} ${sc.title}: ${String(sc.prompt||"").slice(0,800)}`)}</div>`:""}
       ${sc.note&&sc.status!=="run"?`<p class="rl-status${sc.status==="err"?" bad":""}">${esc(sc.note)}</p>`:""}
       ${sc._blocked&&!vsrc&&sc.status==="done"?`<p class="rl-status">The video file can't play inside this page, so the frame is shown. Open the MP4 or Magnific to watch it.</p>`:""}
     </div></div>`;
@@ -2310,6 +2369,16 @@ async function rlBible(){
     const d=e.target.closest("[data-dup]"); if(d){ d.disabled=true; await rlDuplicate(d.dataset.dup); return rlShowLib(); }
     const x=e.target.closest("[data-del]"); if(x){ if(x.dataset.sure){ await rlDelete(x.dataset.del); return rlShowLib(); } x.dataset.sure="1"; x.textContent="Delete for good?"; x.classList.add("danger"); setTimeout(()=>{ if(x.isConnected){ delete x.dataset.sure; x.textContent="Delete"; x.classList.remove("danger"); } },3500); }
   });
+  $("rlOpenBrain").onclick=()=>rlShowBrain();
+  $("rlBrainBack").onclick=()=>{ $("rlBrain").hidden=true; rlShowLib(); };
+  $("rlBrainBody").addEventListener("submit",async e=>{ const f=e.target.closest("#brTeach"); if(!f) return; e.preventDefault(); const t=String(new FormData(f).get("t")||"").trim(); if(!t) return;
+    const msg=$("brTeachMsg"); msg.textContent="Saving…";
+    try{ await RLS.db.collection("feedback").add({kind:"lesson",verdict:0,note:t.slice(0,1500),item:"",project:null,by:RLS.uid||null,at:Date.now(),day:new Date().toLocaleDateString("en-CA")}); f.reset(); msg.textContent="Thanks — it joins the lessons tomorrow morning."; }
+    catch(err){ msg.textContent="Couldn't save ("+(err?.code||"error")+")."; } });
+  $("rlBrainBody").addEventListener("click",async e=>{ const b=e.target.closest("[data-bredit]"); if(!b) return; const id=b.dataset.bredit, div=$("rlBrainBody").querySelector(`[data-sec="${id}"]`), s=BR.sections.find(x=>x.id===id); if(!div||!s) return;
+    if(b.dataset.saving){ return; }
+    if(div.tagName!=="TEXTAREA"){ const ta=document.createElement("textarea"); ta.className="rl-field br-edit"; ta.dataset.sec=id; ta.value=s.text||""; ta.dir="auto"; div.replaceWith(ta); b.textContent="Save"; ta.focus(); return; }
+    b.dataset.saving="1"; b.textContent="Saving…"; try{ await RLS.db.collection("brain").doc(id).update({text:div.value,updatedAt:Date.now()}); s.text=div.value; } catch(err){ b.textContent="Couldn't save"; delete b.dataset.saving; return; } rlShowBrain(); });
   $("rlTitle").addEventListener("input",()=>{ if(!RL) return; RL.title=$("rlTitle").value.trim()||"Untitled reel"; rlSave(); });
   $("rlStages").addEventListener("click",e=>{ const b=e.target.closest("[data-tab]"); if(!b||!RL) return; RL.view=b.dataset.tab; R.dataset.view="board"; rlSave(); rlBoard(); rlRenderChat(); $("rlBoardPane").scrollIntoView({block:"start"}); });
   document.addEventListener("keydown",e=>{ if(e.key!=="Escape"||R.hidden) return; const lb=$("rlLb"); if(lb&&!lb.hidden){ lb.hidden=true; return; } });
@@ -2329,6 +2398,7 @@ async function rlBible(){
   B.addEventListener("click",async e=>{
     const tab=e.target.closest("[data-tab]"); if(tab&&B.contains(tab)){ RL.view=tab.dataset.tab; rlSave(); rlRender(); return; }
     const z=e.target.closest("[data-zoom]"); if(z){ rlZoom(z.dataset.zoom); return; }
+    const rv=e.target.closest(".rl-rate [data-v]"); if(rv){ const box=rv.closest(".rl-rate"); RL._rateOpen={key:box.dataset.key,v:+rv.dataset.v}; rlBoard(); setTimeout(()=>B.querySelector(".rl-rateform input")?.focus(),20); return; }
     const b=e.target.closest("[data-rl]"); if(!b) return; const a=b.dataset.rl, ar=rlAr();
     if(a==="pick") rlSend(ar?`اخترت الفكرة ${+b.dataset.i+1}: ${RL.ideas[+b.dataset.i]?.title||""}. اكتبلي السيناريو.`:`I choose idea ${+b.dataset.i+1}: ${RL.ideas[+b.dataset.i]?.title||""}. Write the script.`);
     else if(a==="pickprev"){ const x=RL.ideasPrev[+b.dataset.i]; if(x){ RL.ideas=[x,...RL.ideas.filter(y=>y.title!==x.title)].slice(0,4); RL.ideasPrev.splice(+b.dataset.i,1); rlSend(ar?`اخترت الفكرة: ${x.title}. اكتبلي السيناريو.`:`I choose the idea "${x.title}". Write the script.`); } }
@@ -2355,6 +2425,7 @@ async function rlBible(){
   });
   B.addEventListener("submit",e=>{
     const f=e.target.closest("[data-addform]"); if(f){ e.preventDefault(); const fd=new FormData(f); rlAddElement(f.dataset.addform,String(fd.get("name")||"").trim(),String(fd.get("desc")||"").trim(),null); return; }
+    const rf=e.target.closest(".rl-rateform"); if(rf){ e.preventDefault(); const note=String(new FormData(rf).get("n")||"").trim(); RL._rateOpen=null; brFeedback(rf.dataset.kind,rf.dataset.key,+rf.dataset.v,note,rf.dataset.item); rlBoard(); return; }
     const r=e.target.closest("[data-revise]"); if(r){ e.preventDefault(); const q=String(new FormData(r).get("q")||"").trim(); if(q) rlReviseElement(r.dataset.revise,q); }
   });
   B.addEventListener("change",e=>{
