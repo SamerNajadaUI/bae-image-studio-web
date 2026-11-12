@@ -1690,6 +1690,13 @@ const RL_TPL={"char": "Three-panel cinematic character sheet, one horizontal 16:
 const rlTpl=k=>(BR?.sections?.find(s=>s.id==="templates")?.[k])||RL_TPL[k];
 const RL_ADV={"trend": {"name": "Trend Scout", "icon": "↗", "role": "Finds what is travelling right now: formats, hooks, sounds, memes and talking points in Jordan, the Arab world and global reels.", "order": 1}, "story": {"name": "Story Doctor", "icon": "✎", "role": "Guards the insight and the story: one human truth, a clear turn, a payoff that earns the brand.", "order": 2}, "dp": {"name": "Director of Photography", "icon": "◉", "role": "Camera, lens, light and composition that look expensive and stay readable to the AI.", "order": 3}, "performance": {"name": "Performance Coach", "icon": "☺", "role": "Acting, casting and wardrobe truth: performances that feel real, never 'ad acting'.", "order": 4}, "tech": {"name": "Seedance Technician", "icon": "⚙", "role": "Prompt engineering for Seedance 2.5 and Nano Banana: references, constraints and the failure modes that waste credits.", "order": 5}};
 const rlAdv=id=>({...(RL_ADV[id]||{name:id,icon:"•",role:""}),...((BR?.advisors||[]).find(x=>x.id===id)||{})});
+const RL_JO=`JORDAN, FROM THE INSIDE (you are the best creative director in Jordan; think like a Jordanian, not a tourist):
+- Values that move people here: النخوة (stepping in for someone without being asked), الشهامة (gallantry, quiet decency), الغيرة (protective care for family and neighbourhood), الكرم (generosity: the host who insists, the extra plate), الشرف والسمعة (honour and how the family is seen), الجيرة (the neighbour is family), العونة (everyone helps: harvest, wedding, moving house), برّ الوالدين (caring for parents). Show these through ACTIONS, never slogans: a young man pays a stranger's taxi without a word, the son quietly settles his father's bill, the neighbour lends the gas cylinder.
+- Daily texture: Amman hills and stairs (Jabal al-Weibdeh, Jabal Amman, Lweibdeh, Rainbow St, Abdali, Sweifieh, Taj, Downtown/Balad), traffic at the 7th circle, servees and yellow taxis, the khaltour coffee, kaak with zaatar, knafeh from Habibah, mansaf at Friday lunch, the jameed, the shrak bread, falafel at Hashem, the gas truck's tune, the morning "ya sabah al-khair", the evening walk, the hookah on the balcony, winter sobba heater and the family around it, snow day in Amman, the Dead Sea Friday, Aqaba holidays, Wadi Rum, Ajloun forests, Jerash, Salt's yellow houses, Irbid students, Zarqa workers.
+- Occasions: Ramadan (iftar rush, fanous, sohour, family gatherings), the two Eids (عيدية, new clothes, visiting elders first), Tawjihi results day (the whole family waiting, horns, knafeh), weddings (zaffeh, dabke, the jaha asking for the bride's hand with coffee), graduation, back to school, Independence Day 25 May, Mother's Day 21 March, the first salary, the first car, the first flat (with the whole family inspecting).
+- Humour that lands: understatement and self-irony, the mother who knows everything, the auntie's questions (إيمتى بدنا نفرح فيك؟), the dad who negotiates every price, cousins in the family WhatsApp group, "ولا يهمك" that hides a sacrifice, "على راسي", "تكرم عينك", "يا زلمة", "والله غير…" (the host's oath). Warm teasing, never mockery of anyone's origin, tribe, accent, religion or region.
+- Respect lines: modest wardrobe for families; no alcohol, no romance clichés, no mocking elders, no showing money flaunted vulgarly, no Gulf/Egyptian/Levantine-generic dialect (use Jordanian: شو، هسا، بدي، منيح، يا زلمة، ليش، كيفك، والله). Faces, names and skin tones look Jordanian. Arabic on screen is correct and Jordanian in tone.
+- Making ideas EXCLUSIVE: each idea starts from a real Jordanian truth (a small habit everyone recognises but nobody filmed), turns on one human value (nakhwa, karam, ghira, sharaf…), and lets the BAE product be the quiet enabler of that value, not the hero. Never repeat an idea, setting or twist already in memory or this chat; if it smells like a generic bank ad (smiling family + phone + city skyline), throw it away and dig deeper.`;
 const RL_BAE=`BANK AL ETIHAD HOUSE STYLE (non-negotiable in every image and video prompt):
 - Cinematic, warm, premium, human. Clean natural light (golden hour, window light, soft daylight), warm neutral grade with orange and burgundy accents, fine grain, gentle halation. Never cold, never neon.
 - Modern Jordan only: today's Amman (Abdali, new towers, sleek cafés, modern homes and offices, modern malls). Modern Scandinavian IKEA-style interiors: light oak, white walls, clean lines.
@@ -2027,7 +2034,7 @@ const rlJob=async(fn)=>{ rlWake(true); try{ return await fn(); } finally{ rlWake
 function rlState(){
   const set=rlSet();
   return {title:RL.title,stage:RL.stage,viewing_tab:RL.view,settings:set,notes:RL.notes,ideas:RL.ideas,picked_idea:RL.picked,script:RL.script,next_free_tag:"@img"+RL.nextTag,
-    characters:RL.characters.map(({name,tag,handle,role,description,wardrobe,prompt,id,lib})=>({tag,handle,name,role,description,wardrobe,prompt,image_generated:!!id,library:lib||null})),
+    characters:RL.characters.map(({name,tag,handle,role,description,wardrobe,prompt,id,lib,fromUser})=>({tag,handle,name,role,description,wardrobe,prompt,image_generated:!!id,library:lib||null,own_image:!!fromUser||undefined})),
     locations:RL.locations.map(({name,tag,handle,kind,description,prompt,id})=>({tag,handle,name,kind,description,prompt,image_generated:!!id})),
     film_look:RL.look||null,
     scenes:RL.scenes.map(({n,title,logline,duration_s,refs,prompt,frame_prompt,frame,status,review})=>({n,title,logline,duration_s,refs,frame_prompt,prompt,first_frame_generated:!!frame?.id,video_rendered:status==="done",gemini_review:review?{score:review.score,verdict:review.verdict,summary:review.summary,issues:review.issues.map(x=>`[${x.t}] ${x.what}`)}:null}))};
@@ -2041,6 +2048,8 @@ function rlPromptFor(text,memText,canSearch){
 ${RL_METHOD}
 
 ${RL_BAE}
+
+${RL_JO}
 
 ${brText(memText)}
 ${canSearch?`
@@ -2068,7 +2077,7 @@ Reply with ONLY one JSON object. Always include "reply" (the chat message, no ma
 - "ideas": [{"title","hook","logline","beats","why_viral","product_moment","jury"}]  (3 per request). Before answering, silently generate at least 8 directions through different lenses of the masters, score each with THE JURY in the brain, and return only the best 3; "jury" = one line on why it wins (score /35)
 - "picked_idea": index (0-based) into "ideas" when the user picks one
 - "script": {"title","duration_s","scenes":[{"n","time","title","action","dialogue":[{"who","line"}],"on_screen_text","sound"}]}
-- "characters": [{"tag","handle","name","role","description","wardrobe","library":null|"Wissam"|"Lina"|"Sara"|"Omar","prompt","from_attachment":null|N}]  — from_attachment: when the user ATTACHED a photo or sheet of this character (in THIS message), give its number N (1 = first attached image, in order). The studio then uses the user's image itself as the character's reference image — never redesign or re-imagine that person; describe them exactly as in the image. When the user attaches characters, map EVERY attached image to an element (characters, or locations/props for places and objects); if two attachments look the same, still map both and say so
+- "characters": [{"tag","handle","name","role","description","wardrobe","library":null|"Wissam"|"Lina"|"Sara"|"Omar","prompt","from_attachment":null|N}]  — when you propose characters, ALWAYS give each one a complete, specific "prompt" (a three-panel character sheet on a plain gray clean background describing face, hair, build, exact wardrobe and shoes) so the user can generate it or attach their own photo. A character with "own_image": true uses the user's photo — keep its description and wardrobe exactly as they are  — from_attachment: when the user ATTACHED a photo or sheet of this character (in THIS message), give its number N (1 = first attached image, in order). The studio then uses the user's image itself as the character's reference image — never redesign or re-imagine that person; describe them exactly as in the image. When the user attaches characters, map EVERY attached image to an element (characters, or locations/props for places and objects); if two attachments look the same, still map both and say so
   — prompt = the full THREE-PANEL character sheet prompt (CHARACTER SHEET template); set "library" only when the user wants that BAE character
 - "locations": [{"tag","handle","name","kind":"location"|"prop","description","prompt","from_attachment":null|N}]  — full image prompt (LOCATION template, empty of people / PROP SHEET template)
 - "film_look": the shared FILM LOOK paragraph (write it with the first scenes; change it only when asked)
@@ -2090,26 +2099,31 @@ async function rlSend(text,{retry}={}){
     if(text) brSignal("chat","request",0,{note:text,item:`stage ${RL.stage} · viewing ${RL.view}${imgs.length?` · ${imgs.length} image(s) attached`:""}${vids.length?` · ${vids.length} video(s) attached`:""}`,key:text});
     rlPending=[]; rlRenderAtt(); $("rlInput").value="";
   }
-  RL.chatPending={text,at:Date.now()}; rlFlush(); rlRenderChat(); rlTyping(true);
+  RL.chatPending={text,at:Date.now()}; rlFlush(); rlRenderChat(); RL_STEPS.length=0;
+  rlStep(imgs.length?`Reading your ${imgs.length} image${imgs.length>1?"s":""}`:vids.length?"Getting your video ready":"Reading your message");
   await rlJob(async()=>{ try{
     const opts={modelTier:"complex",cache:false};
     for(let i=0;i<vids.length&&um;i++){ const a=vids[i], v=um.videos[i];
       if(a.blob.size>RL_VMAX){ v.err="too large"; v._stage="err"; rlVProgUpdate(v); rlSys(`${v.name} is larger than 200 MB, so Gemini can't watch it here. Trim it and attach it again.`,true); continue; }
-      try{ rlTyping(true,`Uploading ${v.name}…`);
-        v.analysis=await rlGeminiWatchBlob(a.blob,rlVideoQuestion(text),({stage,p})=>{ v._stage=stage; v._p=p; rlVProgUpdate(v); rlTyping(true,stage==="upload"?`Uploading ${v.name}… ${p}%`:RL_VSTAGE[stage]); });
-        v._stage="done"; rlVProgUpdate(v);
+      try{ rlStep(`Uploading ${v.name} · 0%`,{id:"up"+i});
+        v.analysis=await rlGeminiWatchBlob(a.blob,rlVideoQuestion(text),({stage,p})=>{ v._stage=stage; v._p=p; rlVProgUpdate(v); if(stage==="upload") rlStep(`Uploading ${v.name} · ${p}%`,{id:"up"+i}); else { rlStep(`Uploaded ${v.name}`,{id:"up"+i,done:true}); rlStep(stage==="send"?"Sending it to Gemini":"Gemini is watching and listening",{id:"gw"+i}); } });
+        v._stage="done"; rlVProgUpdate(v); rlStep("Gemini watched it",{id:"gw"+i,done:true});
         brSignal("chat","video_reference",0,{note:`Gemini watched "${v.name}": ${String(v.analysis).slice(0,700)}`,item:text||"",key:"vid"+v.name+v.size});
-        rlFlush(); rlTyping(true);
+        rlFlush();
       }catch(e){ v.err=String(e?.code||"error"); v._stage="err"; rlVProgUpdate(v); const c=e?.code||"";
         rlSys(/not available on this connector/i.test(String(e?.message||""))?"Claude still has the old tool list of the “BAE Gemini Eye” connector. In claude.ai open Settings → Connectors → BAE Gemini Eye, press Disconnect, then connect it again (it should show 4 tools), and resend. Your text was sent without the video.":c==="server_not_connected"||c==="not_granted"||/not.?connected|manifest/i.test(String(e?.message||""))?"To let Gemini watch videos, add the “BAE Gemini Eye” connector in claude.ai (Settings → Connectors). Your text was sent without the video.":`Gemini couldn't watch ${v.name}: ${String(e?.message||c).slice(0,200)}. Your text was sent without it.`,true); rlTyping(true); }
     }
     if(imgs.length){ if(sampleImages) opts.images=imgs.map(a=>a.blob).slice(0,10); else rlSys("This view can't send images to Claude, so only your text was used.",true); }
+    rlStep("Reading the Director’s memory");
     await brLoad();
     const mem=await rlMemFor([text,RL.title,RL.picked?.title,RL.picked?.logline,RL.view!==RL.stage?RL.view:""].filter(Boolean).join(" "),RL.stage==="render"?"directing":RL.stage);
     const used=new Set(), searched=[];
     const lim=await sample.limits?.().catch(()=>null);
-    if(lim?.tools&&MEM.cards.length) opts.tools=memTools((ids,q)=>{ ids.forEach(i=>used.add(i)); if(q&&!searched.includes(q)) searched.push(q); });
-    const out=await rlAsk(rlPromptFor(text,mem.text,!!opts.tools),opts);
+    if(lim?.tools&&MEM.cards.length) opts.tools=memTools((ids,q)=>{ ids.forEach(i=>used.add(i)); if(q&&!searched.includes(q)){ searched.push(q); rlStep(`Searching memory: “${q}”`); } });
+    rlStep(mem.count?`Recalled ${mem.ids.length} of ${mem.count} memories`:"Memory ready",{done:true});
+    rlStep("The Director is thinking with the five assistant directors");
+    const slow=setTimeout(()=>rlStep("Writing the answer"),9000);
+    const out=await rlAsk(rlPromptFor(text,mem.text,!!opts.tools),opts).finally(()=>clearTimeout(slow));
     RL.chatPending=null;
     const own=[...(Array.isArray(out?.characters)?out.characters:[]),...(Array.isArray(out?.locations)?out.locations:[])].filter(x=>x&&x.from_attachment!=null&&imgs[+x.from_attachment-1]).map(x=>({handle:x.handle,name:x.name,tag:x.tag,blob:imgs[+x.from_attachment-1].blob}));
     rlApply(out||{});
@@ -2145,7 +2159,10 @@ function rlApply(o){
 }
 function rlLinkLibrary(){ for(const c of RL.characters){ if(!c.lib){ if(c.fromLib){ c.fromLib=false; c.id=null; } continue; } const id="ch_"+String(c.lib).toLowerCase(); const mid=S.magIds?.[id]; if(refById(id)){ c.fromLib=true; if(mid) c.id=mid; } } }
 function rlSys(t,bad){ RL.chat.push({role:"sys",text:t,err:!!bad}); rlRenderChat(); }
-function rlTyping(on,note){ const b=$("rlMsgs"); b.querySelector(".rl-typing-m")?.remove(); if(on){ const d=document.createElement("div"); d.className="rl-m a rl-typing-m"; d.innerHTML='<span class="rl-typing" aria-label="Claude is thinking"><i></i><i></i><i></i></span>'+(note?`<span class="t12 muted rl-typnote">${esc(note)}</span>`:""); b.appendChild(d); b.scrollTop=b.scrollHeight; } }
+function rlTyping(on,note){ const b=$("rlMsgs"); b.querySelector(".rl-typing-m")?.remove(); if(!on){ RL_STEPS.length=0; return; }
+  const d=document.createElement("div"); d.className="rl-m a rl-typing-m"; d.setAttribute("role","status"); d.setAttribute("aria-live","polite");
+  d.innerHTML=`<div class="rl-typhead"><span class="rl-typing" aria-hidden="true"><i></i><i></i><i></i></span><span>${esc(note||RL_STEPS.filter(x=>!x.done).slice(-1)[0]?.label||"The Director is thinking…")}</span></div>${RL_STEPS.length?`<ul class="rl-steps">${rlStepsHTML()}</ul>`:""}`;
+  b.appendChild(d); b.scrollTop=b.scrollHeight; }
 /* ---------- videos in the chat: the page can't reach the web, so the video goes to Gemini through the BAE Gemini Eye connector in small pieces ---------- */
 const RL_VMAX=200*1024*1024;
 async function rlVideoThumb(url){ try{ const v=document.createElement("video"); v.muted=true; v.playsInline=true; v.preload="auto"; v.src=url; await new Promise((res,rej)=>{ v.onloadeddata=res; v.onerror=rej; setTimeout(rej,6000); }); v.currentTime=Math.min(0.6,(v.duration||1)/3); await new Promise(res=>{ v.onseeked=res; setTimeout(res,2500); }); const k=Math.min(1,160/Math.max(v.videoWidth,v.videoHeight)); const c=document.createElement("canvas"); c.width=Math.max(1,Math.round(v.videoWidth*k)); c.height=Math.max(1,Math.round(v.videoHeight*k)); c.getContext("2d").drawImage(v,0,0,c.width,c.height); return {thumb:c.toDataURL("image/jpeg",.75),dur:v.duration||0}; }catch{ return {thumb:null,dur:0}; } }
@@ -2279,7 +2296,8 @@ function rlRender(){ if(!RL) return; const t=$("rlTitle"); if(document.activeEle
 function rlRenderNav(){
   const si=rlStageIx(RL.stage);
   const done=k=>({idea:!!RL.picked,script:!!RL.script?.scenes?.length,characters:RL.characters.length>0&&RL.characters.every(e=>e.id),locations:RL.locations.length>0&&RL.locations.every(e=>e.id),directing:RL.scenes.length>0&&RL.scenes.every(s=>s.status==="done"),render:!!RL.space?.url||!!RL.final?.id})[k];
-  $("rlStages").innerHTML=RL_STAGES.map(([k,l],i)=>`<button type="button" role="tab" aria-selected="${RL.view===k}" data-tab="${k}" class="${done(k)?"done":""}${i===si?" cur":""}${i>si+1&&!done(k)?" later":""}"><span class="n" aria-hidden="true">${done(k)?"✓":i+1}</span><span>${l}</span></button>`).join("");
+  $("rlStages").innerHTML=RL_STAGES.map(([k,l],i)=>`<button type="button" role="tab" aria-selected="${RL.view===k}" data-tab="${k}" class="${done(k)?"done":""}${i===si?" cur":""}${i>si+1&&!done(k)?" later":""}"><span class="n" aria-hidden="true">${done(k)?"✓":i+1}</span><span class="lb">${l}</span></button>`).join("");
+  requestAnimationFrame(()=>$("rlStages").querySelector('[aria-selected="true"]')?.scrollIntoView?.({block:"nearest",inline:"center"}));
 }
 function rlChipsFor(){
   const ar=rlAr();
@@ -2295,10 +2313,43 @@ function rlMemChip(m){
   const used=(m.used||[]).map(id=>MEM.byId.get(id)).filter(Boolean);
   return `<details class="rl-memchip" dir="auto"><summary><span aria-hidden="true">🧠</span> Read ${m.recalled} of ${m.total} memories${m.searched?.length?` · searched ${m.searched.map(q=>`“${esc(q)}”`).join(", ")}`:""}${(m.used||[]).length?` · ${(m.used||[]).length} shaped this answer`:""}</summary>${used.length?used.map(c=>`<div class="rl-memc"><span class="k">${esc(c.k)}</span> ${esc(c.t.length>260?c.t.slice(0,260)+"…":c.t)}</div>`).join(""):`<div class="rl-memc muted">Open the Director's brain to search everything it remembers.</div>`}</details>`;
 }
+/* readable replies: bullets, numbered lists and **bold** */
+function rlFmt(t){
+  const lines=String(t||"").split("\n"); let out="", list=null;
+  const inl=x=>esc(x).replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>");
+  const close=()=>{ if(list){ out+=`</${list}>`; list=null; } };
+  for(const ln of lines){
+    const b=ln.match(/^\s*[•\-\*·]\s+(.*)$/), n=ln.match(/^\s*\d+[.)]\s+(.*)$/);
+    if(b||n){ const k=b?"ul":"ol"; if(list!==k){ close(); out+=`<${k}>`; list=k; } out+=`<li>${inl((b||n)[1])}</li>`; continue; }
+    close(); out+=ln.trim()?`<p>${inl(ln)}</p>`:"";
+  }
+  close(); return out;
+}
+function rlAdvHTML(m,mi){
+  const list=(m.advisors||[]).map((x,ai)=>({x,ai})).filter(({x})=>x&&x.note);
+  if(!list.length) return "";
+  const live=list.filter(({x})=>!x.used&&!x.skipped);
+  return `<section class="rl-room2" aria-label="Ideas from the assistant directors"><div class="rl-room2-h"><span>The room</span><span class="t12 muted">${live.length?`${live.length} idea${live.length>1?"s":""} from your assistant directors`:"all answered"}</span></div>
+    <div class="rl-room2-list">${list.map(({x,ai})=>{ const A=rlAdv(x.id); return `<div class="rl-room2-c${x.used?" used":x.skipped?" skipped":""}"><span class="av" aria-hidden="true">${esc(A.icon||"•")}</span><div class="tx"><div class="who"><b>${esc(A.name||x.id)}</b>${A.role?`<span>${esc(A.role)}</span>`:""}</div><p dir="auto">${esc(x.note)}</p>${x.used?`<span class="st">✓ Applied</span>`:x.skipped?`<span class="st">Skipped</span>`:`<div class="ac"><button type="button" class="btn small primary" data-adv="${mi}:${ai}">Apply</button><button type="button" class="btn small" data-advskip="${mi}:${ai}">Skip</button></div>`}</div></div>`; }).join("")}</div></section>`;
+}
+/* what the Director is doing right now, step by step */
+const RL_STEPS=[];
+function rlStep(label,{done,id}={}){
+  const last=RL_STEPS[RL_STEPS.length-1];
+  if(id&&RL_STEPS.find(x=>x.id===id)){ const x=RL_STEPS.find(x=>x.id===id); x.label=label; if(done) x.done=true; }
+  else { if(last&&!last.done&&!done) last.done=true; RL_STEPS.push({id,label,done:!!done}); }
+  const b=$("rlMsgs").querySelector(".rl-typing-m .rl-steps"); if(b) b.innerHTML=rlStepsHTML(); else rlTyping(true);
+}
+const rlStepsHTML=()=>RL_STEPS.slice(-6).map(x=>`<li class="${x.done?"ok":"run"}"><span class="d" aria-hidden="true">${x.done?"✓":""}</span>${esc(x.label)}</li>`).join("");
 function rlRenderChat(){
   const b=$("rlMsgs");
-  if(!RL.chat.length) b.innerHTML=`<div class="rl-m a" dir="auto">Hi! Tell me the reel you need — the product, the message, who it's for. Attach a storyboard, character photos, places or a script and I'll analyse them.\n\nYou can come back to this project any time to change an idea, a character, a location or a shot.</div>`;
-  else b.innerHTML=RL.chat.map((m,mi)=>`<div class="rl-m ${m.role==="u"?"u":m.role==="a"?"a":"sys"}${m.err?" err":""}" dir="auto">${esc(m.text||"")}${m.thumbs?.length?`<div class="imgs">${m.thumbs.map(t=>`<img src="${t}" alt="">`).join("")}</div>`:m.n?`<div class="t12" style="opacity:.7;margin-top:6px">${m.n} image${m.n>1?"s":""} attached</div>`:""}${m.videos?.length?m.videos.map(v=>v.analysis&&!v._stage?`<details class="rl-vsaw"><summary>🎬 ${esc(v.name)} · ✓ Uploaded · Gemini watched it</summary><div dir="auto">${esc(String(v.analysis).slice(0,6000))}</div></details>`:v._stage&&v._stage!=="done"&&v._stage!=="err"?rlVProgHTML(v):v.analysis?`${rlVProgHTML({...v,_stage:"done"})}<details class="rl-vsaw"><summary>What Gemini saw</summary><div dir="auto">${esc(String(v.analysis).slice(0,6000))}</div></details>`:rlVProgHTML({...v,_stage:"err"})).join(""):""}</div>${m.advisors?.length?`<div class="rl-advs" dir="auto">${m.advisors.map((x,ai)=>{ const A=rlAdv(x.id); return `<div class="rl-adv"><span class="ic" aria-hidden="true">${esc(A.icon||"•")}</span><div><b>${esc(A.name||x.id)}</b> ${esc(x.note)} <button type="button" class="rl-advuse" data-adv="${mi}:${ai}">Use</button></div></div>`; }).join("")}</div>`:""}${m.mem?rlMemChip(m.mem):""}`).join("");
+  if(!RL.chat.length) b.innerHTML=`<div class="rl-hello" dir="auto"><span class="av" aria-hidden="true">✦</span><div><b>Hi, I'm your Director.</b><p>Tell me the reel you need — the product, the message, who it's for. Attach a storyboard, character photos, places, a reference video or a script and I'll study them.</p><p class="muted">Five assistant directors listen in and add their ideas. Everything is saved — come back any time.</p></div></div>`;
+  else b.innerHTML=RL.chat.map((m,mi)=>{
+    const role=m.role==="u"?"u":m.role==="a"?"a":"sys";
+    const media=`${m.thumbs?.length?`<div class="imgs">${m.thumbs.map(t=>`<img src="${t}" alt="">`).join("")}</div>`:m.n?`<div class="t12" style="opacity:.7;margin-top:6px">${m.n} image${m.n>1?"s":""} attached</div>`:""}${m.n&&role==="u"?`<div class="rl-sent">✓ ${m.n} image${m.n>1?"s":""} sent</div>`:""}${m.videos?.length?m.videos.map(v=>v.analysis&&!v._stage?`${rlVProgHTML({...v,_stage:"done"})}<details class="rl-vsaw"><summary>What Gemini saw</summary><div dir="auto">${esc(String(v.analysis).slice(0,6000))}</div></details>`:v._stage&&v._stage!=="done"&&v._stage!=="err"?rlVProgHTML(v):v.analysis?`${rlVProgHTML({...v,_stage:"done"})}<details class="rl-vsaw"><summary>What Gemini saw</summary><div dir="auto">${esc(String(v.analysis).slice(0,6000))}</div></details>`:rlVProgHTML({...v,_stage:"err"})).join(""):""}`;
+    const body=role==="a"?`<div class="rl-fmt">${rlFmt(m.text)}</div>`:esc(m.text||"");
+    return `${role==="a"&&RL.chat[mi-1]?.role!=="a"?`<div class="rl-who"><span class="av" aria-hidden="true">✦</span>Director</div>`:""}<div class="rl-m ${role}${m.err?" err":""}" dir="auto">${body}${media}</div>${rlAdvHTML(m,mi)}${m.mem?rlMemChip(m.mem):""}`;
+  }).join("");
   if(RL.chatPending&&!rlBusy) b.insertAdjacentHTML("beforeend",`<div class="rl-m sys rl-retry" dir="auto">The connection dropped before Claude answered. Your message is saved. <button type="button" class="a-btn" id="rlRetry">Answer it now</button></div>`);
   b.scrollTop=b.scrollHeight;
   const last=[...RL.chat].reverse().find(m=>m.role==="a");
@@ -2399,6 +2450,20 @@ function rlCommit(t){ const parts=t.dataset.rlEdit.split(":"); const k=parts[0];
   const el=rlElByTag(parts[1]); if(!el) return; const f=parts[2]||"prompt"; if(f==="prompt"&&el.id&&el.prompt!==t.value) el.stale=true; el[f]=t.value; }
 
 /* One scene: the frame on the left (first frame, then the video), prompts and actions on the right */
+/* which disclosures the user opened stay open across re-renders */
+const RL_OPEN=new Set();
+const rlOpenAttr=(k,def)=>RL_OPEN.has(k)?" open":RL_OPEN.has("!"+k)?"":def?" open":"";
+function rlShotNext(sc){
+  const f=sc.frame||{};
+  if(f.status==="run"||f.pending) return {label:"Generating first frame…",busy:true};
+  if(sc.status==="run"||sc.pending) return {label:sc.pending?"Rendering in Magnific…":"Rendering video…",busy:true};
+  if(sc._reviewing) return {label:"Gemini is watching…",busy:true};
+  if(!f.id&&sc.useFrame!==false) return {label:"Generate first frame",act:"frame"};
+  if(sc.status!=="done") return {label:"Generate video",act:"render"};
+  if(!sc.review||sc.review.clip!==sc.clip) return {label:"👁 Review with Gemini",act:"review"};
+  if(sc.review.issues?.length&&sc.review.verdict!=="keep") return {label:"Fix the prompt with Gemini’s notes",act:"revfix"};
+  return {label:"Generate video again",act:"render",quiet:true};
+}
 function rlShotCard(sc){
   const set=rlSet(), ar=set.aspect.replace(":"," / "), f=sc.frame||{};
   const {refs}=rlSceneRefs(sc), fr=rlSceneRefs(sc,"frame_prompt").refs;
@@ -2407,31 +2472,47 @@ function rlShotCard(sc){
   if(f.id&&!rlTGet(f.id)) rlNeed(f.id);
   const busy=f.status==="run"?"Generating first frame…":sc.status==="run"?(sc.note||"Rendering video…"):"";
   const media=vsrc&&sc.status==="done"?`<video src="${esc(vsrc)}" ${poster?`poster="${poster}"`:""} controls playsinline loop preload="metadata" data-rl-vid="${sc.n}"></video>`
-    :poster?`<img src="${poster}" alt="Scene ${sc.n}" data-zoom="${esc(f.id||sc.clip)}">`:`<span class="ph">${busy?"":"Generate the first frame"}</span>`;
-  const startOK=!!f.id, useStart=startOK&&sc.useFrame!==false;
-  return `<div class="rl-shot" id="rlShot${sc.n}" dir="auto">
-    <div class="rl-shot-l">
-      <div class="rl-media dark${busy?" busy":""}" style="aspect-ratio:${ar}">${media}${busy?`<span class="rl-busy">${esc(busy)}</span>`:""}${sc.status==="done"?`<span class="rl-badge">Video</span>`:f.id?`<span class="rl-badge">First frame</span>`:""}</div>
-      ${used.length?`<div class="rl-refs" aria-label="References attached">${used.map(r=>{ const e=rlElByTag(r.global), im=rlTGet(rlImgOf(e)); return `<span class="rl-ref" title="${esc(e?.name||"")}">${im?`<img src="${im}" alt="" data-zoom="${esc(rlImgOf(e))}">`:`<i></i>`}<b>${esc(rlLabel(e)||r.global)}</b></span>`; }).join("")}</div>`:""}
-    </div>
-    <div class="rl-shot-r">
-      <div class="rl-ihead"><span class="rl-tag">Scene ${sc.n}</span><b>${esc(sc.title||"")}</b> <span class="sub">${sc.duration_s||""} s</span></div>
-      ${rlShotBar(sc)}
-      ${rlBlockingHTML(sc)}
-      <label class="rl-lab" for="rlF${sc.n}">1 · First frame <span>Nano Banana 2.1 · ${set.aspect}</span></label>
-      <textarea class="rl-prompt" id="rlF${sc.n}" data-rl-edit="f:${sc.n}" spellcheck="false" dir="ltr" placeholder="Written from the scene when you generate the first frame">${esc(sc.frame_prompt||"")}</textarea>
-      <div class="rl-btns"><button class="btn small${f.id?"":" primary"}" type="button" data-rl="frame" data-n="${sc.n}" ${f.status==="run"||f.pending?"disabled":""}>${f.status==="run"||f.pending?"Generating…":f.id?"Regenerate first frame":"Generate first frame"}</button>${f.web?`<a class="btn small" href="${esc(f.web)}" target="_blank" rel="noopener">Magnific</a>`:""}</div>
-      ${f.err?`<p class="rl-status bad">${esc(f.err)}</p>`:""}${f.status==="paused"||(f.pending&&f.status!=="run")?`<p class="rl-status">Still generating in Magnific — it appears here when it's done.</p>`:""}${f.stale&&f.id?`<p class="rl-status warn">The supervisor corrected this first-frame prompt after the image was made. Regenerate it.</p>`:""}
-      <details class="rl-vp"${sc.status==="done"?"":" open"}><summary>2 · Video <span>Seedance 2.5 · ${Math.max(4,Math.min(15,+sc.duration_s||8))} s</span></summary>
-        <textarea class="rl-prompt tall" data-rl-edit="s:${sc.n}" spellcheck="false" dir="ltr">${esc(sc.prompt||"")}</textarea></details>
-      <label class="rl-chk"><input type="checkbox" data-rl-start="${sc.n}" ${useStart?"checked":""} ${startOK?"":"disabled"}> Animate from the first frame${startOK?"":" (generate it first)"}</label>
-      <div class="rl-btns"><button class="btn small${sc.status!=="done"&&(startOK||sc.useFrame===false)?" primary":""}" type="button" data-rl="render" data-n="${sc.n}" ${sc.status==="run"||sc.pending?"disabled":""}>${sc.status==="run"?"Rendering…":sc.pending?"Rendering in Magnific…":sc.status==="done"?"Generate video again":"Generate video"}</button>${sc.status==="done"&&!vsrc&&!sc._blocked?`<button class="btn small" type="button" data-rl="play" data-n="${sc.n}">Play here</button>`:""}<button class="btn small" type="button" data-rl="copys" data-n="${sc.n}">Copy prompt</button>${sc.url?`<a class="btn small" href="${esc(sc.url)}" target="_blank" rel="noopener">MP4</a>`:""}${sc.web?`<a class="btn small" href="${esc(sc.web)}" target="_blank" rel="noopener">Magnific</a>`:""}</div>
-      ${sc.status==="done"?rlReviewHTML(sc):""}
-      ${sc.status==="done"||f.id?`<div class="rl-btns rl-rateline"><span class="t12 muted">${sc.status==="done"?"How is this shot?":"How is this first frame?"}</span>${rlRate("shot","shot:"+sc.n+":"+(sc.clip||f.id),`Scene ${sc.n} ${sc.title}: ${String(sc.prompt||"").slice(0,800)}`)}</div>`:""}
-      ${sc.note&&sc.status!=="run"?`<p class="rl-status${sc.status==="err"?" bad":""}">${esc(sc.note)}</p>`:""}
-      ${sc.stale&&sc.clip?`<p class="rl-status warn">The scene prompt was corrected after this video was made.</p>`:""}
-      ${sc._blocked&&!vsrc&&sc.status==="done"?`<p class="rl-status">The video file can't play inside this page, so the frame is shown. Open the MP4 or Magnific to watch it.</p>`:""}
-    </div></div>`;
+    :poster?`<img src="${poster}" alt="Scene ${sc.n}" data-zoom="${esc(f.id||sc.clip)}">`:`<span class="ph">${busy?"":`Scene ${sc.n}`}</span>`;
+  const startOK=!!f.id, useStart=startOK&&sc.useFrame!==false, ck=sc.check, nx=rlShotNext(sc), K="scn:"+sc.n;
+  const chip=(ok,label,warn)=>`<span class="rl-chip${ok?" ok":warn?" warn":""}">${ok?"✓ ":""}${label}</span>`;
+  const chips=[
+    sc._checking?`<span class="rl-chip"><span class="spin" aria-hidden="true"></span> Checking</span>`:ck?.dirty?chip(false,"Check again",true):ck?chip(true,`${ck.passed||0}/8 checks`):chip(false,"Not checked"),
+    chip(!!f.id,"First frame"), chip(sc.status==="done","Video"),
+    sc.review&&sc.review.clip===sc.clip?chip(sc.review.verdict==="keep",`Gemini ${sc.review.score}/10`,sc.review.verdict!=="keep"):""
+  ].join("");
+  return `<article class="rl-scn" id="rlShot${sc.n}" dir="auto">
+    <div class="rl-scn-media"><div class="rl-media dark${busy?" busy":""}" style="aspect-ratio:${ar}">${media}${busy?`<span class="rl-busy">${esc(busy)}</span>`:""}${sc.status==="done"?`<span class="rl-badge">Video</span>`:f.id?`<span class="rl-badge">First frame</span>`:""}</div></div>
+    <div class="rl-scn-body">
+      <div class="rl-scn-head"><span class="rl-tag">Scene ${sc.n}</span><span class="sub">${sc.duration_s||""} s</span></div>
+      <h3 class="rl-scn-title">${esc(sc.title||"")}</h3>
+      ${sc.logline?`<p class="rl-scn-log">${esc(sc.logline)}</p>`:""}
+      <div class="rl-chips">${chips}</div>
+      ${used.length?`<div class="rl-refs" aria-label="Cast and places in this scene">${used.map(r=>{ const e=rlElByTag(r.global), im=rlTGet(rlImgOf(e)); return `<span class="rl-ref" title="${esc(e?.name||"")}">${im?`<img src="${im}" alt="" data-zoom="${esc(rlImgOf(e))}">`:`<i></i>`}<b>${esc(e?.name||rlLabel(e)||r.global)}</b></span>`; }).join("")}</div>`:""}
+      <div class="rl-scn-cta">${nx.act?`<button class="btn small${nx.quiet?"":" primary"}" type="button" data-rl="${nx.act}" data-n="${sc.n}">${nx.label}</button>`:`<span class="rl-chip"><span class="spin" aria-hidden="true"></span> ${esc(nx.label)}</span>`}<button class="btn small" type="button" data-rl="ask" data-n="${sc.n}" aria-expanded="${!!sc._ask}" ${sc._improving?"disabled":""}>✎ Ask for edit</button></div>
+      ${f.err?`<p class="rl-status bad">${esc(f.err)}</p>`:""}${sc.note&&sc.status==="err"?`<p class="rl-status bad">${esc(sc.note)}</p>`:""}
+      ${sc._ask||sc._improving||sc.improveErr||sc.lastChange?.changes?.length?`<div class="rl-scn-edit">${rlShotBar(sc,true)}</div>`:""}
+      <details class="rl-scn-more" data-open-key="${K}"${rlOpenAttr(K)}><summary>Scene details <span class="t12 muted">prompts · blocking · the room · review</span></summary>
+        <div class="rl-scn-inner">
+          ${rlShotBar(sc,false)}
+          ${rlBlockingHTML(sc)}
+          <details class="rl-sec" data-open-key="${K}:f"${rlOpenAttr(K+":f")}><summary>First frame prompt <span class="t12 muted">Nano Banana 2.1 · ${set.aspect}</span></summary>
+            <textarea class="rl-prompt" id="rlF${sc.n}" data-rl-edit="f:${sc.n}" spellcheck="false" dir="ltr" placeholder="Written from the scene when you generate the first frame">${esc(sc.frame_prompt||"")}</textarea>
+            <div class="rl-btns"><button class="btn small" type="button" data-rl="frame" data-n="${sc.n}" ${f.status==="run"||f.pending?"disabled":""}>${f.status==="run"||f.pending?"Generating…":f.id?"Regenerate first frame":"Generate first frame"}</button>${f.web?`<a class="btn small" href="${esc(f.web)}" target="_blank" rel="noopener">Magnific</a>`:""}</div>
+            ${f.status==="paused"||(f.pending&&f.status!=="run")?`<p class="rl-status">Still generating in Magnific — it appears here when it's done.</p>`:""}${f.stale&&f.id?`<p class="rl-status warn">The supervisor corrected this prompt after the image was made. Regenerate it.</p>`:""}
+          </details>
+          <details class="rl-sec" data-open-key="${K}:v"${rlOpenAttr(K+":v")}><summary>Video prompt <span class="t12 muted">Seedance 2.5 · ${Math.max(4,Math.min(15,+sc.duration_s||8))} s</span></summary>
+            <textarea class="rl-prompt tall" data-rl-edit="s:${sc.n}" spellcheck="false" dir="ltr">${esc(sc.prompt||"")}</textarea>
+            <label class="rl-chk"><input type="checkbox" data-rl-start="${sc.n}" ${useStart?"checked":""} ${startOK?"":"disabled"}> Animate from the first frame${startOK?"":" (generate it first)"}</label>
+            <div class="rl-btns"><button class="btn small" type="button" data-rl="render" data-n="${sc.n}" ${sc.status==="run"||sc.pending?"disabled":""}>${sc.status==="run"?"Rendering…":sc.pending?"Rendering in Magnific…":sc.status==="done"?"Generate video again":"Generate video"}</button>${sc.status==="done"&&!vsrc&&!sc._blocked?`<button class="btn small" type="button" data-rl="play" data-n="${sc.n}">Play here</button>`:""}<button class="btn small" type="button" data-rl="copys" data-n="${sc.n}">Copy prompt</button>${sc.url?`<a class="btn small" href="${esc(sc.url)}" target="_blank" rel="noopener">MP4</a>`:""}${sc.web?`<a class="btn small" href="${esc(sc.web)}" target="_blank" rel="noopener">Magnific</a>`:""}</div>
+            ${sc.stale&&sc.clip?`<p class="rl-status warn">The scene prompt was corrected after this video was made.</p>`:""}
+            ${sc._blocked&&!vsrc&&sc.status==="done"?`<p class="rl-status">The video can't play inside this page — open the MP4 or Magnific to watch it.</p>`:""}
+          </details>
+          ${sc.status==="done"?`<details class="rl-sec" data-open-key="${K}:r"${rlOpenAttr(K+":r",!!sc.review)}><summary>Gemini review</summary>${rlReviewHTML(sc)}</details>`:""}
+          ${sc.status==="done"||f.id?`<div class="rl-btns rl-rateline"><span class="t12 muted">${sc.status==="done"?"How is this shot?":"How is this first frame?"}</span>${rlRate("shot","shot:"+sc.n+":"+(sc.clip||f.id),`Scene ${sc.n} ${sc.title}: ${String(sc.prompt||"").slice(0,800)}`)}</div>`:""}
+          ${sc.note&&sc.status!=="run"&&sc.status!=="err"?`<p class="rl-status">${esc(sc.note)}</p>`:""}
+        </div>
+      </details>
+    </div></article>`;
 }
 /* Deliver: the Magnific Space, the joined reel and the production bible */
 function rlDeliver(){
@@ -2486,7 +2567,7 @@ function rlBlockingHTML(sc){
     :ck?.dirty?`<span class="rl-pill warn">Edited — check again</span>`
     :ck?(ck.issues?.length?`<span class="rl-pill ok">Fixed ${ck.issues.length} · ${ck.passed||0}/8 checks${ck.secs?` · ${ck.secs}s`:""}</span>`:`<span class="rl-pill ok">✓ ${ck.passed||0}/8 checks${ck.secs?` · ${ck.secs}s`:""}</span>`)
     :`<span class="rl-pill">Not checked yet</span>`;
-  return `<details class="rl-block"${bp?" open":""}><summary><span>Blocking &amp; continuity</span>${pill}</summary>
+  return `<details class="rl-block rl-sec" data-open-key="scn:${sc.n}:b"${rlOpenAttr("scn:"+sc.n+":b")}><summary><span>Blocking &amp; continuity</span>${pill}</summary>
     ${bp?`<div class="rl-blockgrid">${rlPlanSVG(bp)}<div class="rl-blocktext" dir="auto">
       ${(bp.people||[]).map(p=>`<p><b>${esc(p.name||p.tag)}</b> ${esc(rlLabel(rlElByTag(p.tag))||p.tag||"")} — <span class="zone">${esc(zoneName(p.zone))}</span>${p.action?` · ${esc(p.action)}`:""}</p>`).join("")}
       ${(bp.openings||[]).map(o=>`<p class="muted">${esc(o.name||"Door")}: hinge ${esc(o.hinge||"?")}, opens ${esc(o.opens||"?")}</p>`).join("")}
@@ -2697,17 +2778,17 @@ function rlReviewFix(n){
   const iss=R.issues.filter(x=>x.severity!=="low").length?R.issues.filter(x=>x.severity!=="low"):R.issues;
   rlImproveScene(n,`Gemini watched the rendered video of this shot (${R.score}/10) and found these problems. Rewrite the prompt so each one cannot happen again — be explicit and physical (zones, positions, order of events, locks), not vague:\n${iss.map(x=>`- [${x.t}] ${x.what}${x.expected?` (expected: ${x.expected})`:""}${x.fix?` → suggested fix: ${x.fix}`:""}`).join("\n")}${R.good.length?`\nKeep what worked: ${R.good.join("; ")}`:""}`);
 }
-function rlShotBar(sc){
+function rlShotBar(sc,editOnly){
   const busy=sc._improving, ar=rlAr();
   const chips=ar?["سينمائي أكثر","أضحك","لقطات أقرب","حركة كاميرا أجرأ","أقصر وأسرع"]:["More cinematic","Funnier","Closer shots","Bolder camera","Shorter, faster"];
   const room=sc.room?.items?.filter(x=>!x.done)||[];
-  return `${sc.logline?`<p class="rl-logline" dir="auto">${esc(sc.logline)}</p>`:""}<div class="rl-shotbar"><button class="btn small primary" type="button" data-rl="improve" data-n="${sc.n}" ${busy?"disabled":""}>${busy==="upgrade"?"Rewriting…":"Update shot prompt"}</button><button class="btn small" type="button" data-rl="ask" data-n="${sc.n}" aria-expanded="${!!sc._ask}" ${busy?"disabled":""}>${busy==="edit"?"Applying your edit…":"Ask for edit"}</button><button class="btn small" type="button" data-rl="room" data-n="${sc.n}" ${sc._room||busy?"disabled":""}>${sc._room?"The room is thinking…":"Ask the room"}</button>${sc.history?.length?`<button class="a-btn" type="button" data-rl="undo" data-n="${sc.n}" ${busy?"disabled":""} title="Back to the previous version">Undo</button>`:""}</div>
-  ${sc._ask?`<form class="rl-ask" data-ask="${sc.n}"><label class="t12 muted" for="rlAsk${sc.n}">What should change in this scene? Write it any way you like.</label><textarea class="rl-field" id="rlAsk${sc.n}" name="q" rows="3" dir="auto" placeholder="${ar?"مثلاً: خلي الكاميرا هاند هيلد، وسارة تبتسم لما تفتح الباب، والضو أدفى":"e.g. make it handheld, she smiles when she opens the door, warmer light"}"></textarea><div class="rl-askchips">${chips.map(c=>`<button type="button" data-chip="${esc(c)}">${esc(c)}</button>`).join("")}</div><div class="rl-btns"><button class="btn small primary" type="submit">Apply edit</button><button class="btn small" type="button" data-rl="askcancel" data-n="${sc.n}">Cancel</button><span class="t12 muted">⌘/Ctrl + Enter</span></div></form>`:""}
-  ${busy?`<p class="rl-status"><span class="spin" aria-hidden="true" style="display:inline-block;vertical-align:-2px"></span> ${busy==="edit"?"Applying your edit, then the script supervisor checks it…":"Rewriting with everything the Director knows today, then the script supervisor checks it…"}</p>`:""}
+  if(editOnly) return `${sc._ask?`<form class="rl-ask" data-ask="${sc.n}"><label class="t12 muted" for="rlAsk${sc.n}">What should change in this scene? Write it any way you like.</label><textarea class="rl-field" id="rlAsk${sc.n}" name="q" rows="3" dir="auto" placeholder="${ar?"مثلاً: خلي الكاميرا هاند هيلد، وسارة تبتسم لما تفتح الباب، والضو أدفى":"e.g. make it handheld, she smiles when she opens the door, warmer light"}"></textarea><div class="rl-askchips">${chips.map(c=>`<button type="button" data-chip="${esc(c)}">${esc(c)}</button>`).join("")}</div><div class="rl-btns"><button class="btn small primary" type="submit">Apply edit</button><button class="btn small" type="button" data-rl="askcancel" data-n="${sc.n}">Cancel</button></div></form>`:""}
+  ${busy?`<p class="rl-status"><span class="spin" aria-hidden="true" style="display:inline-block;vertical-align:-2px"></span> ${busy==="edit"?"Applying your edit, then the script supervisor checks it…":"Rewriting with everything the Director knows today…"}</p>`:""}
   ${sc.improveErr?`<p class="rl-status bad">${esc(sc.improveErr)}</p>`:""}
+  ${sc.lastChange?.changes?.length&&!busy?`<details class="rl-changes"><summary><b>${sc.lastChange.kind==="edit"?"✓ Your edit is in":sc.lastChange.kind==="undo"?"Undone":"✓ Updated"}</b> · ${sc.lastChange.changes.length} change${sc.lastChange.changes.length>1?"s":""}${sc.history?.length?` <button class="a-btn" type="button" data-rl="undo" data-n="${sc.n}">Undo</button>`:""}</summary><ul>${sc.lastChange.changes.map(c=>`<li dir="auto">${esc(c)}</li>`).join("")}</ul></details>`:""}`;
+  return `<div class="rl-shotbar"><button class="btn small" type="button" data-rl="improve" data-n="${sc.n}" ${busy?"disabled":""}>${busy==="upgrade"?"Rewriting…":"✦ Update shot prompt"}</button><button class="btn small" type="button" data-rl="room" data-n="${sc.n}" ${sc._room||busy?"disabled":""}>${sc._room?"The room is thinking…":"Ask the room"}</button>${sc.history?.length?`<button class="a-btn" type="button" data-rl="undo" data-n="${sc.n}" ${busy?"disabled":""} title="Back to the previous version">Undo</button>`:""}</div>
   ${sc.roomErr?`<p class="rl-status bad">${esc(sc.roomErr)}</p>`:""}
-  ${room.length?`<div class="rl-room" dir="auto">${sc.room.items.map((x,i)=>x.done?"":`<div class="rl-roomi"><span class="ic" aria-hidden="true">${esc(rlAdv(x.id).icon||"•")}</span><div><span class="t12 muted">${esc(rlAdv(x.id).name||x.id)}</span><b>${esc(x.title)}</b><p>${esc(x.why)}</p><div class="rl-btns"><button class="btn small primary" type="button" data-rl="roomapply" data-n="${sc.n}" data-i="${i}" ${busy?"disabled":""}>Apply</button><button class="a-btn" type="button" data-rl="roomskip" data-n="${sc.n}" data-i="${i}">Skip</button></div></div></div>`).join("")}</div>`:""}
-  ${sc.lastChange?.changes?.length&&!busy?`<div class="rl-changes"><b>${sc.lastChange.kind==="edit"?"Your edit":sc.lastChange.kind==="undo"?"Undone":"Updated"}</b>${sc.lastChange.ask?(/^Gemini watched/.test(sc.lastChange.ask)?" · fixes from Gemini’s review":` · “${esc(sc.lastChange.ask.length>160?sc.lastChange.ask.slice(0,160)+"…":sc.lastChange.ask)}”`):""}<ul>${sc.lastChange.changes.map(c=>`<li dir="auto">${esc(c)}</li>`).join("")}</ul></div>`:""}`;
+  ${room.length?`<div class="rl-room" dir="auto">${sc.room.items.map((x,i)=>x.done?"":`<div class="rl-roomi"><span class="ic" aria-hidden="true">${esc(rlAdv(x.id).icon||"•")}</span><div><span class="t12 muted">${esc(rlAdv(x.id).name||x.id)}</span><b>${esc(x.title)}</b><p>${esc(x.why)}</p><div class="rl-btns"><button class="btn small primary" type="button" data-rl="roomapply" data-n="${sc.n}" data-i="${i}" ${busy?"disabled":""}>Apply</button><button class="a-btn" type="button" data-rl="roomskip" data-n="${sc.n}" data-i="${i}">Skip</button></div></div></div>`).join("")}</div>`:""}`;
 }
 /* Adil's map technique: a top-down image of the location with numbered positions, attached to the shot as a positions-only reference */
 async function rlMakeMap(n){
@@ -2767,17 +2848,55 @@ async function rlImage({prompt,aspect,refs=[],label,onQueued}){
 /* the user's own image becomes the element's reference (uploaded to Magnific, used as @img in every frame and shot) */
 async function rlUploadMag(blob,name){
   if(!S.connected) await connect(true);
-  const plan=await buildArgs("creations_upload_image",`Upload one JPEG image named ${name} to the user's Magnific creations so it can be used as a reference image (@img) in image and video generation. The image bytes MUST go in: put the placeholder string "__FILE__" (raw base64) as the value of the property that carries the image content, or "__FILE_DATAURL__" if that property expects a data: URL.`,{filename:name,mime_type:"image/jpeg",content:"__FILE__"});
-  let pargs=plan.args;
-  if(!/__FILE(_DATAURL)?__/.test(JSON.stringify(pargs))){ const props=Object.keys(S.schemas.creations_upload_image?.inputSchema?.properties||{}); const k=props.find(p=>/base64|content|data|image|file/i.test(p)&&!/url|name|type|mime|folder/i.test(p)); if(k) pargs={...pargs,[k]:"__FILE__"}; else throw {code:"tool_error",message:"Couldn't find where creations_upload_image takes the image"}; }
-  const usesDataUrl=JSON.stringify(pargs).includes("__FILE_DATAURL__");
-  const jpg=await toJpeg(blob,2048).catch(()=>blob);
-  let val; if(S.fileArgs&&!usesDataUrl) val={$file:{data:jpg,name,type:"image/jpeg"}}; else { const b64=await toB64(jpg); val=usesDataUrl?"data:image/jpeg;base64,"+b64:b64; }
-  let args=replaceDeep(pargs,"__FILE__",val); args=replaceDeep(args,"__FILE_DATAURL__",val);
+  const sc=await schemaOf("creations_upload_image");
+  const props=sc?.inputSchema?.properties||{};
+  const descOf=k=>`${k} ${props[k]?.description||""} ${props[k]?.format||""}`.toLowerCase();
+  /* where does the tool take the image? bytes (base64/file) or a link (url) */
+  const fileKey=Object.keys(props).find(k=>/base64|bytes|content|data|file/.test(k.toLowerCase())&&!/url|name|type|mime|folder|project/i.test(k))
+    ||Object.keys(props).find(k=>/base64|bytes/.test(descOf(k))&&!/name|mime|folder/i.test(k));
+  const urlKey=Object.keys(props).find(k=>/url|uri|link|source/i.test(k)&&!/folder|project/i.test(k))
+    ||Object.keys(props).find(k=>/\burl\b|https?:/.test(descOf(k))&&!/name|mime|folder/i.test(k));
+  const jpg=await toJpeg(blob,1600).catch(()=>blob);
+  let link=null;
+  if(!fileKey&&urlKey){
+    /* URL-only: give the image a temporary public link through BAE Gemini Eye */
+    try{ const small=jpg.size>1300000?await toJpeg(blob,1200).catch(()=>jpg):jpg;
+      const r=await mcp.callTool(GEYE,"host_file",{data:await toB64(small),mime:"image/jpeg",name},{cache:false});
+      link=(r?.payload&&typeof r.payload==="object"?r.payload.url:null)||(()=>{ try{ return JSON.parse((r?.content||[]).map(c=>c.text||"").join("")).url; }catch{ return null; } })();
+    }catch(e){ throw {code:"tool_error",message:`Magnific only takes images from a web link here, and BAE Gemini Eye couldn't host it (${e?.code||e?.message||"error"}). Reconnect the BAE Gemini Eye connector (Settings → Connectors) so it shows 5 tools, then try again.`}; }
+    if(!link) throw {code:"tool_error",message:"BAE Gemini Eye didn't return a link for the image."};
+  }
+  if(!fileKey&&!urlKey) throw {code:"tool_error",message:`Magnific's upload tool takes: ${Object.keys(props).join(", ")||"(no schema)"} — none of them is an image. Send me this message.`};
+  const hint=fileKey?`The image bytes go in "${fileKey}": put the placeholder "${/data:|data url|dataurl/i.test(descOf(fileKey))?"__FILE_DATAURL__":"__FILE__"}" there.`:`The image is at this public URL; put it in "${urlKey}": ${link}`;
+  const plan=await buildArgs("creations_upload_image",`Upload one JPEG image named ${name} to the user's Magnific creations so it can be used as a reference image (@img) in image and video generation. ${hint}`,fileKey?{filename:name,mime_type:"image/jpeg",[fileKey]:"__FILE__"}:{filename:name,mime_type:"image/jpeg",[urlKey]:link});
+  let args=plan.args||{};
+  if(fileKey){
+    if(!/__FILE(_DATAURL)?__/.test(JSON.stringify(args))) args={...args,[fileKey]:"__FILE__"};
+    const usesDataUrl=JSON.stringify(args).includes("__FILE_DATAURL__");
+    let val; if(S.fileArgs&&!usesDataUrl) val={$file:{data:jpg,name,type:"image/jpeg"}}; else { const small=jpg.size>700000?await toJpeg(blob,1100).catch(()=>jpg):jpg; const b64=await toB64(small); val=usesDataUrl?"data:image/jpeg;base64,"+b64:b64; }
+    args=replaceDeep(args,"__FILE__",val); args=replaceDeep(args,"__FILE_DATAURL__",val);
+  } else if(!JSON.stringify(args).includes(link)) args={...args,[urlKey]:link};
   const r=await callMag("creations_upload_image",args);
   let rr=readResult(r); if(!rr.ids.length&&!rr.urls.length) rr=await extractWithClaude(r,"the uploaded creation's identifier and url");
   if(!rr.ids.length) throw {code:"tool_error",message:"Magnific accepted the upload but returned no identifier"};
+  /* an upload may still be processing: wait until it is ready to be used as a reference */
+  try{ await waitFor([rr.ids[0]],"upload",4); }catch{}
   return {id:rr.ids[0],web:rr.links?.find(u=>/magnific\.com/.test(u))||null};
+}
+/* study the user's own image so every description and prompt matches it exactly */
+async function rlStudyImage(e,blob){
+  if(!sampleImages) return false;
+  const isChar=RL.characters.includes(e), isProp=e.kind==="prop";
+  const kind=isChar?"character":isProp?"prop/product":"location";
+  const o=await rlAsk(`You are the casting and art department of a commercial director. The user uploaded the reference image of the ${kind} ${e.handle||e.tag} "${e.name||""}" for a Bank al Etihad (Jordan) reel. From now on THIS IMAGE is the truth — study it and describe it EXACTLY, so every prompt matches it.
+Current notes (may be wrong — the image wins): ${trimJSON({description:e.description,wardrobe:e.wardrobe,prompt:String(e.prompt||"").slice(0,800)},1600)}
+${isChar?`Describe: apparent age, gender, build and height impression, face shape, skin tone, eyes, brows, nose, lips, facial hair, hairline, hair colour/length/style, distinctive marks; then EXACT wardrobe top to bottom (garment, colour, fabric, fit, details, shoes, accessories); then posture and attitude. If the image is a multi-panel sheet, read all panels.`:isProp?`Describe: exact object, shape, size impression, materials, colours, finish, branding/markings, condition, details front and back.`:`Describe: kind of place, layout and depth, walls/floor/ceiling materials and colours, doors and windows (where, which side), furniture and objects, light sources and direction, colour temperature, time of day, mood.`}
+Reply with ONLY JSON: {"description":"2–3 sentences, concrete","${isChar?"wardrobe":"details"}":"precise, comma-separated","prompt":"a complete image-generation prompt that recreates exactly this ${kind}${isChar||isProp?" on a plain gray clean background (three-panel character sheet for a character)":""}","summary_ar":"one short Jordanian-Arabic sentence telling the user what you saw"}`,{modelTier:"default",images:[blob],cache:false});
+  if(!o||!o.description) return false;
+  e.description=String(o.description); if(isChar&&o.wardrobe) e.wardrobe=String(o.wardrobe); if(!isChar&&o.details) e.details=String(o.details);
+  if(o.prompt) e.prompt=String(o.prompt);
+  e.studied=Date.now(); e._summary=String(o.summary_ar||"");
+  return true;
 }
 async function rlUseImage(tag,blob){
   const e=rlElByTag(tag); if(!e||!blob||!mcp) return;
@@ -2786,6 +2905,16 @@ async function rlUseImage(tag,blob){
     const th=await rlThumb(URL.createObjectURL(blob),640);
     const out=await rlJob(()=>rlUploadMag(blob,`${String(e.handle||e.tag).replace(/^@/,"")}.jpg`));
     Object.assign(e,{id:out.id,web:out.web||e.web,status:"ok",stale:false,fromUser:true,lib:null,fromLib:false}); if(th) rlTSet(out.id,th);
+    e._note="Studying your image…"; rlBoard();
+    const studied=await rlStudyImage(e,blob).catch(()=>false);
+    if(studied){
+      /* carry the new look into every scene that uses this element */
+      const hs=[e.handle,e.tag].filter(Boolean).map(x=>String(x).toLowerCase());
+      const ns=RL.scenes.filter(sc=>hs.some(h=>String(sc.prompt||"").toLowerCase().includes(h)||String(sc.frame_prompt||"").toLowerCase().includes(h)||(sc.refs||[]).map(x=>String(x).toLowerCase()).includes(h))).map(sc=>sc.n);
+      RL.chat.push({role:"a",text:`👁 ${e._summary||`I studied your image of ${e.name}.`}\n${e.description}${e.wardrobe?`\nWardrobe: ${e.wardrobe}`:""}${ns.length?`\nI'm updating scene${ns.length>1?"s":""} ${ns.join(", ")} to match.`:""}`,t:Date.now()});
+      rlRenderChat();
+      if(ns.length) rlCheckScenes(ns,{quiet:true});
+    }
     brSignal(RL.characters.includes(e)?"character":"location","own_image_used",1,{item:`${e.handle||e.tag} ${e.name||""}`,key:"own"+e.tag});
   }catch(err){ e.status="err"; e.err="Your image wasn't uploaded: "+mcpCopy(err); }
   finally{ delete e._live; delete e._note; rlSave(); rlBoard(); }
@@ -3086,9 +3215,14 @@ async function rlBible(){
   $("rlInput").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing){ e.preventDefault(); rlSend($("rlInput").value); } });
   document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&RL&&!$("rlProjView").hidden){ setTimeout(rlResume,600); if(rlWakeN>0) rlWake(true).then(()=>rlWake(false)); } });
   $("rlMsgs").addEventListener("click",e=>{ if(e.target.closest("#rlRetry")&&RL?.chatPending) rlSend(RL.chatPending.text,{retry:true});
-    const u=e.target.closest("[data-adv]"); if(u&&RL){ const [mi,ai]=u.dataset.adv.split(":").map(Number); const x=RL.chat[mi]?.advisors?.[ai]; if(x){ const A=rlAdv(x.id); brSignal("chat","advisor_used",1,{note:x.note,item:A.name,key:x.note}); rlSend(rlAr()?`طبّق اقتراح ${A.name}: ${x.note}`:`Apply the ${A.name}'s suggestion: ${x.note}`); } } });
+    const sk=e.target.closest("[data-advskip]"); if(sk&&RL){ const [mi,ai]=sk.dataset.advskip.split(":").map(Number); const x=RL.chat[mi]?.advisors?.[ai]; if(x){ x.skipped=true; brSignal("chat","advisor_skipped",-1,{note:x.note,item:rlAdv(x.id).name,key:"skip"+x.note}); rlSave(); rlRenderChat(); } return; }
+    const u=e.target.closest("[data-adv]"); if(u&&RL){ const [mi,ai]=u.dataset.adv.split(":").map(Number); const x=RL.chat[mi]?.advisors?.[ai]; if(x){ x.used=true; const A=rlAdv(x.id); brSignal("chat","advisor_used",1,{note:x.note,item:A.name,key:x.note}); rlSend(rlAr()?`طبّق اقتراح ${A.name}: ${x.note}`:`Apply the ${A.name}'s suggestion: ${x.note}`); } } });
   $("rlChips").onclick=e=>{ const b=e.target.closest("button"); if(b) rlSend(b.textContent); };
+  $("reels").addEventListener("toggle",e=>{ const d=e.target, k=d?.dataset?.openKey; if(!k) return; if(d.open){ RL_OPEN.add(k); RL_OPEN.delete("!"+k); } else { RL_OPEN.delete(k); RL_OPEN.add("!"+k); } },true);
   $("reels").addEventListener("change",e=>{ const t=e.target.closest?.("[data-rl-own]"); if(!t||!t.files?.[0]) return; const f=t.files[0]; t.value=""; rlUseImage(t.dataset.rlOwn,f); });
+  const rlGrow=()=>{ const t=$("rlInput"); t.style.height="auto"; t.style.height=Math.min(180,t.scrollHeight)+"px"; };
+  $("rlInput").addEventListener("input",rlGrow); new MutationObserver(()=>{}).observe($("rlInput"),{attributes:true});
+  $("rlForm").addEventListener("submit",()=>setTimeout(rlGrow,0));
   $("rlFile").onchange=e=>{ for(const f of [...e.target.files].slice(0,10-rlPending.length)) rlPending.push({blob:f,url:URL.createObjectURL(f),name:f.name,video:/^video\//.test(f.type)}); e.target.value=""; rlRenderAtt(); };
   $("rlInput").addEventListener("paste",e=>{ const fs=[...(e.clipboardData?.files||[])].filter(f=>/^image\//.test(f.type)); if(fs.length){ fs.forEach(f=>rlPending.push({blob:f,url:URL.createObjectURL(f),name:f.name})); rlRenderAtt(); } });
   $("rlChatPane").addEventListener("dragover",e=>e.preventDefault());

@@ -29,7 +29,7 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        video_url: { type: "string", description: "Direct https URL of the video file (mp4/mov/webm). Or use file_name from upload_chunk." },
+        video_url: { type: "string", description: "Direct https URL of the video file (mp4/mov/webm) or a public YouTube link (watch, shorts, youtu.be). Or use file_name from upload_chunk." },
         file_name: { type: "string", description: "A video already uploaded with upload_start/upload_chunk (the file.name it returned, e.g. files/abc123)." },
         question: { type: "string", description: "What Gemini should look for and how to answer." },
         fps: { type: "number", description: "Frames per second Gemini samples, 1–10. Default 4 for short shots (fast action needs 5+)." },
@@ -167,6 +167,8 @@ async function watch(args, env) {
     const f = await waitActive(fileName, env.GEMINI_API_KEY);
     part = { file_data: { mime_type: f.mimeType || "video/mp4", file_uri: f.uri } };
     size = +f.sizeBytes || 0;
+  } else if (/^https?:\/\/(www\.|m\.)?(youtube\.com\/(watch|shorts\/)|youtu\.be\/)/i.test(videoUrl)) {
+    part = { file_data: { file_uri: videoUrl.replace(/^https?:\/\/(www\.|m\.)?youtube\.com\/shorts\/([\w-]+).*/i, "https://www.youtube.com/watch?v=$2") } };
   } else {
   // 1. download the video
   const vr = await fetch(videoUrl, { redirect: "follow" });
