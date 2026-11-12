@@ -2039,7 +2039,167 @@ function rlState(){
     film_look:RL.look||null,
     scenes:RL.scenes.map(({n,title,logline,duration_s,refs,prompt,frame_prompt,frame,status,review})=>({n,title,logline,duration_s,refs,frame_prompt,prompt,first_frame_generated:!!frame?.id,video_rendered:status==="done",gemini_review:review?{score:review.score,verdict:review.verdict,summary:review.summary,issues:review.issues.map(x=>`[${x.t}] ${x.what}`)}:null}))};
 }
-function rlPromptFor(text,memText,canSearch){
+/* ---------- The Director as an agent: it reads every tab in full and changes exactly what it needs through tools ---------- */
+function rlEvent(x){ if(!RL) return; (RL.events=RL.events||[]).push({t:Date.now(),x:String(x).slice(0,400)}); RL.events=RL.events.slice(-80); }
+const rlKind=e=>RL.characters.includes(e)?"character":e.kind==="prop"?"prop":"location";
+const rlImgState=e=>e.fromUser?"user's own image":e.fromLib?"BAE library image":e.status==="run"?"generating now":e.id?(e.stale?"generated (prompt changed since — regenerate)":"generated"):"no image yet";
+function rlElFull(e){ return {kind:rlKind(e),tag:e.tag,handle:e.handle,name:e.name,role:e.role,description:e.description,wardrobe:e.wardrobe,details:e.details,prompt:e.prompt,library:e.lib||null,image:rlImgState(e),what_the_image_shows:e.seen||null,error:e.err||null}; }
+function rlSceneFull(sc){ return {n:sc.n,title:sc.title,logline:sc.logline,duration_s:sc.duration_s,refs:sc.refs,blueprint:sc.blueprint||null,frame_prompt:sc.frame_prompt,prompt:sc.prompt,
+  first_frame:sc.frame?.status==="run"?"generating now":sc.frame?.id?(sc.frame.stale?"generated (frame prompt changed since)":"generated"):"none",what_the_first_frame_shows:sc.frame?.seen||null,
+  video:sc.status==="run"?"rendering now":sc.status==="done"?"rendered":sc.status==="err"?"failed: "+(sc.note||""):"not rendered",
+  check:sc.check?{dirty:!!sc.check.dirty,passed:sc.check.passed,total:sc.check.total}:null,
+  gemini_review:sc.review?{score:sc.review.score,verdict:sc.review.verdict,summary:sc.review.summary,issues:(sc.review.issues||[]).map(x=>`[${x.t}] ${x.cat||""}: ${x.what}${x.fix?` → fix: ${x.fix}`:""}`)}:null}; }
+function rlOverview(){
+  const set=rlSet();
+  return {title:RL.title,stage:RL.stage,user_is_viewing_tab:RL.view,settings:set,next_free_tag:"@img"+RL.nextTag,
+    ideas:RL.ideas.map((x,i)=>`${i}: ${x.title}${RL.picked&&RL.picked.title===x.title?" (PICKED)":""}`),picked_idea:RL.picked?{title:RL.picked.title,logline:RL.picked.logline}:null,
+    script:RL.script?{title:RL.script.title,duration_s:RL.script.duration_s,scenes:(RL.script.scenes||[]).map(s=>`${s.n}. ${s.title}`)}:null,
+    film_look:RL.look?String(RL.look).slice(0,300)+(RL.look.length>300?"…":""):null,
+    elements:rlEls().map(e=>({kind:rlKind(e),handle:e.handle,tag:e.tag,name:e.name,image:rlImgState(e),description:String(e.description||"").slice(0,220),seen:e.seen?String(e.seen).slice(0,220):undefined})),
+    scenes:RL.scenes.map(sc=>({n:sc.n,title:sc.title,duration_s:sc.duration_s,refs:sc.refs,first_frame:sc.frame?.id?"yes":"no",video:sc.status==="done"?"rendered":sc.status||"no",review:sc.review?.score??null})),
+    notes:RL.notes?String(RL.notes).slice(0,1500)+(RL.notes.length>1500?"… (studio_read notes for all)":""):""};
+}
+function rlSection(section,arg){
+  switch(section){
+    case "overview": return rlOverview();
+    case "ideas": return {ideas:RL.ideas,picked:RL.picked,earlier_ideas:RL.ideasPrev.map(x=>x.title)};
+    case "script": return RL.script||"No script yet.";
+    case "characters": return RL.characters.map(rlElFull);
+    case "locations": return RL.locations.filter(e=>e.kind!=="prop").map(rlElFull);
+    case "props": return RL.locations.filter(e=>e.kind==="prop").map(rlElFull);
+    case "locations_all": return RL.locations.map(rlElFull);
+    case "element": { const e=rlElByTag(arg)||rlEls().find(x=>x.name&&String(x.name).toLowerCase()===String(arg||"").toLowerCase()); return e?rlElFull(e):`No element "${arg}". Elements: ${rlEls().map(x=>x.handle).join(", ")}`; }
+    case "scenes": return RL.scenes.map(rlSceneFull);
+    case "scene": { const sc=RL.scenes.find(x=>+x.n===+arg); return sc?rlSceneFull(sc):`No scene ${arg}. Scenes: ${RL.scenes.map(x=>x.n).join(", ")||"none"}`; }
+    case "film_look": return RL.look||"Not written yet.";
+    case "notes": return RL.notes||"(empty)";
+    case "settings": return rlSet();
+    case "activity": return (RL.events||[]).slice(-40).map(x=>`${new Date(x.t).toLocaleString()} — ${x.x}`).join("\n")||"Nothing yet.";
+    default: return "Unknown section.";
+  }
+}
+const rlSnapKeys=["title","notes","ideas","ideasPrev","picked","script","characters","locations","scenes","look","settings","stage","view","nextTag"];
+const rlSnap=()=>JSON.parse(JSON.stringify(Object.fromEntries(rlSnapKeys.map(k=>[k,RL[k]])),(k,v)=>k.startsWith("_")?undefined:v));
+const RL_UNDO=new Map();
+function rlUndoTurn(id){ const s=RL_UNDO.get(id); if(!s||!RL) return; Object.assign(RL,JSON.parse(JSON.stringify(s))); RL_UNDO.delete(id);
+  const m=RL.chat.find(x=>x.undo===id); if(m){ m.undone=true; delete m.undo; }
+  rlEvent("The user undid the Director's changes from one reply."); rlSys(rlAr()?"رجّعت كل التغييرات تبعت هالرد.":"All changes from that reply were undone."); rlSave(); rlRender(); }
+function rlCleanHandle(h,kind){ const p={character:"char",location:"loc",prop:"prop"}[kind]||"loc"; let s=String(h||"").trim().replace(/^@/,"").toLowerCase().replace(/[^a-z0-9_]+/g,"_").replace(/^_+|_+$/g,""); if(!s) return null; if(!/^(char|loc|prop)_/.test(s)) s=p+"_"+s; return "@"+s.slice(0,32); }
+/* tools the Director calls while it thinks; mutations are recorded so the reply shows them and can be undone */
+function rlStudioTools(turn){
+  const T=(label)=>rlStep(label);
+  const changed=x=>{ if(!turn.snap) turn.snap=rlSnap(); turn.changes.push(x); };
+  const S1=v=>typeof v==="string"?v:JSON.stringify(v);
+  const els={type:"string",description:"handle like @char_sara / @loc_hall / @prop_ticket (or tag @img3 or the name)"};
+  return [
+    {name:"studio_read",description:"Read any part of the production IN FULL (nothing is cut): overview, ideas, script, characters, locations, props, element (arg = handle), scenes, scene (arg = number), film_look, notes, settings, activity (what the user and the studio did recently: edits, uploads, generations, renders, reviews). Read before you change something you can't see completely above.",
+      inputSchema:{type:"object",properties:{section:{type:"string",enum:["overview","ideas","script","characters","locations","props","element","scenes","scene","film_look","notes","settings","activity"]},arg:{type:"string"}},required:["section"]},
+      execute:async({section,arg})=>{ T(`Reading ${section}${arg?` ${arg}`:""}`); const r=S1(rlSection(section,arg)); return r.length>24000?r.slice(0,24000)+"… (cut — read a single element or scene instead)":r; }},
+    {name:"studio_upsert_element",description:"Add ONE character, location or prop, or change fields of an existing one. Only the fields you pass change; everything else (its image, tag, edits) stays. Pass the full new text for a field you change (e.g. the whole prompt). A new element needs kind, handle, name, description and a complete prompt (CHARACTER SHEET / LOCATION / PROP SHEET template). If an element uses the user's own image, its image is the truth: only align description/prompt with it.",
+      inputSchema:{type:"object",properties:{kind:{type:"string",enum:["character","location","prop"]},handle:els,new_handle:{type:"string",description:"rename the handle (rarely)"},name:{type:"string"},role:{type:"string"},description:{type:"string"},wardrobe:{type:"string"},details:{type:"string"},prompt:{type:"string"},library:{type:"string",enum:["","Wissam","Lina","Sara","Omar"]}},required:["handle"]},
+      execute:async(a)=>{ const e=rlElByTag(a.handle)||rlEls().find(x=>a.name&&x.name&&x.name.toLowerCase()===String(a.name).toLowerCase()&&(!a.kind||rlKind(x)===a.kind));
+        const F=["name","role","description","wardrobe","details","prompt"];
+        if(e){ const diff=F.filter(f=>a[f]!=null&&String(a[f])!==String(e[f]||"")); if(a.library!=null&&(a.library||null)!==(e.lib||null)) diff.push("library");
+          if(a.new_handle){ const h=rlCleanHandle(a.new_handle,rlKind(e)); if(h&&h!==e.handle){ diff.push("handle"); } }
+          if(!diff.length) return `No change: ${e.handle} already has these values.`;
+          changed(`✎ ${e.handle}: ${diff.join(", ")}`); T(`Editing ${e.handle}`);
+          for(const f of F) if(a[f]!=null) e[f]=String(a[f]);
+          if(diff.includes("prompt")&&e.id&&!e.fromUser&&!e.fromLib) e.stale=true;
+          if(a.library!=null){ e.lib=a.library||null; rlLinkLibrary(); }
+          if(diff.includes("handle")){ const old=e.handle; e.handle=rlCleanHandle(a.new_handle,rlKind(e)); for(const sc of RL.scenes){ const rx=new RegExp(old.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"gi"); sc.prompt=String(sc.prompt||"").replace(rx,e.handle); sc.frame_prompt=String(sc.frame_prompt||"").replace(rx,e.handle); sc.refs=(sc.refs||[]).map(r=>String(r).toLowerCase()===old.toLowerCase()?e.handle:r); } }
+          rlEvent(`Director edited ${e.handle} (${diff.join(", ")}).`); turn.dirty=true;
+          return `Updated ${e.handle} (${e.tag}): ${diff.join(", ")}.${e.stale?" Its image no longer matches the prompt — it needs regenerating (ask the user or use studio_action generate_image).":""}`; }
+        const kind=a.kind||"location"; const handle=rlCleanHandle(a.handle,kind)||rlCleanHandle(a.name,kind);
+        if(!handle) return "Give a handle.";
+        if(!a.prompt&&!a.library) return "A new element needs a complete prompt.";
+        const n={tag:"@img"+(RL.nextTag++),handle,name:a.name||handle.replace(/^@\w+?_/,""),role:a.role||"",description:a.description||"",prompt:a.prompt||"",lib:a.library||null};
+        if(a.wardrobe) n.wardrobe=a.wardrobe; if(a.details) n.details=a.details;
+        changed(`＋ ${kind} ${handle}`); T(`Adding ${handle}`);
+        if(kind==="character") RL.characters.push(n); else { if(kind==="prop") n.kind="prop"; else n.kind="location"; RL.locations.push(n); }
+        rlEnsureHandles(RL); rlLinkLibrary(); rlEvent(`Director added ${kind} ${handle}.`); turn.dirty=true;
+        return `Added ${kind} ${n.handle} as ${n.tag}. It has no image yet.`; }},
+    {name:"studio_delete",description:"Delete exactly one thing: an element (target = handle), a scene (target = scene number) or a script scene (target = 'script:N'). Everything else stays. Tell the user in the reply what you deleted.",
+      inputSchema:{type:"object",properties:{target:{type:"string"}},required:["target"]},
+      execute:async({target})=>{ const t=String(target||"").trim();
+        if(/^script:\d+$/i.test(t)){ const n=+t.split(":")[1]; const L=RL.script?.scenes||[]; const i=L.findIndex(s=>+s.n===n); if(i<0) return "No such script scene."; changed(`− script scene ${n}`); L.splice(i,1); rlEvent(`Director deleted script scene ${n}.`); turn.dirty=true; return `Deleted script scene ${n}.`; }
+        if(/^\d+$/.test(t)){ const i=RL.scenes.findIndex(s=>+s.n===+t); if(i<0) return `No scene ${t}.`; changed(`− scene ${t}`); T(`Deleting scene ${t}`); RL.scenes.splice(i,1); rlEvent(`Director deleted scene ${t}.`); turn.dirty=true; return `Deleted scene ${t}. Remaining: ${RL.scenes.map(s=>s.n).join(", ")||"none"}.`; }
+        const e=rlElByTag(t)||rlEls().find(x=>x.name&&x.name.toLowerCase()===t.toLowerCase()); if(!e) return `Nothing called ${t}.`;
+        changed(`− ${e.handle}`); T(`Deleting ${e.handle}`);
+        RL.characters=RL.characters.filter(x=>x!==e); RL.locations=RL.locations.filter(x=>x!==e);
+        const used=RL.scenes.filter(sc=>[sc.prompt,sc.frame_prompt,...(sc.refs||[])].join(" ").toLowerCase().includes(String(e.handle).toLowerCase())).map(s=>s.n);
+        rlEvent(`Director deleted ${e.handle}.`); turn.dirty=true;
+        return `Deleted ${e.handle}.${used.length?` Scenes ${used.join(", ")} still mention it — update them.`:""}`; }},
+    {name:"studio_upsert_scene",description:"Create or change ONE directing scene (shot). Only the fields you pass change. For a new scene give everything (blueprint first, then frame_prompt and prompt). Changing prompt resets its rendered video; the studio re-checks the scene automatically.",
+      inputSchema:{type:"object",properties:{n:{type:"number"},title:{type:"string"},logline:{type:"string"},duration_s:{type:"number"},refs:{type:"array",items:{type:"string"}},blueprint:{type:"object"},frame_prompt:{type:"string"},prompt:{type:"string"},new_n:{type:"number",description:"move the scene to this number (others shift)"}},required:["n"]},
+      execute:async(a)=>{ const n=+a.n; const fields=["title","logline","duration_s","refs","blueprint","frame_prompt","prompt"]; const sc0={n}; for(const f of fields) if(a[f]!=null) sc0[f]=a[f];
+        const old=RL.scenes.find(x=>+x.n===n);
+        if(!old&&!a.prompt) return "A new scene needs a prompt (and a blueprint and frame_prompt).";
+        changed(old?`✎ scene ${n}: ${fields.filter(f=>a[f]!=null).join(", ")}`:`＋ scene ${n}`); T(old?`Rewriting scene ${n}`:`Writing scene ${n}`);
+        turn.scenes.push(sc0);
+        if(a.new_n!=null&&+a.new_n!==n) turn.moves.push([n,+a.new_n]);
+        rlEvent(`Director ${old?"changed":"added"} scene ${n}.`); turn.dirty=true;
+        return `${old?"Updated":"Added"} scene ${n}.`; }},
+    {name:"studio_script",description:"Change the script: pass 'scene' to add or change ONE script scene (by n, only given fields change), or 'script' to replace the whole script (title, duration_s, scenes).",
+      inputSchema:{type:"object",properties:{scene:{type:"object",description:"{n,time,title,action,dialogue:[{who,line}],on_screen_text,sound}"},script:{type:"object"}}},
+      execute:async({scene,script})=>{ if(script&&typeof script==="object"){ changed("✎ script (whole)"); T("Rewriting the script"); RL.script=script; rlEvent("Director rewrote the script."); turn.dirty=true; return "Script replaced."; }
+        if(scene&&scene.n!=null){ RL.script=RL.script||{title:RL.title,scenes:[]}; const L=RL.script.scenes=RL.script.scenes||[]; const i=L.findIndex(s=>+s.n===+scene.n); changed(`${i<0?"＋":"✎"} script scene ${scene.n}`); T(`Editing script scene ${scene.n}`);
+          if(i<0){ L.push(scene); L.sort((x,y)=>+x.n-+y.n); } else L[i]={...L[i],...scene}; rlEvent(`Director ${i<0?"added":"edited"} script scene ${scene.n}.`); turn.dirty=true; return `Script scene ${scene.n} saved.`; }
+        return "Pass scene or script."; }},
+    {name:"studio_set",description:"Set one project field: title, notes_append (add a line to the notes), notes (replace), film_look, settings ({length, aspect, lang, res}), stage, open_tab (show the user a tab: idea, script, characters, locations, directing, render), picked_idea (index of the idea).",
+      inputSchema:{type:"object",properties:{field:{type:"string",enum:["title","notes_append","notes","film_look","settings","stage","open_tab","picked_idea"]},value:{}},required:["field","value"]},
+      execute:async({field,value})=>{ const v=value;
+        if(field==="open_tab"){ if(rlStageIx(v)<0) return "Unknown tab."; turn.openTab=String(v); return `The user will see the ${v} tab.`; }
+        changed(`✎ ${field.replace("_"," ")}`); turn.dirty=true;
+        if(field==="title") RL.title=String(v);
+        else if(field==="notes_append") RL.notes=[RL.notes,String(v)].filter(Boolean).join("\n");
+        else if(field==="notes") RL.notes=String(v);
+        else if(field==="film_look"){ RL.look=String(v); RL.scenes.forEach(s=>{ if(s.check) s.check.dirty=true; }); }
+        else if(field==="settings"&&v&&typeof v==="object"){ RL.settings={...rlSet(),...v}; }
+        else if(field==="stage"){ if(rlStageIx(v)<0) return "Unknown stage."; RL.stage=String(v); }
+        else if(field==="picked_idea"){ const x=RL.ideas[+v]; if(!x) return "No such idea."; RL.picked=x; }
+        rlEvent(`Director set ${field}.`); return `${field} saved.`; }},
+    {name:"studio_action",description:"Start a studio job. These spend Magnific credits and take minutes — use them only when the user asked for it (or clearly approved). generate_image (target = element handle), generate_frame (target = scene number), render_video (target = scene number), review_video (Gemini watches the rendered scene, target = scene number), check_scene (re-check a scene's prompt, target = scene number). Jobs start right after your reply.",
+      inputSchema:{type:"object",properties:{action:{type:"string",enum:["generate_image","generate_frame","render_video","review_video","check_scene"]},target:{type:"string"}},required:["action","target"]},
+      execute:async({action,target})=>{ const t=String(target||"");
+        if(action==="generate_image"){ if(!rlElByTag(t)&&!turn.changes.some(c=>c.includes(t))) return `No element ${t}.`; }
+        else if(!RL.scenes.find(s=>+s.n===+t)&&!turn.scenes.some(s=>+s.n===+t)) return `No scene ${t}.`;
+        turn.actions.push([action,t]); T(`Queued: ${action.replace("_"," ")} ${t}`); return `Queued ${action} ${t}; it starts as soon as you reply.`; }}
+  ];
+}
+function rlApplyTurn(turn){
+  /* scene writes go through the same merge as before: stale video/frame + automatic re-check */
+  if(turn.scenes.length){ const toCheck=[];
+    for(const sc of turn.scenes){ const i=RL.scenes.findIndex(x=>+x.n===+sc.n);
+      if(i<0){ RL.scenes.push({...sc}); toCheck.push(sc.n); continue; }
+      const old=RL.scenes[i]; const m={...old,...sc};
+      if(sc.prompt&&sc.prompt!==old.prompt) Object.assign(m,{status:null,clip:null,url:null,note:null,_src:null,web:null});
+      if((sc.prompt&&sc.prompt!==old.prompt)||(sc.frame_prompt&&sc.frame_prompt!==old.frame_prompt)||(sc.blueprint&&JSON.stringify(sc.blueprint)!==JSON.stringify(old.blueprint))||(sc.refs&&JSON.stringify(sc.refs)!==JSON.stringify(old.refs))){ toCheck.push(sc.n); if(m.frame?.id&&sc.frame_prompt&&sc.frame_prompt!==old.frame_prompt) m.frame={...m.frame,stale:true}; }
+      RL.scenes[i]=m; }
+    for(const [a,b] of turn.moves){ const i=RL.scenes.findIndex(x=>+x.n===a); if(i<0) continue; const [s]=RL.scenes.splice(i,1); RL.scenes.splice(Math.max(0,Math.min(RL.scenes.length,b-1)),0,s); RL.scenes.forEach((x,k)=>x.n=k+1); }
+    RL.scenes.sort((x,y)=>+x.n-+y.n);
+    if(toCheck.length) setTimeout(()=>rlCheckScenes(toCheck,{quiet:true}),60); }
+  if(turn.openTab) RL.view=turn.openTab;
+}
+function rlRunActions(turn){
+  for(const [a,t] of turn.actions){
+    if(a==="generate_image") rlGenElement(rlElByTag(t)?.tag||t);
+    else if(a==="generate_frame") rlGenFrame(t);
+    else if(a==="render_video") rlRenderScene(t);
+    else if(a==="review_video") rlReview(t);
+    else if(a==="check_scene") rlCheckScenes([t]);
+  }
+}
+/* the Director looks at every new image (generated or replaced), so it always knows what is actually on screen */
+async function rlDataBlob(src){ try{ const r=await fetch(src); return await r.blob(); }catch{ return null; } }
+async function rlSee(o,label,brief){
+  if(!sampleImages||!o?.id) return;
+  const src=rlFull[o.id]||rlTGet(o.id); if(!src) return; const blob=await rlDataBlob(src); if(!blob) return;
+  try{ const r=await rlAsk(`You are the director's eye. This is the image now used as ${label} in a Bank al Etihad reel. Describe exactly what is visible so the director can write prompts that match it and spot mistakes: people (age, look, wardrobe), objects, place, light, colours, framing, any text, anything that differs from the brief.
+Brief it was made from (may differ — the image wins): ${String(brief||"").slice(0,1500)}
+Reply with only JSON: {"seen":"3–5 precise sentences","mismatch":"what differs from the brief, or empty"}`,{modelTier:"default",images:[blob],cache:false});
+    if(r?.seen){ o.seen=String(r.seen)+(r.mismatch?` MISMATCH vs brief: ${r.mismatch}`:""); rlEvent(`The Director looked at ${label}: ${String(r.seen).slice(0,200)}${r.mismatch?` — differs: ${String(r.mismatch).slice(0,160)}`:""}`); rlSave(); } }catch{}
+}
+function rlPromptFor(text,memText,canSearch,agent){
   const set=rlSet();
   const hist=RL.chat.filter(m=>m.role!=="sys").slice(-14).map(m=>`${m.role==="u"?"USER":"YOU"}: ${m.text}${m.n?` [attached ${m.n} image(s)]`:""}${m.videos?.length?` [attached ${m.videos.length} video(s): ${m.videos.map(v=>v.name).join(", ")}]`:""}`).join("\n");
   const vids=RL.chat.filter(m=>m.role==="u"&&m.videos?.some(v=>v.analysis)).slice(-2).flatMap(m=>m.videos.filter(v=>v.analysis));
@@ -2061,7 +2221,18 @@ STAGE FLOW: idea → script → characters → locations → directing → rende
 
 HANDLES: every character, location and prop has a permanent readable handle (@char_sara, @loc_hall, @prop_phone) and an internal tag (@img1…) shown in the project state. In every prompt refer to elements ONLY by their handle. Keep each existing element's tag and handle. A NEW element gets a handle you choose (@char_<name>, @loc_<place>, @prop_<object>; lowercase latin letters, digits and underscores) — the studio assigns its tag. The studio maps handles to Seedance's @img numbers when it renders.
 
-PROJECT STATE (JSON): ${trimJSON(rlState(),26000)}
+${agent?`YOU ARE AN AGENT WITH FULL CONTROL OF THE STUDIO. You can read every tab in full and add, change or delete anything through your tools:
+- studio_read: read any section completely (characters, locations, props, scenes, script, an element, a scene, activity…). The overview below is a summary — before changing something, read it if you can't see all of it.
+- studio_upsert_element / studio_delete / studio_upsert_scene / studio_script / studio_set: make EXACTLY the change needed, one item at a time. Nothing else is touched, images and the user's edits are kept. Do several calls in one turn when the user asks for several things.
+- studio_action: start generations/renders/reviews (they cost credits — only when the user asks or approves).
+You have only a few tool rounds per reply, so call SEVERAL tools at once in the same round (e.g. all the elements you add or edit together), read only what isn't already shown below, and then answer. Never say you can't see or can't change a tab: read it and do it. After acting, the reply tells the user in one or two short lines what you changed (the studio also lists the changes under your message with an Undo button). If something is ambiguous and costly, ask; otherwise act.
+The JSON keys characters/locations/scenes below still work but are for building a whole stage from scratch; for any targeted change use the tools.
+
+PROJECT OVERVIEW (JSON): ${trimJSON(rlOverview(),14000)}
+
+THE TAB THE USER IS LOOKING AT (${RL.view}), IN FULL: ${trimJSON(rlSection(RL.view==="characters"?"characters":RL.view==="locations"?"locations_all":RL.view==="directing"||RL.view==="render"?"scenes":RL.view==="script"?"script":"ideas"),24000)}
+`:`PROJECT STATE (JSON): ${trimJSON(rlState(),40000)}`}
+${(()=>{ const since=RL.lastReplyAt||0; const ev=(RL.events||[]).filter(x=>x.t>since); return ev.length?`WHAT HAPPENED IN THE STUDIO SINCE YOUR LAST REPLY (the user and the studio did this — take it into account):\n${ev.map(x=>"- "+x.x).join("\n")}\n`:""; })()}
 
 CONVERSATION SO FAR:
 ${hist||"(none)"}
@@ -2071,7 +2242,7 @@ ${vids.map(v=>`### ${v.name}${v.dur?` (${Math.round(v.dur)} s)`:""}\n${String(v.
 
 `:""}USER NOW: ${text||"(attachments only)"}
 
-Reply with ONLY one JSON object. Always include "reply" (the chat message, no markdown tables) and "stage" (the furthest stage the production has reached after this turn). Include a key ONLY when you create or change it, and then give its COMPLETE new value (the full list, including the elements you did not change, with their tags):
+Reply with ONLY one JSON object. Always include "reply" (the chat message, no markdown tables) and "stage" (the furthest stage the production has reached after this turn). Include a key ONLY when you create or change it. "characters", "locations" and "scenes" ADD or UPDATE the items you list (matched by tag/handle/number); items you leave out are kept (delete only with studio_delete). Other keys replace their value:
 - "title": short reel title
 - "notes": everything learned from attachments and decisions (append to existing notes)
 - "ideas": [{"title","hook","logline","beats","why_viral","product_moment","jury"}]  (3 per request). Before answering, silently generate at least 8 directions through different lenses of the masters, score each with THE JURY in the brain, and return only the best 3; "jury" = one line on why it wins (score /35)
@@ -2089,7 +2260,7 @@ Reply with ONLY one JSON object. Always include "reply" (the chat message, no ma
 async function rlSend(text,{retry}={}){
   if(rlBusy||!RL) return; text=(text||"").trim(); const atts=retry?[]:rlPending.slice(); if(!text&&!atts.length) return;
   if(!sample){ rlSys("Claude isn't available in this view. Open the page in claude.ai and allow Claude.",true); return; }
-  rlBusy=true; $("rlSend").disabled=true; RL.chatPending=null;
+  rlBusy=true; const ctl=new AbortController(); RL._ctl=ctl; { const sb=$("rlSend"); sb.classList.add("stop"); sb.setAttribute("aria-label","Stop"); } RL.chatPending=null;
   const imgs=atts.filter(a=>!a.video), vids=atts.filter(a=>a.video);
   let um=null;
   if(!retry){
@@ -2102,7 +2273,7 @@ async function rlSend(text,{retry}={}){
   RL.chatPending={text,at:Date.now()}; rlFlush(); rlRenderChat(); RL_STEPS.length=0;
   rlStep(imgs.length?`Reading your ${imgs.length} image${imgs.length>1?"s":""}`:vids.length?"Getting your video ready":"Reading your message");
   await rlJob(async()=>{ try{
-    const opts={modelTier:"complex",cache:false};
+    const opts={modelTier:"complex",cache:false,signal:ctl.signal};
     for(let i=0;i<vids.length&&um;i++){ const a=vids[i], v=um.videos[i];
       if(a.blob.size>RL_VMAX){ v.err="too large"; v._stage="err"; rlVProgUpdate(v); rlSys(`${v.name} is larger than 200 MB, so Gemini can't watch it here. Trim it and attach it again.`,true); continue; }
       try{ rlStep(`Uploading ${v.name} · 0%`,{id:"up"+i});
@@ -2119,19 +2290,31 @@ async function rlSend(text,{retry}={}){
     const mem=await rlMemFor([text,RL.title,RL.picked?.title,RL.picked?.logline,RL.view!==RL.stage?RL.view:""].filter(Boolean).join(" "),RL.stage==="render"?"directing":RL.stage);
     const used=new Set(), searched=[];
     const lim=await sample.limits?.().catch(()=>null);
-    if(lim?.tools&&MEM.cards.length) opts.tools=memTools((ids,q)=>{ ids.forEach(i=>used.add(i)); if(q&&!searched.includes(q)){ searched.push(q); rlStep(`Searching memory: “${q}”`); } });
+    const turn={changes:[],scenes:[],moves:[],actions:[],snap:null,dirty:false};
+    if(lim?.tools){ const st=rlStudioTools(turn), mt=MEM.cards.length?memTools((ids,q)=>{ ids.forEach(i=>used.add(i)); if(q&&!searched.includes(q)){ searched.push(q); rlStep(`Searching memory: “${q}”`); } }):[];
+      const order=["studio_read","studio_upsert_element","studio_upsert_scene","studio_delete","studio_set","search_memory","studio_action","studio_script","open_memory"];
+      opts.tools=[...st,...mt].sort((x,y)=>order.indexOf(x.name)-order.indexOf(y.name)).slice(0,Math.max(1,+lim.tools.maxCount||9)); }
     rlStep(mem.count?`Recalled ${mem.ids.length} of ${mem.count} memories`:"Memory ready",{done:true});
     rlStep("The Director is thinking with the five assistant directors");
     const slow=setTimeout(()=>rlStep("Writing the answer"),9000);
-    const out=await rlAsk(rlPromptFor(text,mem.text,!!opts.tools),opts).finally(()=>clearTimeout(slow));
+    const out=await rlAsk(rlPromptFor(text,mem.text,!!opts.tools?.some(t=>t.name==="search_memory"),!!opts.tools?.some(t=>t.name==="studio_upsert_element")),opts).finally(()=>clearTimeout(slow));
     RL.chatPending=null;
     const own=[...(Array.isArray(out?.characters)?out.characters:[]),...(Array.isArray(out?.locations)?out.locations:[])].filter(x=>x&&x.from_attachment!=null&&imgs[+x.from_attachment-1]).map(x=>({handle:x.handle,name:x.name,tag:x.tag,blob:imgs[+x.from_attachment-1].blob}));
+    if(!turn.snap&&out&&["characters","locations","scenes","script","ideas","film_look","title"].some(k=>out[k]!=null)) turn.snap=rlSnap();
+    rlApplyTurn(turn);
     rlApply(out||{});
+    { const last=RL.chat[RL.chat.length-1]; if(last?.role==="a"){ const ch=[...turn.changes];
+        if(out){ if(Array.isArray(out.characters)&&out.characters.length) ch.push(`✎ characters (${out.characters.length})`); if(Array.isArray(out.locations)&&out.locations.length) ch.push(`✎ locations & props (${out.locations.length})`); if(Array.isArray(out.scenes)&&out.scenes.length) ch.push(`✎ scenes ${out.scenes.map(x=>x.n).join(", ")}`); if(out.script) ch.push("✎ script"); if(Array.isArray(out.ideas)&&out.ideas.length) ch.push("＋ new ideas"); if(out.film_look) ch.push("✎ film look"); }
+        if(turn.actions.length) ch.push(...turn.actions.map(([x,t])=>`▶ ${x.replace("_"," ")} ${t}`));
+        if(ch.length){ last.changes=ch.slice(0,24); if(turn.snap){ const id="u"+Date.now().toString(36); RL_UNDO.clear(); RL.chat.forEach(x=>{ delete x.undo; }); RL_UNDO.set(id,turn.snap); last.undo=id; } } } }
+    RL.lastReplyAt=Date.now();
+    setTimeout(()=>rlRunActions(turn),80);
     for(const o of own){ const el=(o.handle&&rlElByTag(o.handle))||[...RL.characters,...RL.locations].find(e=>e.name&&o.name&&e.name.toLowerCase()===String(o.name).toLowerCase())||(o.tag&&rlElByTag(o.tag)); if(el) rlUseImage(el.tag,o.blob); }
     const last=RL.chat[RL.chat.length-1];
     if(last?.role==="a"&&mem.count) last.mem={recalled:mem.ids.length,total:mem.count,used:(Array.isArray(out?.used_memories)?out.used_memories:[]).map(String).filter(id=>MEM.byId.has(id)).slice(0,8),searched:searched.slice(0,3)};
-  }catch(e){ if(!rlTransient(e)){ RL.chatPending=null; RL.chat.push({role:"sys",err:true,text:sampleCopy(e)}); } }
-  finally{ rlTyping(false); rlBusy=false; $("rlSend").disabled=false; rlSave(); rlRender(); } });
+  }catch(e){ if(e?.code==="cancelled"){ RL.chatPending=null; RL.chat.push({role:"sys",text:rlAr()?"وقفت. أي إشي عملته الأدوات قبل الوقف ضل محفوظ.":"Stopped. Anything the tools already did stays."}); }
+    else if(!rlTransient(e)){ RL.chatPending=null; RL.chat.push({role:"sys",err:true,text:sampleCopy(e)}); } }
+  finally{ rlTyping(false); rlBusy=false; RL._ctl=null; { const sb=$("rlSend"); sb.classList.remove("stop"); sb.setAttribute("aria-label","Send"); } rlSave(); rlRender(); } });
 }
 function rlApply(o){
   if(o.title) RL.title=String(o.title);
@@ -2144,15 +2327,16 @@ function rlApply(o){
   const merge=(oldL,newL)=>newL.map(n=>{ const o2=oldL.find(x=>n.tag&&x.tag===n.tag)||oldL.find(x=>n.handle&&x.handle&&x.handle.toLowerCase()===String(n.handle).toLowerCase())||oldL.find(x=>x.name&&n.name&&x.name.toLowerCase()===String(n.name).toLowerCase());
     if(o2){ const m={...o2,...n,tag:o2.tag,handle:o2.handle||n.handle,id:o2.id,web:o2.web,lib:n.library!==undefined?n.library:o2.lib,status:o2.status}; if(o2.id&&n.prompt&&n.prompt!==o2.prompt&&!o2.fromUser) m.stale=true; delete m.library; return m; }
     const m={...n,lib:n.library||null,tag:"@img"+(RL.nextTag++)}; delete m.library; return m; });
-  if(Array.isArray(o.characters)) RL.characters=merge(RL.characters,o.characters);
-  if(Array.isArray(o.locations)) RL.locations=merge(RL.locations,o.locations);
+  const upsert=(oldL,newL)=>{ const m=merge(oldL,newL.filter(x=>x&&typeof x==="object")); return [...oldL.map(x=>m.find(y=>y.tag===x.tag)||x),...m.filter(y=>!oldL.some(x=>x.tag===y.tag))]; };
+  if(Array.isArray(o.characters)) RL.characters=upsert(RL.characters,o.characters);
+  if(Array.isArray(o.locations)) RL.locations=upsert(RL.locations,o.locations);
   rlEnsureHandles(RL); rlLinkLibrary();
   if(typeof o.film_look==="string"&&o.film_look.trim()) RL.look=o.film_look.trim();
   let toCheck=[];
-  if(Array.isArray(o.scenes)) RL.scenes=o.scenes.map(sc=>{ const old=RL.scenes.find(x=>+x.n===+sc.n); if(!old){ toCheck.push(sc.n); return {...sc}; }
+  if(Array.isArray(o.scenes)){ const kept=RL.scenes.filter(x=>!o.scenes.some(sc=>+sc.n===+x.n)); RL.scenes=[...kept,...o.scenes.map(sc=>{ const old=RL.scenes.find(x=>+x.n===+sc.n); if(!old){ toCheck.push(sc.n); return {...sc}; }
     const m={...old,...sc}; if(sc.prompt&&sc.prompt!==old.prompt) Object.assign(m,{status:null,clip:null,url:null,note:null,_src:null,web:null});
     if((sc.prompt&&sc.prompt!==old.prompt)||(sc.frame_prompt&&sc.frame_prompt!==old.frame_prompt)||(sc.blueprint&&JSON.stringify(sc.blueprint)!==JSON.stringify(old.blueprint))){ toCheck.push(sc.n); if(m.frame?.id&&sc.frame_prompt&&sc.frame_prompt!==old.frame_prompt) m.frame={...m.frame,stale:true}; }
-    return m; });
+    return m; })].sort((x,y)=>+x.n-+y.n); }
   if(toCheck.length) setTimeout(()=>rlCheckScenes(toCheck,{quiet:true}),60);
   if(o.stage&&rlStageIx(o.stage)>=0){ if(rlStageIx(o.stage)!==rlStageIx(RL.stage)) RL.view=o.stage; RL.stage=o.stage; }
   RL.chat.push({role:"a",text:String(o.reply||"…"),chips:Array.isArray(o.chips)?o.chips.slice(0,4):[],advisors:Array.isArray(o.advisors)?o.advisors.filter(x=>x&&x.note).slice(0,3).map(x=>({id:String(x.id||""),note:String(x.note).slice(0,400)})):[]});
@@ -2348,7 +2532,7 @@ function rlRenderChat(){
     const role=m.role==="u"?"u":m.role==="a"?"a":"sys";
     const media=`${m.thumbs?.length?`<div class="imgs">${m.thumbs.map(t=>`<img src="${t}" alt="">`).join("")}</div>`:m.n?`<div class="t12" style="opacity:.7;margin-top:6px">${m.n} image${m.n>1?"s":""} attached</div>`:""}${m.n&&role==="u"?`<div class="rl-sent">✓ ${m.n} image${m.n>1?"s":""} sent</div>`:""}${m.videos?.length?m.videos.map(v=>v.analysis&&!v._stage?`${rlVProgHTML({...v,_stage:"done"})}<details class="rl-vsaw"><summary>What Gemini saw</summary><div dir="auto">${esc(String(v.analysis).slice(0,6000))}</div></details>`:v._stage&&v._stage!=="done"&&v._stage!=="err"?rlVProgHTML(v):v.analysis?`${rlVProgHTML({...v,_stage:"done"})}<details class="rl-vsaw"><summary>What Gemini saw</summary><div dir="auto">${esc(String(v.analysis).slice(0,6000))}</div></details>`:rlVProgHTML({...v,_stage:"err"})).join(""):""}`;
     const body=role==="a"?`<div class="rl-fmt">${rlFmt(m.text)}</div>`:esc(m.text||"");
-    return `${role==="a"&&RL.chat[mi-1]?.role!=="a"?`<div class="rl-who"><span class="av" aria-hidden="true">✦</span>Director</div>`:""}<div class="rl-m ${role}${m.err?" err":""}" dir="auto">${body}${media}</div>${rlAdvHTML(m,mi)}${m.mem?rlMemChip(m.mem):""}`;
+    return `${role==="a"&&RL.chat[mi-1]?.role!=="a"?`<div class="rl-who"><span class="av" aria-hidden="true">✦</span>Director</div>`:""}<div class="rl-m ${role}${m.err?" err":""}" dir="auto">${body}${media}</div>${m.changes?.length?`<div class="rl-chg${m.undone?" undone":""}"><div class="h"><b>${m.undone?"Undone":"Done in the studio"}</b>${m.undo&&RL_UNDO.has(m.undo)?`<button type="button" class="btn small" data-rlundo="${m.undo}">Undo</button>`:""}</div><ul>${m.changes.map(c=>`<li dir="auto">${esc(c)}</li>`).join("")}</ul></div>`:""}${m.prompt?.text?`<details class="rl-vsaw"><summary>${esc(m.prompt.label||"Prompt")}</summary><div dir="auto">${esc(String(m.prompt.text).slice(0,6000))}</div></details>`:""}${rlAdvHTML(m,mi)}${m.mem?rlMemChip(m.mem):""}`;
   }).join("");
   if(RL.chatPending&&!rlBusy) b.insertAdjacentHTML("beforeend",`<div class="rl-m sys rl-retry" dir="auto">The connection dropped before Claude answered. Your message is saved. <button type="button" class="a-btn" id="rlRetry">Answer it now</button></div>`);
   b.scrollTop=b.scrollHeight;
@@ -2753,6 +2937,7 @@ async function rlReview(n){
     if(!o) throw {code:"bad_json",message:"Gemini answered, but not in the expected format: "+txt.slice(0,240)};
     sc.review={at:Date.now(),clip:sc.clip,score:+o.score||0,verdict:String(o.verdict||""),summary:String(o.summary||""),issues:(o.issues||[]).filter(x=>x&&x.what).slice(0,12).map(x=>({t:String(x.t||""),category:String(x.category||"other"),severity:String(x.severity||"medium"),what:String(x.what),expected:String(x.expected||""),fix:String(x.fix||"")})),good:(o.good||[]).map(String).slice(0,6),audio:o.audio||null};
     const iss=sc.review.issues;
+    rlEvent(`Gemini reviewed scene ${sc.n}: ${sc.review.score}/10 (${sc.review.verdict}). ${sc.review.summary}`);
     brSignal("shot","gemini_review",sc.review.verdict==="keep"?1:-1,{note:`Gemini watched scene ${sc.n} (${sc.review.score}/10, ${sc.review.verdict}): ${sc.review.summary} ISSUES: ${iss.map(x=>`[${x.t} ${x.category}/${x.severity}] ${x.what} → fix: ${x.fix}`).join(" | ")}${sc.review.good.length?` KEEP: ${sc.review.good.join("; ")}`:""}`,item:`Scene ${sc.n} · ${sc.title||""}: ${String(sc.prompt||"").slice(0,700)}`,key:"rev"+sc.n+(sc.clip||"")});
   }catch(e){
     const c=e?.code||"";
@@ -2907,11 +3092,13 @@ async function rlUseImage(tag,blob){
     Object.assign(e,{id:out.id,web:out.web||e.web,status:"ok",stale:false,fromUser:true,lib:null,fromLib:false}); if(th) rlTSet(out.id,th);
     e._note="Studying your image…"; rlBoard();
     const studied=await rlStudyImage(e,blob).catch(()=>false);
+    rlEvent(`The user replaced the image of ${e.handle} (${e.name||""}) with their own${studied?`; the Director studied it: ${String(e.description||"").slice(0,240)}`:""}.`);
+    if(studied) e.seen=`${e.description}${e.wardrobe?` Wardrobe: ${e.wardrobe}`:""}${e.details?` Details: ${e.details}`:""}`;
     if(studied){
       /* carry the new look into every scene that uses this element */
       const hs=[e.handle,e.tag].filter(Boolean).map(x=>String(x).toLowerCase());
       const ns=RL.scenes.filter(sc=>hs.some(h=>String(sc.prompt||"").toLowerCase().includes(h)||String(sc.frame_prompt||"").toLowerCase().includes(h)||(sc.refs||[]).map(x=>String(x).toLowerCase()).includes(h))).map(sc=>sc.n);
-      RL.chat.push({role:"a",text:`👁 ${e._summary||`I studied your image of ${e.name}.`}\n${e.description}${e.wardrobe?`\nWardrobe: ${e.wardrobe}`:""}${ns.length?`\nI'm updating scene${ns.length>1?"s":""} ${ns.join(", ")} to match.`:""}`,t:Date.now()});
+      RL.chat.push({role:"a",text:`👁 ${e._summary||`I studied your image of ${e.name}.`}\n${e.description}${e.wardrobe?`\nWardrobe: ${e.wardrobe}`:""}${e.details?`\nDetails: ${e.details}`:""}${ns.length?`\nI'm updating scene${ns.length>1?"s":""} ${ns.join(", ")} to match.`:""}`,changes:[`✎ ${e.handle}: description${e.wardrobe?", wardrobe":""}, prompt (from your image)`,...ns.map(n=>`↻ scene ${n} re-checked`)],prompt:{label:`New prompt for ${e.handle}`,text:e.prompt},t:Date.now()});
       rlRenderChat();
       if(ns.length) rlCheckScenes(ns,{quiet:true});
     }
@@ -2925,7 +3112,8 @@ async function rlGenElement(tag){
   e.status="run"; e.err=null; e._live=true; rlBoard();
   const isLoc=RL.locations.includes(e)&&e.kind!=="prop";
   const sendPrompt=isLoc||/plain gr[ae]y clean background/i.test(e.prompt)?e.prompt:`${e.prompt}\nBackground: plain gray clean background — seamless flat matte mid-grey, no gradient, no texture, no floor line, no shadows on the backdrop.`;
-  try{ const out=await rlJob(()=>rlImage({prompt:sendPrompt,aspect:"16:9",label:"reference image",onQueued:(id,web)=>{ e.pending=id; e.web=web||e.web; rlFlush(); }})); Object.assign(e,{id:out.id,web:out.web,status:"ok",stale:false}); delete e.pending; }
+  try{ const out=await rlJob(()=>rlImage({prompt:sendPrompt,aspect:"16:9",label:"reference image",onQueued:(id,web)=>{ e.pending=id; e.web=web||e.web; rlFlush(); }})); Object.assign(e,{id:out.id,web:out.web,status:"ok",stale:false}); delete e.pending; delete e.seen;
+    rlEvent(`A new image of ${e.handle} (${e.name||""}) was generated.`); setTimeout(()=>rlSee(e,`the reference image of ${rlKind(e)} ${e.handle} "${e.name||""}"`,e.prompt),1500); }
   catch(err){ if(e.pending&&rlTransient(err)){ e.status="paused"; e.err=null; } else { e.status="err"; e.err=mcpCopy(err); delete e.pending; } }
   finally{ delete e._live; }
   rlSave(); rlBoard();
@@ -2943,7 +3131,8 @@ async function rlGenFrame(n){
     const {prompt,refs,missing}=rlSceneRefs(sc,"frame_prompt");
     if(missing.length) throw {code:"tool_error",message:`Generate ${missing.join(", ")} first, so the first frame can use them.`};
     const out=await rlImage({prompt,aspect:rlSet().aspect,refs,label:"first frame",onQueued:(id,web)=>{ f.pending=id; f.web=web||f.web; rlFlush(); }});
-    Object.assign(f,{id:out.id,web:out.web,status:"ok",stale:false}); delete f.pending;
+    Object.assign(f,{id:out.id,web:out.web,status:"ok",stale:false}); delete f.pending; delete f.seen;
+    rlEvent(`The first frame of scene ${sc.n} was generated.`); setTimeout(()=>rlSee(f,`the first frame of scene ${sc.n}`,sc.frame_prompt),1500);
   }catch(err){ if(f.pending&&rlTransient(err)){ f.status="paused"; f.err=null; } else { f.status="err"; f.err=mcpCopy(err); delete f.pending; } }
   finally{ delete f._live; rlWake(false); }
   rlSave(); rlBoard();
@@ -3015,6 +3204,7 @@ async function rlFinishVideo(sc,rr,id){
   const all=[...rr.urls,...rr.links]; sc.url=all.find(u=>/\.(mp4|mov|webm)(\?|#|$)/i.test(u))||all.find(u=>/video|render|output/i.test(u)&&!/magnific\.com\/app\//i.test(u))||null;
   await rlLoadVideo(sc,sc.clip);
   sc.status="done"; sc.stale=false; delete sc.pending; delete sc.pendingAt;
+  rlEvent(`Scene ${sc.n}'s video finished rendering.`);
 }
 /* Ask Magnific for the finished video itself (playable in the page), else a poster frame and the file link */
 async function rlLoadVideo(o,cid){
@@ -3211,10 +3401,11 @@ async function rlBible(){
   $("rlTitle").addEventListener("input",()=>{ if(!RL) return; RL.title=$("rlTitle").value.trim()||"Untitled reel"; rlSave(); });
   $("rlStages").addEventListener("click",e=>{ const b=e.target.closest("[data-tab]"); if(!b||!RL) return; RL.view=b.dataset.tab; R.dataset.view="board"; rlSave(); rlBoard(); rlRenderChat(); $("rlBoardPane").scrollIntoView({block:"start"}); });
   document.addEventListener("keydown",e=>{ if(e.key!=="Escape"||R.hidden) return; const lb=$("rlLb"); if(lb&&!lb.hidden){ lb.hidden=true; return; } });
-  $("rlForm").onsubmit=e=>{ e.preventDefault(); rlSend($("rlInput").value); };
+  $("rlForm").onsubmit=e=>{ e.preventDefault(); if(rlBusy){ RL?._ctl?.abort(); return; } rlSend($("rlInput").value); };
   $("rlInput").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing){ e.preventDefault(); rlSend($("rlInput").value); } });
   document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&RL&&!$("rlProjView").hidden){ setTimeout(rlResume,600); if(rlWakeN>0) rlWake(true).then(()=>rlWake(false)); } });
   $("rlMsgs").addEventListener("click",e=>{ if(e.target.closest("#rlRetry")&&RL?.chatPending) rlSend(RL.chatPending.text,{retry:true});
+    const un=e.target.closest("[data-rlundo]"); if(un&&RL){ rlUndoTurn(un.dataset.rlundo); return; }
     const sk=e.target.closest("[data-advskip]"); if(sk&&RL){ const [mi,ai]=sk.dataset.advskip.split(":").map(Number); const x=RL.chat[mi]?.advisors?.[ai]; if(x){ x.skipped=true; brSignal("chat","advisor_skipped",-1,{note:x.note,item:rlAdv(x.id).name,key:"skip"+x.note}); rlSave(); rlRenderChat(); } return; }
     const u=e.target.closest("[data-adv]"); if(u&&RL){ const [mi,ai]=u.dataset.adv.split(":").map(Number); const x=RL.chat[mi]?.advisors?.[ai]; if(x){ x.used=true; const A=rlAdv(x.id); brSignal("chat","advisor_used",1,{note:x.note,item:A.name,key:x.note}); rlSend(rlAr()?`طبّق اقتراح ${A.name}: ${x.note}`:`Apply the ${A.name}'s suggestion: ${x.note}`); } } });
   $("rlChips").onclick=e=>{ const b=e.target.closest("button"); if(b) rlSend(b.textContent); };
@@ -3253,6 +3444,7 @@ async function rlBible(){
     else if(a==="edit"){ const el=rlElByTag(b.dataset.tag); if(el){ el._edit=true; rlBoard(); } }
     else if(a==="editdone"){ const el=rlElByTag(b.dataset.tag); if(el){ el._edit=false; el.err=null; if(el.status==="err") el.status=null; rlSave(); rlBoard(); } }
     else if(a==="remove"){ if(!b.dataset.sure){ b.dataset.sure="1"; b.textContent="Remove for good?"; b.classList.add("danger"); return; } const el=rlElByTag(b.dataset.tag); if(el) brSignal(RL.characters.includes(el)?"character":el.kind||"location","removed",-1,{item:`${el.name}: ${el.description||""}`,key:el.tag});
+      rlEvent(`The user deleted ${el?.handle||b.dataset.tag}${el?.name?` (${el.name})`:""}.`);
       RL.characters=RL.characters.filter(x=>x.tag!==b.dataset.tag); RL.locations=RL.locations.filter(x=>x.tag!==b.dataset.tag); rlSave(); rlBoard(); }
     else if(a==="add"){ RL._adding=b.dataset.k; rlBoard(); setTimeout(()=>B.querySelector(".rl-addform input")?.focus(),30); }
     else if(a==="addcancel"){ RL._adding=null; rlBoard(); }
@@ -3292,6 +3484,7 @@ async function rlBible(){
     const s=e.target.closest("[data-rl-start]"); if(s){ const sc=RL.scenes.find(x=>String(x.n)===s.dataset.rlStart); if(sc){ sc.useFrame=s.checked; rlSave(); rlBoard(); } return; }
     const t=e.target.closest("[data-rl-edit]"); if(!t) return; const before=rlEditValue(t); rlCommit(t); rlSave();
     if(before!=null&&before!==t.value){ const p=t.dataset.rlEdit.split(":"), kind=p[0]==="b"?"script":p[0]==="s"||p[0]==="f"?"shot":p[0]==="c"?"character":"location";
+      rlEvent(`The user edited by hand: ${p[0]==="look"?"the film look":p[0]==="b"?`script scene ${+p[1]+1} ${p[2]}`:p[0]==="s"?`scene ${p[1]} Seedance prompt`:p[0]==="f"?`scene ${p[1]} first-frame prompt`:`${p[1]} ${p[2]||"prompt"}`}. New text: ${String(t.value).slice(0,260)}`);
       brSignal(kind,"edited_by_user",0,{note:`The user rewrote ${p[0]==="b"?"script "+p[2]:p[0]==="s"?"the Seedance prompt":p[0]==="f"?"the first-frame prompt":(p[2]||"prompt")} by hand — learn from the difference.`,before,after:t.value,key:t.dataset.rlEdit}); } });
 })();
 function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span class="th vid" title="${esc(a.name||"")}"><video src="${a.url}" muted playsinline preload="metadata"></video><span class="vb" aria-hidden="true">▶</span><button type="button" data-i="${i}" aria-label="Remove">×</button></span>`:`<span class="th"><img src="${a.url}" alt="${esc(a.name||"")}"><button type="button" data-i="${i}" aria-label="Remove">×</button></span>`).join(""); }
