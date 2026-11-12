@@ -1,0 +1,4 @@
+# Your Google Gemini API key, from https://aistudio.google.com/apikey
+GEMINI_API_KEY=
+# Any long random text (20+ characters). It becomes part of the connector URL: /mcp/<ACCESS_TOKEN>
+ACCESS_TOKEN=

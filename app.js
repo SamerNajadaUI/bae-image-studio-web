@@ -1881,7 +1881,7 @@ async function memShortTerm(){
   if(!RLS.db) return [];
   try{ const since=+(MEM.catalog?.consolidatedAt||0);
     const f=await RLS.db.collection("feedback").orderBy("at","desc").limit(60).get();
-    return f.docs.map(d=>d.data()).filter(x=>x&&+x.at>since).filter(x=>!x.implicit||["edited_by_user","revised","edit_requested","asked_for_more","chosen","advisor_applied","advisor_skipped"].includes(x.signal)).slice(0,25); }
+    return f.docs.map(d=>d.data()).filter(x=>x&&+x.at>since).filter(x=>!x.implicit||["edited_by_user","revised","edit_requested","asked_for_more","chosen","advisor_applied","advisor_skipped","gemini_review"].includes(x.signal)).slice(0,25); }
   catch{ return []; }
 }
 /* what the Director gets on every turn: the most relevant long-term memories + today's short-term memory */
@@ -2030,7 +2030,7 @@ function rlState(){
     characters:RL.characters.map(({name,tag,handle,role,description,wardrobe,prompt,id,lib})=>({tag,handle,name,role,description,wardrobe,prompt,image_generated:!!id,library:lib||null})),
     locations:RL.locations.map(({name,tag,handle,kind,description,prompt,id})=>({tag,handle,name,kind,description,prompt,image_generated:!!id})),
     film_look:RL.look||null,
-    scenes:RL.scenes.map(({n,title,logline,duration_s,refs,prompt,frame_prompt,frame,status})=>({n,title,logline,duration_s,refs,frame_prompt,prompt,first_frame_generated:!!frame?.id,video_rendered:status==="done"}))};
+    scenes:RL.scenes.map(({n,title,logline,duration_s,refs,prompt,frame_prompt,frame,status,review})=>({n,title,logline,duration_s,refs,frame_prompt,prompt,first_frame_generated:!!frame?.id,video_rendered:status==="done",gemini_review:review?{score:review.score,verdict:review.verdict,summary:review.summary,issues:review.issues.map(x=>`[${x.t}] ${x.what}`)}:null}))};
 }
 function rlPromptFor(text,memText,canSearch){
   const set=rlSet();
@@ -2364,6 +2364,7 @@ function rlShotCard(sc){
         <textarea class="rl-prompt tall" data-rl-edit="s:${sc.n}" spellcheck="false" dir="ltr">${esc(sc.prompt||"")}</textarea></details>
       <label class="rl-chk"><input type="checkbox" data-rl-start="${sc.n}" ${useStart?"checked":""} ${startOK?"":"disabled"}> Animate from the first frame${startOK?"":" (generate it first)"}</label>
       <div class="rl-btns"><button class="btn small${sc.status!=="done"&&(startOK||sc.useFrame===false)?" primary":""}" type="button" data-rl="render" data-n="${sc.n}" ${sc.status==="run"||sc.pending?"disabled":""}>${sc.status==="run"?"Rendering…":sc.pending?"Rendering in Magnific…":sc.status==="done"?"Generate video again":"Generate video"}</button>${sc.status==="done"&&!vsrc&&!sc._blocked?`<button class="btn small" type="button" data-rl="play" data-n="${sc.n}">Play here</button>`:""}<button class="btn small" type="button" data-rl="copys" data-n="${sc.n}">Copy prompt</button>${sc.url?`<a class="btn small" href="${esc(sc.url)}" target="_blank" rel="noopener">MP4</a>`:""}${sc.web?`<a class="btn small" href="${esc(sc.web)}" target="_blank" rel="noopener">Magnific</a>`:""}</div>
+      ${sc.status==="done"?rlReviewHTML(sc):""}
       ${sc.status==="done"||f.id?`<div class="rl-btns rl-rateline"><span class="t12 muted">${sc.status==="done"?"How is this shot?":"How is this first frame?"}</span>${rlRate("shot","shot:"+sc.n+":"+(sc.clip||f.id),`Scene ${sc.n} ${sc.title}: ${String(sc.prompt||"").slice(0,800)}`)}</div>`:""}
       ${sc.note&&sc.status!=="run"?`<p class="rl-status${sc.status==="err"?" bad":""}">${esc(sc.note)}</p>`:""}
       ${sc.stale&&sc.clip?`<p class="rl-status warn">The scene prompt was corrected after this video was made.</p>`:""}
@@ -2565,6 +2566,75 @@ function rlUndoScene(n){
   if(sc.frame?.id) sc.frame.stale=true; if(sc.clip) sc.stale=true; if(sc.check) sc.check.dirty=true;
   sc.lastChange={at:Date.now(),kind:"undo",changes:[`Back to the version before “${h.why}”.`]}; rlSave(); rlBoard();
 }
+/* ---------- Gemini Eye: Gemini watches the rendered shot (picture AND sound) and reports what went wrong, second by second ---------- */
+const GEYE="BAE Gemini Eye";
+const rlRevCats={identity:"Face / wardrobe",geography:"Who is where",extra_people:"Extra people",action_order:"Order of events",camera:"Camera",framing:"Framing",motion:"Motion",physics:"Physics",lip_sync:"Lip-sync",dialogue:"Dialogue",audio:"Sound",text:"Text / logo",brand:"Brand",other:"Other"};
+const rlT=t=>{ const m=String(t||"").match(/(\d+):(\d{1,2})(?:\.(\d))?/); return m?(+m[1])*60+(+m[2])+(m[3]?+m[3]/10:0):null; };
+async function rlVideoUrl(sc){
+  if(sc.url&&/^https:\/\//.test(sc.url)) return sc.url;
+  if(!sc.clip) return null;
+  try{ const a=await buildArgs("creations_register_download","Get a direct download URL (https) for this finished VIDEO creation.",{identifier:sc.clip});
+    const x=readResult(await callMag("creations_register_download",a.args)); const u=[...x.urls,...x.links].find(u=>/^https:\/\//.test(u)&&!/magnific\.com\/app\//i.test(u));
+    if(u){ sc.url=u; rlSave(); } return u||null; }catch{ return null; }
+}
+function rlReviewBrief(sc){
+  const {prompt,refs}=rlSceneRefs(sc), set=rlSet(), beat=RL.script?.scenes?.[(+sc.n||1)-1]||null, bp=sc.blueprint||{};
+  const who=refs.map(r=>`${r.tag} = ${r.name}${r.map?" (position map, not a person)":""}`).join("; ");
+  const lines=(beat?.dialogue||[]).map(d=>`${d.who}: "${d.line}"`).join(" | ");
+  return `You are a strict script supervisor reviewing ONE AI-generated video shot for a Bank al Etihad (Jordan) commercial. Watch the whole clip, picture and sound together, at the given frame rate, and compare it with the brief below. Report ONLY what you actually see and hear; never guess. Use exact timestamps MM:SS (or MM:SS.s).
+
+THE BRIEF
+- Format: ${set.aspect}, about ${Math.max(4,Math.min(15,+sc.duration_s||8))} s, dialogue language: ${set.lang}.
+- Characters/locations (the prompt refers to them as @imgN): ${who||"see prompt"}.
+- Planned positions: ${trimJSON({zones:bp.zones,people:bp.people,cameras:bp.cameras},1500)}
+- Script beat: ${trimJSON(beat,1200)}
+- Expected dialogue: ${lines||"none (nobody should speak)"}
+- Full shot prompt given to the video model:
+${String(prompt||"").slice(0,9000)}
+
+CHECK, in this order: 1 who is where (inside/outside, left/right, behind/in front of a barrier, zones) · 2 identity: same faces, hair, wardrobe as described, no face drift between cuts · 3 extra, missing or duplicated people (twins) · 4 order of events and timing vs the prompt's seconds · 5 camera: lens feel, the named move, angle (three-quarter vs frontal), framing (head cropped? hands/feet in frame?) · 6 motion quality: sliding feet, jitter, morphing, unwanted slow motion, objects melting, physics · 7 who speaks, lip-sync, language/dialect, lines cut off, other people's mouths moving · 8 sound: unwanted music, missing or wrong SFX · 9 readable text, logos, screens · 10 brand safety and modesty for a Jordanian audience.
+
+Reply with ONLY JSON:
+{"score":0-10,"verdict":"keep"|"fix"|"redo","summary":"one or two sentences","issues":[{"t":"MM:SS","category":"geography|identity|extra_people|action_order|camera|framing|motion|physics|lip_sync|dialogue|audio|text|brand|other","severity":"high"|"medium"|"low","what":"what is wrong, concretely","expected":"what the brief asked for","fix":"how to word the prompt so it cannot happen again"}],"good":["what works and must be kept"],"audio":{"speech_heard":"exact words or none","language":"","music":true|false,"sfx":"main sounds heard"}}
+Order issues by severity, at most 12. score 10 = perfect against the brief.`;
+}
+async function rlReview(n){
+  const sc=RL.scenes.find(x=>+x.n===+n); if(!sc||!mcp||sc._reviewing) return;
+  sc._reviewing=true; sc.reviewErr=null; rlBoard(); rlWake(true);
+  try{
+    const url=await rlVideoUrl(sc);
+    if(!url) throw {code:"no_url",message:"There's no direct link to this video yet. Open it in Magnific once, or generate it again."};
+    const r=await mcp.callTool(GEYE,"watch_video",{video_url:url,question:rlReviewBrief(sc),fps:Math.max(+sc.duration_s||8)<=8?5:4,json:true},{cache:false});
+    const txt=typeof r?.payload==="string"?r.payload:r?.payload?.answer||(r?.content||[]).map(c=>c.text||"").join("")||"";
+    let o=null; try{ o=JSON.parse(txt.replace(/^```(?:json)?|```$/g,"").trim()); }catch{ const m=txt.match(/\{[\s\S]*\}/); try{ o=m?JSON.parse(m[0]):null; }catch{} }
+    if(!o) throw {code:"bad_json",message:"Gemini answered, but not in the expected format: "+txt.slice(0,240)};
+    sc.review={at:Date.now(),clip:sc.clip,score:+o.score||0,verdict:String(o.verdict||""),summary:String(o.summary||""),issues:(o.issues||[]).filter(x=>x&&x.what).slice(0,12).map(x=>({t:String(x.t||""),category:String(x.category||"other"),severity:String(x.severity||"medium"),what:String(x.what),expected:String(x.expected||""),fix:String(x.fix||"")})),good:(o.good||[]).map(String).slice(0,6),audio:o.audio||null};
+    const iss=sc.review.issues;
+    brSignal("shot","gemini_review",sc.review.verdict==="keep"?1:-1,{note:`Gemini watched scene ${sc.n} (${sc.review.score}/10, ${sc.review.verdict}): ${sc.review.summary} ISSUES: ${iss.map(x=>`[${x.t} ${x.category}/${x.severity}] ${x.what} → fix: ${x.fix}`).join(" | ")}${sc.review.good.length?` KEEP: ${sc.review.good.join("; ")}`:""}`,item:`Scene ${sc.n} · ${sc.title||""}: ${String(sc.prompt||"").slice(0,700)}`,key:"rev"+sc.n+(sc.clip||"")});
+  }catch(e){
+    const c=e?.code||"";
+    sc.reviewErr=c==="server_not_connected"||c==="not_granted"||/not.?connected|unknown server|not in the manifest/i.test(String(e?.message||""))?"Gemini Eye isn't connected for you yet. Add the “BAE Gemini Eye” connector in claude.ai (Settings → Connectors), then try again."
+      :c==="tool_error"?"Gemini: "+String(e?.message||e?.result?.content?.[0]?.text||"").slice(0,300)
+      :String(e?.message||c||"Review failed").slice(0,300);
+  }finally{ sc._reviewing=false; rlWake(false); rlSave(); rlBoard(); }
+}
+function rlReviewHTML(sc){
+  const R=sc.review, cur=R&&R.clip===sc.clip;
+  const head=`<div class="rl-btns rl-revbar"><button class="btn small${R?"":" primary"}" type="button" data-rl="review" data-n="${sc.n}" ${sc._reviewing?"disabled":""}>${sc._reviewing?"Gemini is watching…":R?"Review again with Gemini":"👁 Review with Gemini"}</button>${R&&R.issues.length&&!sc._improving?`<button class="btn small primary" type="button" data-rl="revfix" data-n="${sc.n}">Fix the prompt with these</button>`:""}<span class="t12 muted">Gemini watches the picture and the sound</span></div>`;
+  if(sc._reviewing) return head+`<p class="rl-status"><span class="spin" aria-hidden="true" style="display:inline-block;vertical-align:-2px"></span> Gemini is watching the shot frame by frame and listening to the sound…</p>`;
+  if(sc.reviewErr) return head+`<p class="rl-status bad">${esc(sc.reviewErr)}</p>`;
+  if(!R) return head;
+  const col=R.verdict==="keep"?"ok":R.verdict==="redo"?"bad":"warn";
+  return head+`<div class="rl-review" dir="auto"><div class="rl-revhead"><span class="rl-pill ${col==="ok"?"ok":"warn"}">${R.score}/10 · ${esc(R.verdict||"")}</span>${cur?"":`<span class="t12 muted">from an earlier take</span>`}<p>${esc(R.summary)}</p></div>
+  ${R.issues.length?`<ul class="rl-revlist">${R.issues.map(x=>`<li class="sev-${esc(x.severity)}"><button type="button" class="rl-revt" data-rl="seek" data-n="${sc.n}" data-t="${rlT(x.t)??""}" ${rlT(x.t)==null?"disabled":""}>${esc(x.t||"—")}</button><div><b>${esc(rlRevCats[x.category]||x.category)}</b> ${esc(x.what)}${x.expected?`<span class="t12 muted"> · expected: ${esc(x.expected)}</span>`:""}</div></li>`).join("")}</ul>`:`<p class="t12 muted">No problems found.</p>`}
+  ${R.good.length?`<p class="t12 muted">Keep: ${R.good.map(esc).join(" · ")}</p>`:""}
+  ${R.audio?`<p class="t12 muted">Heard: ${esc(String(R.audio.speech_heard||"no speech"))}${R.audio.language?` (${esc(R.audio.language)})`:""}${R.audio.music?" · music present":""}${R.audio.sfx?` · ${esc(R.audio.sfx)}`:""}</p>`:""}</div>`;
+}
+function rlReviewFix(n){
+  const sc=RL.scenes.find(x=>+x.n===+n); const R=sc?.review; if(!R) return;
+  const iss=R.issues.filter(x=>x.severity!=="low").length?R.issues.filter(x=>x.severity!=="low"):R.issues;
+  rlImproveScene(n,`Gemini watched the rendered video of this shot (${R.score}/10) and found these problems. Rewrite the prompt so each one cannot happen again — be explicit and physical (zones, positions, order of events, locks), not vague:\n${iss.map(x=>`- [${x.t}] ${x.what}${x.expected?` (expected: ${x.expected})`:""}${x.fix?` → suggested fix: ${x.fix}`:""}`).join("\n")}${R.good.length?`\nKeep what worked: ${R.good.join("; ")}`:""}`);
+}
 function rlShotBar(sc){
   const busy=sc._improving, ar=rlAr();
   const chips=ar?["سينمائي أكثر","أضحك","لقطات أقرب","حركة كاميرا أجرأ","أقصر وأسرع"]:["More cinematic","Funnier","Closer shots","Bolder camera","Shorter, faster"];
@@ -2575,7 +2645,7 @@ function rlShotBar(sc){
   ${sc.improveErr?`<p class="rl-status bad">${esc(sc.improveErr)}</p>`:""}
   ${sc.roomErr?`<p class="rl-status bad">${esc(sc.roomErr)}</p>`:""}
   ${room.length?`<div class="rl-room" dir="auto">${sc.room.items.map((x,i)=>x.done?"":`<div class="rl-roomi"><span class="ic" aria-hidden="true">${esc(rlAdv(x.id).icon||"•")}</span><div><span class="t12 muted">${esc(rlAdv(x.id).name||x.id)}</span><b>${esc(x.title)}</b><p>${esc(x.why)}</p><div class="rl-btns"><button class="btn small primary" type="button" data-rl="roomapply" data-n="${sc.n}" data-i="${i}" ${busy?"disabled":""}>Apply</button><button class="a-btn" type="button" data-rl="roomskip" data-n="${sc.n}" data-i="${i}">Skip</button></div></div></div>`).join("")}</div>`:""}
-  ${sc.lastChange?.changes?.length&&!busy?`<div class="rl-changes"><b>${sc.lastChange.kind==="edit"?"Your edit":sc.lastChange.kind==="undo"?"Undone":"Updated"}</b>${sc.lastChange.ask?` · “${esc(sc.lastChange.ask)}”`:""}<ul>${sc.lastChange.changes.map(c=>`<li dir="auto">${esc(c)}</li>`).join("")}</ul></div>`:""}`;
+  ${sc.lastChange?.changes?.length&&!busy?`<div class="rl-changes"><b>${sc.lastChange.kind==="edit"?"Your edit":sc.lastChange.kind==="undo"?"Undone":"Updated"}</b>${sc.lastChange.ask?(/^Gemini watched/.test(sc.lastChange.ask)?" · fixes from Gemini’s review":` · “${esc(sc.lastChange.ask.length>160?sc.lastChange.ask.slice(0,160)+"…":sc.lastChange.ask)}”`):""}<ul>${sc.lastChange.changes.map(c=>`<li dir="auto">${esc(c)}</li>`).join("")}</ul></div>`:""}`;
 }
 /* Adil's map technique: a top-down image of the location with numbered positions, attached to the shot as a positions-only reference */
 async function rlMakeMap(n){
@@ -2967,6 +3037,9 @@ async function rlBible(){
     else if(a==="check") rlCheckScenes([b.dataset.n]);
     else if(a==="stopcheck"){ e.preventDefault(); const sc=RL.scenes.find(x=>String(x.n)===b.dataset.n); sc?._ctl?.abort(); }
     else if(a==="improve") rlImproveScene(b.dataset.n);
+    else if(a==="review") rlReview(b.dataset.n);
+    else if(a==="revfix") rlReviewFix(b.dataset.n);
+    else if(a==="seek"){ const v=document.querySelector(`video[data-rl-vid="${b.dataset.n}"]`); const t=+b.dataset.t; if(v&&Number.isFinite(t)){ try{ v.currentTime=Math.max(0,t-0.3); v.play?.().catch(()=>{}); v.scrollIntoView?.({block:"nearest"}); }catch{} } }
     else if(a==="room") rlRoom(b.dataset.n);
     else if(a==="roomapply"||a==="roomskip"){ const sc=RL.scenes.find(x=>String(x.n)===b.dataset.n), it=sc?.room?.items?.[+b.dataset.i]; if(it){ it.done=true; brSignal("shot",a==="roomapply"?"advisor_applied":"advisor_skipped",a==="roomapply"?1:-1,{note:it.instruction,item:`${rlAdv(it.id).name}: ${it.title}`,key:it.instruction}); if(a==="roomapply") rlImproveScene(sc.n,it.instruction); else { rlSave(); rlBoard(); } } }
     else if(a==="makemap") rlMakeMap(b.dataset.n);

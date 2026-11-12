@@ -1,0 +1,16 @@
+{
+  "name": "bae-gemini-eye",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A tiny remote MCP server that lets Claude watch videos through Google Gemini (picture and sound).",
+  "scripts": { "deploy": "wrangler deploy", "dev": "wrangler dev" },
+  "devDependencies": { "wrangler": "^4.0.0" },
+  "cloudflare": {
+    "bindings": {
+      "GEMINI_API_KEY": { "description": "Your Google Gemini API key, from https://aistudio.google.com/apikey" },
+      "ACCESS_TOKEN": { "description": "Any long random text (20+ characters). Your connector URL ends with /mcp/<this text>." },
+      "GEMINI_MODEL": { "description": "Gemini model that watches the videos. Default gemini-3.8-flash." }
+    }
+  }
+}
