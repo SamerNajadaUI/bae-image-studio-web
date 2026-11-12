@@ -1806,17 +1806,125 @@ async function brLoad(force){
   return BR;
 }
 async function brLoadFeedback(){ if(!RLS.db) return []; try{ const f=await RLS.db.collection("feedback").orderBy("at","desc").limit(30).get(); BR.feedback=f.docs.map(d=>({id:d.id,...JSON.parse(JSON.stringify(d.data()))})); }catch{} return BR.feedback; }
-/* what the Director reads before every answer: knowledge first, then the team's lessons, then this morning's research */
-function brText(){
-  if(!BR.sections.length&&!BR.research.length) return "";
-  const cut=(t,n)=>String(t||"").length>n?String(t).slice(0,n)+"…":String(t||"");
+
+/* =====================================================================
+   LONG-TERM MEMORY — like a person's: everything kept, recalled by relevance
+   - mem/<shard>     : memory cards (atomic, verbatim), packed ~400 per document, never deleted or compressed
+   - memmeta/catalog : list of shards, counts, topics
+   - archive/<part>  : the raw, word-for-word record of everything (research, notes, feedback, lessons)
+   - feedback        : short-term memory (today's signals) until the nightly consolidation turns it into cards
+   Recall: BM25 relevance over text + topics + bilingual keywords, boosted by stage, evidence and team lessons,
+   then one hop along the graph links. The Director gets the most relevant memories every turn and can search for more.
+   ===================================================================== */
+const MEM={cards:[],byId:new Map(),df:new Map(),avg:1,loaded:0,catalog:null,loading:null};
+const MEM_STOP=new Set("the a an and or of to in on at for with by from is are be this that it as not no but if then than so do does into over under its his her their our your you we they he she i me my was were has have had will would can could should one two all any each very more most also just only out up down off about after before when where who what which how why like same other new old use used make made keep".split(" ").concat("في من على الى إلى عن مع هذا هذه ذلك تلك هو هي هم انا أنا انت إنت احنا اللي الي التي الذي كان كانت يكون بس او أو و ثم لما اذا إذا كل بعد قبل عند شو ليش كيف وين هاد هاي هسا".split(" ")));
+function memTok(s){
+  return String(s||"").toLowerCase()
+    .replace(/[ً-ٰٟـ]/g,"").replace(/[أإآ]/g,"ا").replace(/ة/g,"ه").replace(/ى/g,"ي")
+    .split(/[^\p{L}\p{N}]+/u).filter(w=>w.length>1&&!MEM_STOP.has(w));
+}
+async function memLoad(force){
+  await rlStoreInit(); const db=RLS.db; if(!db) return MEM;
+  if(MEM.loading) return MEM.loading;
+  if(!force&&MEM.loaded&&Date.now()-MEM.loaded<10*60000) return MEM;
+  MEM.loading=(async()=>{
+    try{
+      const cat=await db.doc("memmeta/catalog").get();
+      if(!cat.exists){ MEM.catalog=null; MEM.cards=[]; MEM.loaded=Date.now(); return MEM; }
+      MEM.catalog=JSON.parse(JSON.stringify(cat.data()));
+      const [voc,...shards]=await Promise.all([db.doc("memmeta/vocab").get().then(s=>s.exists?JSON.parse(JSON.stringify(s.data())):null).catch(()=>null),...(MEM.catalog.shards||[]).map(id=>db.doc("mem/"+id).get().then(s=>s.exists?JSON.parse(JSON.stringify(s.data())):null).catch(()=>null))]);
+      MEM.vocab=voc?.topics||{};
+      const cards=[]; for(const s of shards) for(const c of (s?.cards||[])) if(c&&c.id&&c.t) cards.push(c);
+      Object.assign(MEM,memIndex(cards)); MEM.loaded=Date.now();
+    }catch(e){ log("✕","memory load",{code:e?.code}); }
+    return MEM;
+  })();
+  try{ return await MEM.loading; } finally{ MEM.loading=null; }
+}
+/* the search index: words of the text and context, plus each topic's bilingual terms (so باب finds "door") */
+function memIndex(cards){
+  const topTok=new Map(); const tt=t=>{ if(!topTok.has(t)){ const x=MEM.vocab?.[t]; topTok.set(t,memTok([t,...(x?.en||[]),...(x?.ar||[])].join(" "))); } return topTok.get(t); };
+  const df=new Map(); let total=0;
+  for(const c of cards){ const tags=[...(c.tp||[]).flatMap(tt),...memTok([(c.kw||[]).join(" "),(c.en||[]).join(" ")].join(" "))];
+    c._tok=[...memTok(c.t+" "+(c.cx||"")),...tags]; c._tags=new Set(tags); total+=c._tok.length; for(const w of new Set(c._tok)) df.set(w,(df.get(w)||0)+1); }
+  return {cards,byId:new Map(cards.map(c=>[c.id,c])),df,avg:cards.length?total/cards.length:1};
+}
+/* relevance: BM25 on the card text, plus tag hits, stage fit, evidence, team lessons; superseded cards rank lower */
+function memSearch(query,{stage,limit=20,kinds,expand=true}={}){
+  const q=[...new Set(memTok(query))]; const N=MEM.cards.length||1, k1=1.2, b=0.75;
+  if(!MEM.cards.length) return [];
+  const idf=w=>Math.log(1+(N-(MEM.df.get(w)||0)+.5)/((MEM.df.get(w)||0)+.5));
+  const scored=[];
+  for(const c of MEM.cards){
+    if(kinds&&!kinds.includes(c.k)) continue;
+    let rel=0;
+    if(q.length){ const tf=new Map(); for(const w of c._tok) tf.set(w,(tf.get(w)||0)+1);
+      for(const w of q){ const f=tf.get(w); if(f) rel+=idf(w)*(f*(k1+1))/(f+k1*(1-b+b*c._tok.length/MEM.avg)); if(c._tags.has(w)) rel+=1.2; }
+      if(rel===0) continue; }
+    /* relevance first; then what the team confirmed, what fits this stage, the team's own lessons */
+    let s=rel*(1+0.15*Math.log(1+(+c.ev||1)))+(+c.w||2)*0.15;
+    if(stage&&(c.st||[]).some(x=>x===stage||x==="any")) s+=q.length?0.8:2;
+    if(c.k==="lesson") s+=q.length?0.6:1.2;
+    if(c.sup) s-=3;
+    if(s>0.3) scored.push([s,c]);
+  }
+  scored.sort((x,y)=>y[0]-x[0]);
+  const top=scored.slice(0,limit).map(([s,c])=>({c,score:+s.toFixed(2)}));
+  if(expand){ const seen=new Set(top.map(x=>x.c.id)); const extra=[];
+    for(const {c} of top.slice(0,Math.min(8,top.length))) for(const l of (c.ln||[])){ const n=MEM.byId.get(l.id); if(n&&!seen.has(n.id)&&extra.length<Math.ceil(limit/3)){ seen.add(n.id); extra.push({c:n,score:0,via:{from:c.id,r:l.r}}); } }
+    top.push(...extra); }
+  return top;
+}
+const memLine=({c,via})=>`[${c.id} · ${c.k}${(+c.ev||1)>1?` · ×${c.ev}`:""}${c.at?` · ${new Date(c.at).toLocaleDateString("en-CA")}`:""}${via?` · linked (${via.r}) to ${via.from}`:""}${c.sup?` · superseded by ${c.sup}`:""}] ${c.cx?`(${c.cx}) `:""}${c.t}`;
+/* short-term memory: today's signals and lessons not yet consolidated into cards */
+async function memShortTerm(){
+  if(!RLS.db) return [];
+  try{ const since=+(MEM.catalog?.consolidatedAt||0);
+    const f=await RLS.db.collection("feedback").orderBy("at","desc").limit(60).get();
+    return f.docs.map(d=>d.data()).filter(x=>x&&+x.at>since).filter(x=>!x.implicit||["edited_by_user","revised","edit_requested","asked_for_more","chosen","advisor_applied","advisor_skipped"].includes(x.signal)).slice(0,25); }
+  catch{ return []; }
+}
+/* what the Director gets on every turn: the most relevant long-term memories + today's short-term memory */
+async function memContext(query,stage,{limit=36}={}){
+  await memLoad();
+  const hits=memSearch(query,{stage,limit});
+  const lessons=memSearch(query,{stage,limit:12,kinds:["lesson"],expand:false}).filter(x=>!hits.some(h=>h.c.id===x.c.id));
+  const st=await memShortTerm();
+  const used=[...hits,...lessons].map(x=>x.c.id);
+  const txt=MEM.cards.length?`### LONG-TERM MEMORY — ${MEM.cards.length} memories kept word for word; here are the ${used.length} most relevant to this moment (team lessons win over general knowledge; a superseded memory yields to the one that replaced it)
+${[...hits,...lessons].map(memLine).join("\n")}`:"";
+  const sTxt=st.length?`### SHORT-TERM MEMORY — today's team signals, not yet consolidated
+${st.map(x=>`- ${x.kind}${x.signal?`/${x.signal}`:""}${x.verdict===1?" 👍":x.verdict===-1?" 👎":""}: ${String(x.note||"").slice(0,300)}${x.before?` | BEFORE: ${String(x.before).slice(0,200)} | AFTER: ${String(x.after||"").slice(0,200)}`:""}${x.item&&!x.before?` | on: ${String(x.item).slice(0,160)}`:""}`).join("\n")}`:"";
+  return {text:[txt,sTxt].filter(Boolean).join("\n\n"),ids:used,count:MEM.cards.length};
+}
+/* tools the Director can call to search deeper before it decides */
+function memTools(onUse){
+  return [
+    {name:"search_memory",description:"Search the Director's long-term memory (everything the team and the research ever taught it, word for word). Use English or Arabic keywords; add a stage to focus. Returns the most relevant memory cards with ids.",
+      inputSchema:{type:"object",properties:{query:{type:"string"},stage:{type:"string",enum:["idea","script","characters","locations","directing","render","any"]},kind:{type:"string",enum:["lesson","insight","technique","fact","trend","rule","example","mistake","research","any"]},limit:{type:"number"}},required:["query"]},
+      execute:async({query,stage,kind,limit})=>{ await memLoad(); const r=memSearch(String(query||""),{stage:stage&&stage!=="any"?stage:null,kinds:kind&&kind!=="any"?[kind]:null,limit:Math.max(3,Math.min(25,+limit||12))}); onUse?.(r.map(x=>x.c.id),String(query||"")); return r.length?r.map(memLine).join("\n"):"No memory matches. Try other words."; }},
+    {name:"open_memory",description:"Open one memory card by id with everything linked to it (the graph neighbours) and where it came from.",
+      inputSchema:{type:"object",properties:{id:{type:"string"}},required:["id"]},
+      execute:async({id})=>{ await memLoad(); const c=MEM.byId.get(String(id)); if(!c) return "Not found."; onUse?.([c.id]);
+        const links=(c.ln||[]).map(l=>({r:l.r,c:MEM.byId.get(l.id)})).filter(x=>x.c);
+        const back=MEM.cards.filter(x=>(x.ln||[]).some(l=>l.id===c.id)).slice(0,10);
+        return `${memLine({c})}\nTopics: ${(c.tp||[]).join(", ")} | stages: ${(c.st||[]).join(", ")} | sources: ${trimJSON(c.src||[],600)}\nLINKS:\n${links.map(x=>`(${x.r}) ${memLine({c:x.c})}`).join("\n")||"none"}\nLINKED FROM:\n${back.map(x=>memLine({c:x})).join("\n")||"none"}`; }}];
+}
+/* read-only handle for checking recall from the browser console */
+try{ Object.defineProperty(window,"baeMemory",{value:Object.freeze({search:(q,o)=>memSearch(String(q||""),o||{}).map(x=>({id:x.c.id,kind:x.c.k,score:x.score,text:x.c.t,via:x.via})),stats:()=>({cards:MEM.cards.length,shards:MEM.catalog?.shards?.length||0}),_bench:(n)=>{ const base=MEM.cards; if(!base.length) return null; const big=[]; for(let i=0;i<n;i++){ const b=base[i%base.length]; big.push({...b,id:"x"+i,t:b.t+" v"+i,ln:[]}); } const keep={cards:MEM.cards,byId:MEM.byId,df:MEM.df,avg:MEM.avg}; const t0=performance.now(); const ix=memIndex(big); const t1=performance.now(); Object.assign(MEM,ix); const t2=performance.now(); memSearch("door inside outside باب",{stage:"directing",limit:36}); const t3=performance.now(); Object.assign(MEM,keep); return {cards:n,indexMs:Math.round(t1-t0),searchMs:Math.round(t3-t2)}; }})}); }catch{}
+async function rlMemFor(query,stage,limit=36){ try{ return await memContext(query,stage,{limit}); }catch(e){ log("✕","memory recall",{code:e?.code}); return {text:"",ids:[],count:0}; } }
+/* what the Director reads before every answer — nothing is cut: the core knowledge in full, the assistant directors' full notes,
+   the team's lessons in full, the memories recalled for THIS moment, today's short-term memory and this morning's research */
+function brText(memText){
+  if(!BR.sections.length&&!BR.research.length&&!memText) return "";
   const lessons=BR.sections.find(s=>s.id==="lessons"), rest=BR.sections.filter(s=>s.id!=="lessons");
   const R=BR.research[0];
-  return `DIRECTOR'S BRAIN — the team's shared memory. Think with it on every answer. Where the team's lessons disagree with general knowledge, the lessons win.
-${rest.map(s=>`### ${s.title}\n${cut(s.text,s.id==="templates"?9000:6000)}`).join("\n\n")}
-${BR.advisors.length?`### ASSISTANT DIRECTORS — five specialists who research every morning and advise you. Consult them; pass on their best note when it matters.\n${BR.advisors.map(x=>`[${x.id}] ${x.name} — ${x.role}\n${cut(x.notes,800)}`).join("\n\n")}`:""}
-${lessons?`### ${lessons.title}\n${cut(lessons.text,5000)}`:""}
-${R?`### This morning's research (${R.date})\n${cut(R.text,4000)}`:""}`;
+  return `DIRECTOR'S BRAIN — the team's shared memory. Read ALL of it before you decide: the core knowledge, the team's lessons, the long-term memories recalled for this moment, today's short-term memory and this morning's research. Where the team's lessons or memories disagree with general knowledge, the team wins; a newer memory that supersedes an older one wins.
+${rest.map(s=>`### ${s.title}\n${s.text||""}`).join("\n\n")}
+${BR.advisors.length?`### ASSISTANT DIRECTORS — five specialists who research every morning and advise you. Consult them; pass on their best note when it matters.\n${BR.advisors.map(x=>`[${x.id}] ${x.name} — ${x.role}\n${x.notes||""}`).join("\n\n")}`:""}
+${lessons?`### ${lessons.title}\n${lessons.text||""}`:""}
+${memText||""}
+${R?`### This morning's research (${R.date})\n${R.text||""}`:""}`;
 }
 async function brFeedback(kind,key,verdict,note,item){
   if(!RL) return;
@@ -1841,18 +1949,61 @@ function rlRate(kind,key,item){
   if(RL._rateOpen?.key===key) return `<form class="rl-rateform" data-kind="${kind}" data-key="${esc(key)}" data-item="${esc(String(item||"").slice(0,1200))}" data-v="${RL._rateOpen.v}"><span aria-hidden="true">${RL._rateOpen.v===1?"👍":"👎"}</span><input class="rl-field" name="n" dir="auto" placeholder="${RL._rateOpen.v===1?"What works? (optional)":"What's wrong? (optional)"}" aria-label="Why"><button class="a-btn" type="submit">Send</button></form>`;
   return `<div class="rl-rate" data-kind="${kind}" data-key="${esc(key)}" data-item="${esc(String(item||"").slice(0,1200))}"><button type="button" data-v="1" aria-pressed="${v===1}" title="Good — teach the Director">👍</button><button type="button" data-v="-1" aria-pressed="${v===-1}" title="Weak — teach the Director">👎</button></div>`;
 }
+/* ---------- the memory, browsable: search, open a memory, follow its links ---------- */
+const BRM={q:"",k:""};
+const MEM_KINDS=["lesson","mistake","rule","technique","insight","fact","trend","example","research","advisor"];
+function brMemHTML(){
+  const n=MEM.cards.length, cat=MEM.catalog||{};
+  const topics=Object.entries(cat.topics||{}).sort((a,b)=>b[1]-a[1]).slice(0,30);
+  return `<section class="rl-card br-mem" id="brMem"><div class="rl-ihead"><b>Long-term memory</b><span class="t12 muted">${n.toLocaleString()} memories · never deleted or shortened${cat.consolidatedAt?` · last consolidated ${rlAgo(cat.consolidatedAt)}`:""}</span></div>
+  <p class="muted" style="margin:6px 0 10px">Everything the Director has learned — the team's lessons and edits, every morning's research, the assistant directors' notes, the masters — kept word for word as linked memory cards. Before every answer it reads the ones that matter, and it can search for more.</p>
+  <form class="br-memform" id="brMemSearch"><input class="rl-field" name="q" dir="auto" value="${esc(BRM.q)}" placeholder="Search the memory — door, باب, Ramadan, 35mm, Seedance…" aria-label="Search the memory"><select class="rl-field" name="k" aria-label="Kind"><option value="">All kinds</option>${MEM_KINDS.map(k=>`<option${BRM.k===k?" selected":""}>${k}</option>`).join("")}</select><button class="btn primary small" type="submit">Search</button></form>
+  ${topics.length?`<div class="br-topics">${topics.map(([t,c])=>`<button type="button" class="br-topic" data-memq="${esc(t)}">${esc(t)} <span>${c}</span></button>`).join("")}</div>`:""}
+  <div id="brMemRes" class="br-memres">${n?"":`<p class="muted">The memory is being prepared.</p>`}</div></section>`;
+}
+function brMemCard(c){ return `<button type="button" class="br-mcard" data-memopen="${esc(c.id)}"><span class="k">${esc(c.k)}${(+c.ev||1)>1?` · ×${c.ev}`:""}${c.sup?" · replaced":""}</span>${c.cx?`<span class="t12 muted">${esc(c.cx)}</span>`:""}<span class="t" dir="auto">${esc(c.t.length>320?c.t.slice(0,320)+"…":c.t)}</span><span class="t12 muted">${(c.tp||[]).slice(0,4).map(esc).join(" · ")}${c.at?` · ${new Date(c.at).toLocaleDateString("en-CA")}`:""}</span></button>`; }
+function brMemSearchShow(q,k){
+  BRM.q=q; BRM.k=k||""; const box=$("brMemRes"); if(!box) return;
+  if(!q.trim()&&!k){ box.innerHTML=""; return; }
+  const r=memSearch(q,{kinds:k?[k]:null,limit:30,expand:false});
+  box.innerHTML=r.length?`<p class="t12 muted">${r.length} memories${q?` for “${esc(q)}”`:""}${k?` · ${esc(k)}`:""}</p>${r.map(x=>brMemCard(x.c)).join("")}`:`<p class="muted">Nothing yet for “${esc(q)}”.</p>`;
+}
+const MEM_REL={supports:"var(--teal-dark)",contradicts:"var(--burgundy)",supersedes:"var(--orange)",example:"var(--orange-med)",related:"var(--stone)"};
+function brGraph(c,nb){
+  const W=640,H=300,cx=W/2,cy=H/2, short=t=>{ t=String(t||""); return t.length>30?t.slice(0,29)+"…":t; };
+  const pts=nb.map((x,i)=>{ const a=-Math.PI/2+i*2*Math.PI/nb.length; return {...x,x:cx+Math.cos(a)*250,y:cy+Math.sin(a)*112}; });
+  return `<svg class="br-graph" viewBox="0 0 ${W} ${H}" role="img" aria-label="This memory and the memories linked to it">
+  ${pts.map(p=>`<line x1="${cx}" y1="${cy}" x2="${p.x.toFixed(1)}" y2="${p.y.toFixed(1)}" stroke="${MEM_REL[p.r]||MEM_REL.related}" stroke-width="1.5"${p.back?' stroke-dasharray="4 4"':""}/>`).join("")}
+  <circle cx="${cx}" cy="${cy}" r="12" fill="var(--orange)"/><text x="${cx}" y="${cy+30}" text-anchor="middle" class="c">${esc(short(c.t))}</text>
+  ${pts.map(p=>`<g class="n" data-memopen="${esc(p.c.id)}" tabindex="0" role="button"><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="18" fill="transparent"/><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="7" fill="${MEM_REL[p.r]||MEM_REL.related}"/><text x="${p.x.toFixed(1)}" y="${(p.y+(p.y<cy?-12:20)).toFixed(1)}" text-anchor="middle">${esc(short(p.c.t))}</text></g>`).join("")}</svg>
+  <p class="t12 muted br-legend">${Object.entries(MEM_REL).map(([r,col])=>`<span><i style="background:${col}"></i>${r}</span>`).join("")}<span>dashed = links pointing here</span></p>`;
+}
+function brMemOpen(id){
+  const c=MEM.byId.get(id), box=$("brMemRes"); if(!c||!box) return;
+  const out=(c.ln||[]).map(l=>({r:l.r,c:MEM.byId.get(l.id)})).filter(x=>x.c);
+  const inn=MEM.cards.filter(x=>x!==c&&(x.ln||[]).some(l=>l.id===c.id)&&!out.some(o=>o.c===x)).map(x=>({r:(x.ln.find(l=>l.id===c.id)||{}).r||"related",c:x,back:true}));
+  const nb=[...out,...inn].slice(0,12);
+  const src=(c.src||[]).map(x=>{ const ref=String(x.ref||""); return [x.type,/^https?:\/\//.test(ref)?`<a href="${esc(ref)}" target="_blank" rel="noopener">${esc(x.title||ref.replace(/^https?:\/\//,"").slice(0,48))}</a>`:esc(ref),esc(x.date||"")].filter(Boolean).join(" "); }).join(" · ");
+  box.innerHTML=`<div class="br-mdetail"><div class="rl-btns"><button class="a-btn" type="button" data-memback>← Back</button></div>
+   <div class="br-mfull"><span class="k">${esc(c.k)}${(+c.ev||1)>1?` · confirmed ${c.ev}×`:""}${c.sup?" · replaced by a newer memory":""}</span><p dir="auto">${esc(c.t)}</p>
+   <span class="t12 muted">${(c.tp||[]).map(esc).join(" · ")}${(c.st||[]).length?` · stages: ${(c.st||[]).map(esc).join(", ")}`:""}${c.at?` · ${new Date(c.at).toLocaleDateString("en-CA")}`:""}</span>${src?`<span class="t12 muted">From: ${src}</span>`:""}</div>
+   ${nb.length?brGraph(c,nb):`<p class="t12 muted">No links yet — each night new memories are linked to the ones they support, extend or replace.</p>`}
+   ${nb.map(x=>`<div class="br-mlink"><span class="r" style="color:${MEM_REL[x.r]||"inherit"}">${esc(x.r)}${x.back?" (to this)":""}</span>${brMemCard(x.c)}</div>`).join("")}</div>`;
+  box.scrollIntoView?.({block:"nearest"});
+}
 function rlShowBrain(){
   $("rlLib").hidden=true; $("rlProjView").hidden=true; $("rlBrain").hidden=false; $("reels").dataset.mode="brain"; $("reels").scrollTop=0;
   const box=$("rlBrainBody"); box.innerHTML=`<p class="muted">Loading the Director's memory…</p>`;
-  Promise.all([brLoad(true),brLoadFeedback()]).then(()=>{
+  Promise.all([brLoad(true),brLoadFeedback(),memLoad(true)]).then(()=>{
     if(!RLS.db){ box.innerHTML=rlEmpty("The shared memory needs the page's database, which isn't available in this view. Open the page in claude.ai."); return; }
     const fb=BR.feedback, up=fb.filter(x=>!x.implicit&&x.verdict===1).length, down=fb.filter(x=>!x.implicit&&x.verdict===-1).length, taught=fb.filter(x=>x.kind==="lesson").length, sig=fb.filter(x=>x.implicit).length;
     box.innerHTML=`
-    <div class="br-stats"><div><b>${BR.sections.length}</b><span>knowledge sections</span></div><div><b>${BR.research.length}</b><span>mornings of research</span></div><div><b>${fb.length}</b><span>recent signals · ${up} 👍 ${down} 👎 · ${taught} lessons · ${sig} learned from actions</span></div></div>
-    <form class="rl-card br-teach" id="brTeach"><div class="rl-ihead"><b>Teach the Director</b></div><p class="muted">A rule, an insight about Jordanians, a line people really say, an ad you loved and why. It also learns silently from what everyone does — the ideas you choose and skip, your edits, revisions, regenerations and approvals. Every morning it's all condensed into the team's lessons.</p><textarea class="rl-field" name="t" rows="3" dir="auto" placeholder="e.g. Jordanians laugh at the father who forwards every voice note… / Don't use the word 'easy' — say 'بكبسة'"></textarea><div class="rl-btns"><button class="btn primary small" type="submit">Teach</button><span class="t12 muted" id="brTeachMsg"></span></div></form>
+    <div class="br-stats"><div><b>${MEM.cards.length.toLocaleString()}</b><span>long-term memories · ${BR.sections.length} core sections</span></div><div><b>${Math.max(+MEM.catalog?.researchDays||0,BR.research.length)}</b><span>mornings of research, all kept</span></div><div><b>${fb.length}</b><span>recent signals · ${up} 👍 ${down} 👎 · ${taught} lessons · ${sig} learned from actions</span></div></div>
+    ${brMemHTML()}
+    <form class="rl-card br-teach" id="brTeach"><div class="rl-ihead"><b>Teach the Director</b></div><p class="muted">A rule, an insight about Jordanians, a line people really say, an ad you loved and why. It also learns silently from what everyone does — the ideas you choose and skip, your edits, revisions, regenerations and approvals. Every night it's all saved word for word into its long-term memory and linked to what it already knows.</p><textarea class="rl-field" name="t" rows="3" dir="auto" placeholder="e.g. Jordanians laugh at the father who forwards every voice note… / Don't use the word 'easy' — say 'بكبسة'"></textarea><div class="rl-btns"><button class="btn primary small" type="submit">Teach</button><span class="t12 muted" id="brTeachMsg"></span></div></form>
     <div class="rl-head"><div><h2>Assistant directors</h2><p>Five specialists research every morning and advise the Director: their notes appear under its replies, and "Ask the room" on any shot gets one concrete improvement from each.</p></div></div>
     <div class="br-advs">${["trend","story","dp","performance","tech"].map(id=>{ const A=rlAdv(id); return `<div class="br-adv"><div class="ih"><span class="ic" aria-hidden="true">${esc(A.icon||"•")}</span><b>${esc(A.name||id)}</b></div><p class="t12 muted" style="margin:0">${esc(A.role||"")}</p><div class="br-text" dir="auto">${esc(A.notes||"Research arrives tomorrow morning.")}</div><span class="t12 muted">${A.updatedAt?"Updated "+rlAgo(A.updatedAt):""}</span></div>`; }).join("")}</div>
-    ${BR.research.length?`<details class="rl-card br-sec" open><summary><b>This morning's research</b><span class="t12 muted">${esc(BR.research[0].date||"")} · runs every day at 5:33 AM Amman time</span></summary><div class="br-text" dir="auto">${esc(BR.research[0].text||"")}</div>${(BR.research[0].sources||[]).length?`<p class="t12 muted">Sources: ${(BR.research[0].sources||[]).slice(0,8).map(u=>`<a href="${esc(u.url||u)}" target="_blank" rel="noopener">${esc(u.title||u.url||u)}</a>`).join(" · ")}</p>`:""}${BR.research.length>1?`<p class="t12 muted">Earlier: ${BR.research.slice(1).map(r=>esc(r.date)).join(" · ")}</p>`:""}</details>`:`<div class="rl-card"><b>Daily research</b><p class="muted">The first morning research arrives at 5:33 AM Amman time.</p></div>`}
+    ${BR.research.length?`<details class="rl-card br-sec" open><summary><b>This morning's research</b><span class="t12 muted">${esc(BR.research[0].date||"")} · runs every morning (Amman time)</span></summary><div class="br-text" dir="auto">${esc(BR.research[0].text||"")}</div>${(BR.research[0].sources||[]).length?`<p class="t12 muted">Sources: ${(BR.research[0].sources||[]).slice(0,8).map(u=>`<a href="${esc(u.url||u)}" target="_blank" rel="noopener">${esc(u.title||u.url||u)}</a>`).join(" · ")}</p>`:""}${BR.research.length>1?`<p class="t12 muted">Earlier: ${BR.research.slice(1).map(r=>esc(r.date)).join(" · ")}</p>`:""}</details>`:`<div class="rl-card"><b>Daily research</b><p class="muted">The first morning research arrives tomorrow morning.</p></div>`}
     ${BR.sections.map(s=>`<details class="rl-card br-sec"${s.id==="lessons"?" open":""}><summary><b>${esc(s.title||s.id)}</b><span class="t12 muted">${s.updatedAt?"Updated "+rlAgo(s.updatedAt):""}</span></summary>
       <div class="br-text" dir="auto" data-sec="${esc(s.id)}">${esc(s.text||"")}</div>
       ${BR.canEdit?`<div class="rl-btns"><button class="a-btn" type="button" data-bredit="${esc(s.id)}">Edit</button></div>`:""}</details>`).join("")}
@@ -1881,7 +2032,7 @@ function rlState(){
     film_look:RL.look||null,
     scenes:RL.scenes.map(({n,title,logline,duration_s,refs,prompt,frame_prompt,frame,status})=>({n,title,logline,duration_s,refs,frame_prompt,prompt,first_frame_generated:!!frame?.id,video_rendered:status==="done"}))};
 }
-function rlPromptFor(text){
+function rlPromptFor(text,memText,canSearch){
   const set=rlSet();
   const hist=RL.chat.filter(m=>m.role!=="sys").slice(-14).map(m=>`${m.role==="u"?"USER":"YOU"}: ${m.text}${m.n?` [attached ${m.n} image(s)]`:""}`).join("\n");
   return `You are the creative director and AI film director of Bank al Etihad (Jordan) in a reels production studio. You talk with a BAE designer in a chat and build the production with them, one stage at a time. Answer in the user's language (Arabic or English, Jordanian tone is fine), warm and direct, short paragraphs.
@@ -1890,7 +2041,9 @@ ${RL_METHOD}
 
 ${RL_BAE}
 
-${brText()}
+${brText(memText)}
+${canSearch?`
+MEMORY SEARCH: your long-term memory holds ${MEM.cards.length} memories. The most relevant ones are above. If this request touches something they don't cover (a new topic, place, occasion, product, technique), call search_memory (English or Arabic keywords) before deciding, and open_memory to follow links. At most 3 searches; never search for what is already above.`:""}
 
 TARGET: ${set.aspect} reel, about ${set.length} seconds in total, dialogue language: ${set.lang}. BAE characters already in the user's Magnific library (they can be cast): Wissam (man, early 30s), Lina (young woman, dark braided ponytail), Sara (woman, light-blonde low bun), Omar (man in his 40s, heavy build).
 
@@ -1916,6 +2069,7 @@ Reply with ONLY one JSON object. Always include "reply" (the chat message, no ma
 - "film_look": the shared FILM LOOK paragraph (write it with the first scenes; change it only when asked)
 - "scenes": [{"n","title","logline","duration_s","refs":["@char_…","@loc_…"],"blueprint":{...},"frame_prompt","prompt"}]  — logline = one line "what it does"; blueprint = the top-down blocking plan written FIRST (format: ${RL_BP_SCHEMA}); frame_prompt = the still-image prompt (Nano Banana 2.1) for the scene's first frame, using the tags ("the man @img1 sits…"); prompt = the full Seedance 2.5 prompt that continues from that first frame, following the DIRECTING structure; duration 4–15 s, ${set.aspect}
 - "chips": 2–4 short suggested next replies for the user, in their language
+- "used_memories": ids of the memory cards (c_…) that actually shaped this answer, 0–8
 - "advisors": 0–3 short notes from the ASSISTANT DIRECTORS that matter for THIS reply: [{"id":"trend"|"story"|"dp"|"performance"|"tech","note":"one concrete suggestion in the user's language"}]. Only when genuinely useful; never repeat what you already did.`;
 }
 async function rlSend(text,{retry}={}){
@@ -1933,8 +2087,14 @@ async function rlSend(text,{retry}={}){
     const opts={modelTier:"complex",cache:false};
     if(atts.length){ if(sampleImages) opts.images=atts.map(a=>a.blob).slice(0,10); else rlSys("This view can't send images to Claude, so only your text was used.",true); }
     await brLoad();
-    const out=await rlAsk(rlPromptFor(text),opts);
+    const mem=await rlMemFor([text,RL.title,RL.picked?.title,RL.picked?.logline,RL.view!==RL.stage?RL.view:""].filter(Boolean).join(" "),RL.stage==="render"?"directing":RL.stage);
+    const used=new Set(), searched=[];
+    const lim=await sample.limits?.().catch(()=>null);
+    if(lim?.tools&&MEM.cards.length) opts.tools=memTools((ids,q)=>{ ids.forEach(i=>used.add(i)); if(q&&!searched.includes(q)) searched.push(q); });
+    const out=await rlAsk(rlPromptFor(text,mem.text,!!opts.tools),opts);
     RL.chatPending=null; rlApply(out||{});
+    const last=RL.chat[RL.chat.length-1];
+    if(last?.role==="a"&&mem.count) last.mem={recalled:mem.ids.length,total:mem.count,used:(Array.isArray(out?.used_memories)?out.used_memories:[]).map(String).filter(id=>MEM.byId.has(id)).slice(0,8),searched:searched.slice(0,3)};
   }catch(e){ if(!rlTransient(e)){ RL.chatPending=null; RL.chat.push({role:"sys",err:true,text:sampleCopy(e)}); } }
   finally{ rlTyping(false); rlBusy=false; $("rlSend").disabled=false; rlSave(); rlRender(); } });
 }
@@ -2069,10 +2229,15 @@ function rlChipsFor(){
     directing:ar?["خلّي الكاميرا أجرأ","قصّر المشهد الأول"]:["Bolder camera work","Shorten scene 1"],render:[]};
   return D[RL.view]||[];
 }
+/* under each Director reply: what it remembered before answering */
+function rlMemChip(m){
+  const used=(m.used||[]).map(id=>MEM.byId.get(id)).filter(Boolean);
+  return `<details class="rl-memchip" dir="auto"><summary><span aria-hidden="true">🧠</span> Read ${m.recalled} of ${m.total} memories${m.searched?.length?` · searched ${m.searched.map(q=>`“${esc(q)}”`).join(", ")}`:""}${(m.used||[]).length?` · ${(m.used||[]).length} shaped this answer`:""}</summary>${used.length?used.map(c=>`<div class="rl-memc"><span class="k">${esc(c.k)}</span> ${esc(c.t.length>260?c.t.slice(0,260)+"…":c.t)}</div>`).join(""):`<div class="rl-memc muted">Open the Director's brain to search everything it remembers.</div>`}</details>`;
+}
 function rlRenderChat(){
   const b=$("rlMsgs");
   if(!RL.chat.length) b.innerHTML=`<div class="rl-m a" dir="auto">Hi! Tell me the reel you need — the product, the message, who it's for. Attach a storyboard, character photos, places or a script and I'll analyse them.\n\nYou can come back to this project any time to change an idea, a character, a location or a shot.</div>`;
-  else b.innerHTML=RL.chat.map((m,mi)=>`<div class="rl-m ${m.role==="u"?"u":m.role==="a"?"a":"sys"}${m.err?" err":""}" dir="auto">${esc(m.text||"")}${m.thumbs?.length?`<div class="imgs">${m.thumbs.map(t=>`<img src="${t}" alt="">`).join("")}</div>`:m.n?`<div class="t12" style="opacity:.7;margin-top:6px">${m.n} image${m.n>1?"s":""} attached</div>`:""}</div>${m.advisors?.length?`<div class="rl-advs" dir="auto">${m.advisors.map((x,ai)=>{ const A=rlAdv(x.id); return `<div class="rl-adv"><span class="ic" aria-hidden="true">${esc(A.icon||"•")}</span><div><b>${esc(A.name||x.id)}</b> ${esc(x.note)} <button type="button" class="rl-advuse" data-adv="${mi}:${ai}">Use</button></div></div>`; }).join("")}</div>`:""}`).join("");
+  else b.innerHTML=RL.chat.map((m,mi)=>`<div class="rl-m ${m.role==="u"?"u":m.role==="a"?"a":"sys"}${m.err?" err":""}" dir="auto">${esc(m.text||"")}${m.thumbs?.length?`<div class="imgs">${m.thumbs.map(t=>`<img src="${t}" alt="">`).join("")}</div>`:m.n?`<div class="t12" style="opacity:.7;margin-top:6px">${m.n} image${m.n>1?"s":""} attached</div>`:""}</div>${m.advisors?.length?`<div class="rl-advs" dir="auto">${m.advisors.map((x,ai)=>{ const A=rlAdv(x.id); return `<div class="rl-adv"><span class="ic" aria-hidden="true">${esc(A.icon||"•")}</span><div><b>${esc(A.name||x.id)}</b> ${esc(x.note)} <button type="button" class="rl-advuse" data-adv="${mi}:${ai}">Use</button></div></div>`; }).join("")}</div>`:""}${m.mem?rlMemChip(m.mem):""}`).join("");
   if(RL.chatPending&&!rlBusy) b.insertAdjacentHTML("beforeend",`<div class="rl-m sys rl-retry" dir="auto">The connection dropped before Claude answered. Your message is saved. <button type="button" class="a-btn" id="rlRetry">Answer it now</button></div>`);
   b.scrollTop=b.scrollHeight;
   const last=[...RL.chat].reverse().find(m=>m.role==="a");
@@ -2308,13 +2473,15 @@ async function rlCheckScenes(ns,{quiet}={}){
   let done; const all=new Promise(r=>done=r); list.forEach(s=>{ s._checkP=all; });
   list.forEach(s=>{ s._checking=Date.now(); s.checkPending=true; s._ctl=new AbortController(); }); rlFlush(); if(!quiet) rlBoard(); else rlBoardSoon(); rlWake(true); rlTick();
   await brLoad();
-  const lessons=(BR.sections.find(s=>s.id==="lessons")?.text||"").slice(0,700), set=rlSet();
+  const lessons=(BR.sections.find(s=>s.id==="lessons")?.text||"").slice(0,1500), set=rlSet();
+  await Promise.race([memLoad().catch(()=>{}),new Promise(r=>setTimeout(r,2500))]);
   await Promise.all(list.map(async sc=>{
     const local=rlQuickCheck(sc), beat=RL.script?.scenes?.[(+sc.n||1)-1]||null;
     try{
       const out=await rlAsk(`You are a fast, precise script supervisor for an AI-video scene (${set.aspect}; Nano Banana first frame, then Seedance 2.5). Find what would make the AI misread the scene and fix it with SMALL text edits. Do not rewrite or restyle what is already correct.
 ${RL_CHECKLIST}
 Team lessons: ${lessons||"none"}
+Team memory (past mistakes, lessons and rules that match this scene): ${memSearch([sc.title,sc.logline,String(sc.prompt||"").slice(0,900)].filter(Boolean).join(" "),{stage:"directing",limit:10,kinds:["mistake","lesson","rule","technique"],expand:false}).map(x=>"\n- "+x.c.t).join("")||"none"}
 Script beat: ${trimJSON(beat,1200)}
 People and places: ${trimJSON([...RL.characters,...RL.locations].map(e=>`${e.tag} ${e.name}`),600)}
 Automatic warnings: ${local.join(" | ")||"none"}
@@ -2353,6 +2520,7 @@ async function rlImproveScene(n,instruction){
   sc._improving=instruction?"edit":"upgrade"; sc._ask=false; sc.improveErr=null; sc.improvePending={instruction}; rlFlush(); rlBoard(); rlWake(true);
   if(instruction) brSignal("shot","edit_requested",-1,{note:instruction,item:`Scene ${sc.n} · ${sc.title||""}`,before:sc.prompt,key:sc.n+instruction});
   await brLoad();
+  const mem=await rlMemFor([instruction,sc.title,sc.logline,String(sc.prompt||"").slice(0,900)].filter(Boolean).join(" "),"directing",30);
   const set=rlSet(), before={title:sc.title,duration_s:sc.duration_s,refs:sc.refs,blueprint:sc.blueprint,frame_prompt:sc.frame_prompt,prompt:sc.prompt};
   let ok=false;
   try{
@@ -2363,7 +2531,7 @@ Rules: keep every element handle (@char_…, @loc_…, @prop_…) exactly; write
 
 ${RL_BAE}
 
-${brText()}
+${brText(mem.text)}
 
 PROJECT: script ${trimJSON(RL.script,4000)}
 CAST: ${trimJSON(RL.characters.map(({tag,name,description,wardrobe})=>({tag,name,description,wardrobe})),2500)}
@@ -2433,12 +2601,13 @@ async function rlMakeMap(n){
 async function rlRoom(n){
   const sc=RL.scenes.find(x=>+x.n===+n); if(!sc||!sample||sc._room) return;
   sc._room=true; sc.roomErr=null; rlBoard(); rlWake(true);
-  await brLoad();
+  await brLoad(); await Promise.race([memLoad().catch(()=>{}),new Promise(r=>setTimeout(r,2500))]);
   const ids=["trend","story","dp","performance","tech"];
   try{
     const out=await rlAsk(`Five assistant directors review ONE scene of a Bank al Etihad reel (${rlSet().aspect}, Seedance 2.5). Each gives exactly ONE concrete, high-impact improvement from their speciality, grounded in their latest research notes and the team's lessons. No generic advice; name the exact change (lens, move, beat, line, gesture, prop, constraint…). Write in the user's language (${rlAr()?"Arabic, Jordanian tone":"English"}); keep handles (@char_…) as they are.
 ${ids.map(id=>{ const A=rlAdv(id); return `[${id}] ${A.name} — ${A.role}\nLatest notes: ${String(A.notes||"").slice(0,700)}`; }).join("\n\n")}
-Team lessons: ${(BR.sections.find(s=>s.id==="lessons")?.text||"").slice(0,800)}
+Team lessons: ${BR.sections.find(s=>s.id==="lessons")?.text||"none"}
+Team memory relevant to this scene: ${memSearch([sc.title,sc.logline,String(sc.prompt||"").slice(0,900)].filter(Boolean).join(" "),{stage:"directing",limit:14}).map(x=>"\n- "+memLine(x)).join("")||"none"}
 Script beat: ${trimJSON(RL.script?.scenes?.[(+sc.n||1)-1]||null,1000)}
 Scene ${sc.n} "${sc.title||""}" (${sc.duration_s||""} s):
 ${String(sc.prompt||"").slice(0,6000)}
@@ -2734,6 +2903,11 @@ async function rlBible(){
   });
   $("rlOpenBrain").onclick=()=>rlShowBrain();
   $("rlBrainBack").onclick=()=>{ $("rlBrain").hidden=true; rlShowLib(); };
+  $("rlBrainBody").addEventListener("submit",e=>{ const f=e.target.closest("#brMemSearch"); if(!f) return; e.preventDefault(); const d=new FormData(f); brMemSearchShow(String(d.get("q")||""),String(d.get("k")||"")); });
+  $("rlBrainBody").addEventListener("click",e=>{ const o=e.target.closest("[data-memopen]"); if(o){ brMemOpen(o.dataset.memopen); return; }
+    const t=e.target.closest("[data-memq]"); if(t){ const f=$("brMemSearch"); if(f){ f.q.value=t.dataset.memq; f.k.value=""; } brMemSearchShow(t.dataset.memq,""); return; }
+    if(e.target.closest("[data-memback]")) brMemSearchShow(BRM.q,BRM.k); });
+  $("rlBrainBody").addEventListener("keydown",e=>{ const o=e.target.closest?.("g[data-memopen]"); if(o&&(e.key==="Enter"||e.key===" ")){ e.preventDefault(); brMemOpen(o.dataset.memopen); } });
   $("rlBrainBody").addEventListener("submit",async e=>{ const f=e.target.closest("#brTeach"); if(!f) return; e.preventDefault(); const t=String(new FormData(f).get("t")||"").trim(); if(!t) return;
     const msg=$("brTeachMsg"); msg.textContent="Saving…";
     try{ await RLS.db.collection("feedback").add({kind:"lesson",verdict:0,note:t.slice(0,1500),item:"",project:null,by:RLS.uid||null,at:Date.now(),day:new Date().toLocaleDateString("en-CA")}); f.reset(); msg.textContent="Thanks — it joins the lessons tomorrow morning."; }
