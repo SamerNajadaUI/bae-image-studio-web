@@ -54,6 +54,12 @@ const TOOLS = [
     inputSchema: { type: "object", properties: { upload_id: { type: "string" }, upload_url: { type: "string", description: "Same as upload_id (older pages)." }, offset: { type: "number" }, data: { type: "string", description: "base64 bytes" }, last: { type: "boolean" } }, required: ["offset", "data"] },
   },
   {
+    name: "host_file",
+    title: "Give a file a temporary public link",
+    description: "Stores a small file (an image up to ~700 KB, base64) for 24 hours and returns a public https URL, for tools that can only fetch a file from a URL (e.g. uploading a reference image to Magnific).",
+    inputSchema: { type: "object", properties: { data: { type: "string", description: "base64 bytes" }, mime: { type: "string" }, name: { type: "string" } }, required: ["data", "mime"] },
+  },
+  {
     name: "gemini_status",
     title: "Check the Gemini connection",
     description: "Checks that the Gemini API key works and that the configured model is available.",
@@ -73,6 +79,11 @@ export default {
     if (url.pathname === "/" || url.pathname === "/health")
       return new Response("BAE Gemini Eye is running. Connect it in claude.ai with the /mcp/<ACCESS_TOKEN> URL.", { headers: { "content-type": "text/plain", ...cors } });
 
+    const fm = url.pathname.match(/^\/f\/(hf_[0-9a-f]{32})(\.[a-z0-9]{2,5})?$/);
+    if (fm && (request.method === "GET" || request.method === "HEAD") && env.UPLOADS) {
+      const r = await store(env, fm[1]).fetch("https://do/file", { method: "GET" });
+      return new Response(request.method === "HEAD" ? null : r.body, { status: r.status, headers: { "content-type": r.headers.get("content-type") || "application/octet-stream", "cache-control": "private, max-age=3600", ...cors } });
+    }
     const m = url.pathname.match(/^\/mcp\/([^/]+)\/?$/);
     if (!m || !env.ACCESS_TOKEN || !safeEqual(decodeURIComponent(m[1]), env.ACCESS_TOKEN))
       return new Response("Not found", { status: 404, headers: cors });
@@ -117,6 +128,7 @@ async function handle(msg, env, request) {
         const name = params?.name, args = params?.arguments || {};
         if (name === "gemini_status") return ok(id, await status(env));
         if (name === "watch_video") return ok(id, await watch(args, env));
+        if (name === "host_file") return ok(id, await hostFile(args, env, request));
         if (name === "upload_start") return ok(id, await upStart(args, env));
         if (name === "upload_chunk") return ok(id, await upChunk(args, env));
         return rpcError(id, -32602, `Unknown tool: ${name}`);
@@ -256,6 +268,21 @@ async function upStart(args, env) {
   return { content: [{ type: "text", text: JSON.stringify(res) }], structuredContent: res };
 }
 
+async function hostFile(args, env, request) {
+  if (!env.UPLOADS) return toolError("The UPLOADS Durable Object is not configured on the worker.");
+  const mime = String(args.mime || "image/jpeg");
+  if (!/^(image|video)\//.test(mime)) return toolError("Only images or videos.");
+  const b64s = String(args.data || "");
+  const bytes = typeof Uint8Array.fromBase64 === "function" ? Uint8Array.fromBase64(b64s) : new Uint8Array(Buffer.from(b64s, "base64"));
+  if (!bytes.byteLength || bytes.byteLength > 1900000) return toolError("The file must be under ~1.9 MB.");
+  const id = "hf_" + crypto.randomUUID().replace(/-/g, "");
+  const r = await store(env, id).fetch("https://do/file", { method: "PUT", headers: { "content-type": mime }, body: bytes });
+  if (!r.ok) return toolError(`Could not keep the file (${r.status}).`);
+  const ext = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "video/mp4": ".mp4" }[mime] || "";
+  const u = new URL(request.url); const link = `${u.origin}/f/${id}${ext}`;
+  return { content: [{ type: "text", text: JSON.stringify({ url: link, expires_in_hours: 24 }) }], structuredContent: { url: link, expires_in_hours: 24 } };
+}
+
 async function upChunk(args, env) {
   const id = String(args.upload_id || args.upload_url || "");
   if (!/^up_[0-9a-f]{32}$/.test(id)) return toolError("upload_id must come from upload_start.");
@@ -276,6 +303,12 @@ export class UploadStore {
   async fetch(request) {
     const u = new URL(request.url);
     const out = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json" } });
+    if (u.pathname === "/file") {
+      if (request.method === "PUT") { await this.storage.put("file", new Uint8Array(await request.arrayBuffer())); await this.storage.put("mime", request.headers.get("content-type") || "application/octet-stream"); await this.storage.setAlarm(Date.now() + 24 * 3600e3); return out({ ok: true }); }
+      const f = await this.storage.get("file");
+      if (!f) return new Response("gone", { status: 404 });
+      return new Response(f, { headers: { "content-type": (await this.storage.get("mime")) || "application/octet-stream" } });
+    }
     if (u.pathname === "/meta") { await this.storage.put("meta", await request.json()); await this.storage.setAlarm(Date.now() + 6 * 3600e3); return out({ ok: true }); }
     if (u.pathname !== "/chunk") return out({ error: "not found" }, 404);
     const meta = await this.storage.get("meta");
