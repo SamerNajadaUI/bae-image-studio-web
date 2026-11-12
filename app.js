@@ -2099,7 +2099,7 @@ async function rlSend(text,{retry}={}){
         brSignal("chat","video_reference",0,{note:`Gemini watched "${v.name}": ${String(v.analysis).slice(0,700)}`,item:text||"",key:"vid"+v.name+v.size});
         rlFlush(); rlTyping(true);
       }catch(e){ v.err=String(e?.code||"error"); const c=e?.code||"";
-        rlSys(c==="server_not_connected"||c==="not_granted"||/not.?connected|manifest/i.test(String(e?.message||""))?"To let Gemini watch videos, add the “BAE Gemini Eye” connector in claude.ai (Settings → Connectors). Your text was sent without the video.":`Gemini couldn't watch ${v.name}: ${String(e?.message||c).slice(0,200)}. Your text was sent without it.`,true); rlTyping(true); }
+        rlSys(/not available on this connector/i.test(String(e?.message||""))?"Claude still has the old tool list of the “BAE Gemini Eye” connector. In claude.ai open Settings → Connectors → BAE Gemini Eye, press Disconnect, then connect it again (it should show 4 tools), and resend. Your text was sent without the video.":c==="server_not_connected"||c==="not_granted"||/not.?connected|manifest/i.test(String(e?.message||""))?"To let Gemini watch videos, add the “BAE Gemini Eye” connector in claude.ai (Settings → Connectors). Your text was sent without the video.":`Gemini couldn't watch ${v.name}: ${String(e?.message||c).slice(0,200)}. Your text was sent without it.`,true); rlTyping(true); }
     }
     if(imgs.length){ if(sampleImages) opts.images=imgs.map(a=>a.blob).slice(0,10); else rlSys("This view can't send images to Claude, so only your text was used.",true); }
     await brLoad();
