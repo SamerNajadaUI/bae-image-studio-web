@@ -2068,8 +2068,9 @@ Reply with ONLY one JSON object. Always include "reply" (the chat message, no ma
 - "ideas": [{"title","hook","logline","beats","why_viral","product_moment","jury"}]  (3 per request). Before answering, silently generate at least 8 directions through different lenses of the masters, score each with THE JURY in the brain, and return only the best 3; "jury" = one line on why it wins (score /35)
 - "picked_idea": index (0-based) into "ideas" when the user picks one
 - "script": {"title","duration_s","scenes":[{"n","time","title","action","dialogue":[{"who","line"}],"on_screen_text","sound"}]}
-- "characters": [{"tag","handle","name","role","description","wardrobe","library":null|"Wissam"|"Lina"|"Sara"|"Omar","prompt"}]  — prompt = the full THREE-PANEL character sheet prompt (CHARACTER SHEET template); set "library" only when the user wants that BAE character
-- "locations": [{"tag","handle","name","kind":"location"|"prop","description","prompt"}]  — full image prompt (LOCATION template, empty of people / PROP SHEET template)
+- "characters": [{"tag","handle","name","role","description","wardrobe","library":null|"Wissam"|"Lina"|"Sara"|"Omar","prompt","from_attachment":null|N}]  — from_attachment: when the user ATTACHED a photo or sheet of this character (in THIS message), give its number N (1 = first attached image, in order). The studio then uses the user's image itself as the character's reference image — never redesign or re-imagine that person; describe them exactly as in the image. When the user attaches characters, map EVERY attached image to an element (characters, or locations/props for places and objects); if two attachments look the same, still map both and say so
+  — prompt = the full THREE-PANEL character sheet prompt (CHARACTER SHEET template); set "library" only when the user wants that BAE character
+- "locations": [{"tag","handle","name","kind":"location"|"prop","description","prompt","from_attachment":null|N}]  — full image prompt (LOCATION template, empty of people / PROP SHEET template)
 - "film_look": the shared FILM LOOK paragraph (write it with the first scenes; change it only when asked)
 - "scenes": [{"n","title","logline","duration_s","refs":["@char_…","@loc_…"],"blueprint":{...},"frame_prompt","prompt"}]  — logline = one line "what it does"; blueprint = the top-down blocking plan written FIRST (format: ${RL_BP_SCHEMA}); frame_prompt = the still-image prompt (Nano Banana 2.1) for the scene's first frame, using the tags ("the man @img1 sits…"); prompt = the full Seedance 2.5 prompt that continues from that first frame, following the DIRECTING structure; duration 4–15 s, ${set.aspect}
 - "chips": 2–4 short suggested next replies for the user, in their language
@@ -2109,7 +2110,10 @@ async function rlSend(text,{retry}={}){
     const lim=await sample.limits?.().catch(()=>null);
     if(lim?.tools&&MEM.cards.length) opts.tools=memTools((ids,q)=>{ ids.forEach(i=>used.add(i)); if(q&&!searched.includes(q)) searched.push(q); });
     const out=await rlAsk(rlPromptFor(text,mem.text,!!opts.tools),opts);
-    RL.chatPending=null; rlApply(out||{});
+    RL.chatPending=null;
+    const own=[...(Array.isArray(out?.characters)?out.characters:[]),...(Array.isArray(out?.locations)?out.locations:[])].filter(x=>x&&x.from_attachment!=null&&imgs[+x.from_attachment-1]).map(x=>({handle:x.handle,name:x.name,tag:x.tag,blob:imgs[+x.from_attachment-1].blob}));
+    rlApply(out||{});
+    for(const o of own){ const el=(o.handle&&rlElByTag(o.handle))||[...RL.characters,...RL.locations].find(e=>e.name&&o.name&&e.name.toLowerCase()===String(o.name).toLowerCase())||(o.tag&&rlElByTag(o.tag)); if(el) rlUseImage(el.tag,o.blob); }
     const last=RL.chat[RL.chat.length-1];
     if(last?.role==="a"&&mem.count) last.mem={recalled:mem.ids.length,total:mem.count,used:(Array.isArray(out?.used_memories)?out.used_memories:[]).map(String).filter(id=>MEM.byId.has(id)).slice(0,8),searched:searched.slice(0,3)};
   }catch(e){ if(!rlTransient(e)){ RL.chatPending=null; RL.chat.push({role:"sys",err:true,text:sampleCopy(e)}); } }
@@ -2124,7 +2128,7 @@ function rlApply(o){
   if(o.script&&typeof o.script==="object") RL.script=o.script;
   /* elements keep their tag, image and edits; new ones take the next free tag */
   const merge=(oldL,newL)=>newL.map(n=>{ const o2=oldL.find(x=>n.tag&&x.tag===n.tag)||oldL.find(x=>n.handle&&x.handle&&x.handle.toLowerCase()===String(n.handle).toLowerCase())||oldL.find(x=>x.name&&n.name&&x.name.toLowerCase()===String(n.name).toLowerCase());
-    if(o2){ const m={...o2,...n,tag:o2.tag,handle:o2.handle||n.handle,id:o2.id,web:o2.web,lib:n.library!==undefined?n.library:o2.lib,status:o2.status}; if(o2.id&&n.prompt&&n.prompt!==o2.prompt) m.stale=true; delete m.library; return m; }
+    if(o2){ const m={...o2,...n,tag:o2.tag,handle:o2.handle||n.handle,id:o2.id,web:o2.web,lib:n.library!==undefined?n.library:o2.lib,status:o2.status}; if(o2.id&&n.prompt&&n.prompt!==o2.prompt&&!o2.fromUser) m.stale=true; delete m.library; return m; }
     const m={...n,lib:n.library||null,tag:"@img"+(RL.nextTag++)}; delete m.library; return m; });
   if(Array.isArray(o.characters)) RL.characters=merge(RL.characters,o.characters);
   if(Array.isArray(o.locations)) RL.locations=merge(RL.locations,o.locations);
@@ -2373,11 +2377,12 @@ function rlElCard(e,kind){
     ${e.err?`<p class="rl-status bad">${esc(e.err)}</p>`:""}
     <div class="rl-btns"><button class="btn small primary" type="button" data-rl="editdone" data-tag="${e.tag}">Done</button><button class="btn small" type="button" data-rl="remove" data-tag="${e.tag}">Remove</button></div></div>`;
   return `<div class="rl-item" dir="auto"><div class="rl-ihead"><span class="rl-tag" title="${esc(e.tag)}">${esc(rlLabel(e))}</span><b>${esc(e.name||"")}</b>${e.stale?`<span class="rl-pill warn" title="The prompt changed after this image was made">Changed</span>`:""}</div>
-    <div class="rl-media${busy||writing?" busy":""}" style="aspect-ratio:${isProp?"1 / 1":"16 / 9"}">${th?`<img src="${th}" alt="${esc(e.name||"")}" data-zoom="${esc(img)}">`:`<span class="ph">${busy||writing?"":img?"Loading image…":"No image yet"}</span>`}${busy?`<span class="rl-busy">Generating…</span>`:writing?`<span class="rl-busy">Claude is writing…</span>`:""}</div>
+    <div class="rl-media${busy||writing?" busy":""}" style="aspect-ratio:${isProp?"1 / 1":"16 / 9"}">${th?`<img src="${th}" alt="${esc(e.name||"")}" data-zoom="${esc(img)}">`:`<span class="ph">${busy||writing?"":img?"Loading image…":"No image yet"}</span>`}${busy?`<span class="rl-busy">${e._note||"Generating…"}</span>`:writing?`<span class="rl-busy">Claude is writing…</span>`:""}</div>
     <p>${esc(e.description||e.role||"")}</p>
     ${e.status==="paused"?`<p class="rl-status">Still generating in Magnific — it appears here when it's done.</p>`:""}
+    ${e.fromUser&&e.id?`<p class="rl-status">✓ Your image — used as ${esc(e.handle||e.tag)} in every first frame and shot.</p>`:""}
     ${e.fromLib?`<p class="rl-status${e.id?"":" bad"}">${e.id?"BAE character from your Magnific library":"Link your Magnific library first (Photography → References → Link library), so this character can be attached."}</p>`:""}
-    <div class="rl-btns">${e.fromLib?"":`<button class="btn small${e.id&&!e.stale?"":" primary"}" type="button" data-rl="gen" data-tag="${e.tag}" ${busy||writing||!e.prompt?"disabled":""}>${busy?"Generating…":e.id?"Regenerate":"Generate image"}</button>`}<button class="btn small" type="button" data-rl="edit" data-tag="${e.tag}">Edit</button>${e.web?`<a class="btn small" href="${esc(e.web)}" target="_blank" rel="noopener">Magnific</a>`:""}<span class="rl-sp"></span>${rlRate(kind==="c"?"character":e.kind||"location","el:"+e.tag+":"+(e.id||"p"),`${e.name}: ${e.description||""} | ${String(e.prompt||"").slice(0,600)}`)}</div>
+    <div class="rl-btns">${e.fromLib?"":`<button class="btn small${e.id&&!e.stale?"":" primary"}" type="button" data-rl="gen" data-tag="${e.tag}" ${busy||writing||!e.prompt?"disabled":""}>${busy?(e._note?"Uploading…":"Generating…"):e.fromUser?"Generate instead":e.id?"Regenerate":"Generate image"}</button><label class="btn small rl-own" ${busy?'aria-disabled="true"':""}>${e.fromUser?"Replace my image":"Use my image"}<input type="file" accept="image/*" class="sr" data-rl-own="${esc(e.tag)}" ${busy?"disabled":""}></label>`}<button class="btn small" type="button" data-rl="edit" data-tag="${e.tag}">Edit</button>${e.web?`<a class="btn small" href="${esc(e.web)}" target="_blank" rel="noopener">Magnific</a>`:""}<span class="rl-sp"></span>${rlRate(kind==="c"?"character":e.kind||"location","el:"+e.tag+":"+(e.id||"p"),`${e.name}: ${e.description||""} | ${String(e.prompt||"").slice(0,600)}`)}</div>
     ${e.fromLib?"":`<form class="rl-revise" data-revise="${e.tag}"><input class="rl-field" name="q" placeholder="Ask for a change… e.g. older, navy blazer" aria-label="Ask Claude to change ${esc(e.name||"")}" dir="auto"><button class="a-btn" type="submit" ${writing?"disabled":""}>Revise</button></form>`}
     ${e.err?`<p class="rl-status bad">${esc(e.err)}</p>`:""}</div>`;
 }
@@ -2759,6 +2764,32 @@ async function rlImage({prompt,aspect,refs=[],label,onQueued}){
   if(shot){ const src=`data:${shot.mime};base64,${shot.data}`; rlFull[id]=src; rlTSet(id,await rlThumb(src)); }
   return {id, web:rr.webUrl||web};
 }
+/* the user's own image becomes the element's reference (uploaded to Magnific, used as @img in every frame and shot) */
+async function rlUploadMag(blob,name){
+  if(!S.connected) await connect(true);
+  const plan=await buildArgs("creations_upload_image",`Upload one JPEG image named ${name} to the user's Magnific creations so it can be used as a reference image (@img) in image and video generation. The image bytes MUST go in: put the placeholder string "__FILE__" (raw base64) as the value of the property that carries the image content, or "__FILE_DATAURL__" if that property expects a data: URL.`,{filename:name,mime_type:"image/jpeg",content:"__FILE__"});
+  let pargs=plan.args;
+  if(!/__FILE(_DATAURL)?__/.test(JSON.stringify(pargs))){ const props=Object.keys(S.schemas.creations_upload_image?.inputSchema?.properties||{}); const k=props.find(p=>/base64|content|data|image|file/i.test(p)&&!/url|name|type|mime|folder/i.test(p)); if(k) pargs={...pargs,[k]:"__FILE__"}; else throw {code:"tool_error",message:"Couldn't find where creations_upload_image takes the image"}; }
+  const usesDataUrl=JSON.stringify(pargs).includes("__FILE_DATAURL__");
+  const jpg=await toJpeg(blob,2048).catch(()=>blob);
+  let val; if(S.fileArgs&&!usesDataUrl) val={$file:{data:jpg,name,type:"image/jpeg"}}; else { const b64=await toB64(jpg); val=usesDataUrl?"data:image/jpeg;base64,"+b64:b64; }
+  let args=replaceDeep(pargs,"__FILE__",val); args=replaceDeep(args,"__FILE_DATAURL__",val);
+  const r=await callMag("creations_upload_image",args);
+  let rr=readResult(r); if(!rr.ids.length&&!rr.urls.length) rr=await extractWithClaude(r,"the uploaded creation's identifier and url");
+  if(!rr.ids.length) throw {code:"tool_error",message:"Magnific accepted the upload but returned no identifier"};
+  return {id:rr.ids[0],web:rr.links?.find(u=>/magnific\.com/.test(u))||null};
+}
+async function rlUseImage(tag,blob){
+  const e=rlElByTag(tag); if(!e||!blob||!mcp) return;
+  e.status="run"; e.err=null; e._live=true; e._note="Uploading your image…"; rlBoard();
+  try{
+    const th=await rlThumb(URL.createObjectURL(blob),640);
+    const out=await rlJob(()=>rlUploadMag(blob,`${String(e.handle||e.tag).replace(/^@/,"")}.jpg`));
+    Object.assign(e,{id:out.id,web:out.web||e.web,status:"ok",stale:false,fromUser:true,lib:null,fromLib:false}); if(th) rlTSet(out.id,th);
+    brSignal(RL.characters.includes(e)?"character":"location","own_image_used",1,{item:`${e.handle||e.tag} ${e.name||""}`,key:"own"+e.tag});
+  }catch(err){ e.status="err"; e.err="Your image wasn't uploaded: "+mcpCopy(err); }
+  finally{ delete e._live; delete e._note; rlSave(); rlBoard(); }
+}
 async function rlGenElement(tag){
   const e=rlElByTag(tag); if(!e||!mcp||!sample||e.status==="run"||!e.prompt) return;
   if(!S.connected) await connect(true);
@@ -3057,6 +3088,7 @@ async function rlBible(){
   $("rlMsgs").addEventListener("click",e=>{ if(e.target.closest("#rlRetry")&&RL?.chatPending) rlSend(RL.chatPending.text,{retry:true});
     const u=e.target.closest("[data-adv]"); if(u&&RL){ const [mi,ai]=u.dataset.adv.split(":").map(Number); const x=RL.chat[mi]?.advisors?.[ai]; if(x){ const A=rlAdv(x.id); brSignal("chat","advisor_used",1,{note:x.note,item:A.name,key:x.note}); rlSend(rlAr()?`طبّق اقتراح ${A.name}: ${x.note}`:`Apply the ${A.name}'s suggestion: ${x.note}`); } } });
   $("rlChips").onclick=e=>{ const b=e.target.closest("button"); if(b) rlSend(b.textContent); };
+  $("reels").addEventListener("change",e=>{ const t=e.target.closest?.("[data-rl-own]"); if(!t||!t.files?.[0]) return; const f=t.files[0]; t.value=""; rlUseImage(t.dataset.rlOwn,f); });
   $("rlFile").onchange=e=>{ for(const f of [...e.target.files].slice(0,10-rlPending.length)) rlPending.push({blob:f,url:URL.createObjectURL(f),name:f.name,video:/^video\//.test(f.type)}); e.target.value=""; rlRenderAtt(); };
   $("rlInput").addEventListener("paste",e=>{ const fs=[...(e.clipboardData?.files||[])].filter(f=>/^image\//.test(f.type)); if(fs.length){ fs.forEach(f=>rlPending.push({blob:f,url:URL.createObjectURL(f),name:f.name})); rlRenderAtt(); } });
   $("rlChatPane").addEventListener("dragover",e=>e.preventDefault());
