@@ -2161,7 +2161,9 @@ async function rlGeminiWatchBlob(blob,question,onStep){
   }
   if(!file?.name) throw {code:"tool_error",message:"Gemini didn't confirm the upload."};
   onStep?.({stage:"watch",p:100});
-  const w=await mcp.callTool(GEYE,"watch_video",{file_name:file.name,question,fps:3},{cache:false});
+  let w=null;
+  for(let i=0;;i++){ try{ w=await mcp.callTool(GEYE,"watch_video",{file_name:file.name,question,fps:blob.size>40*1048576?2:3},{cache:false}); break; }
+    catch(e){ const m=String(e?.message||e?.result?.content?.[0]?.text||""); if(i<5&&/still processing|took too long|busy|high demand|503|429/i.test(m)){ await new Promise(r=>setTimeout(r,8000)); continue; } throw e; } }
   return typeof w?.payload==="string"?w.payload:w?.payload?.answer||(w?.content||[]).map(c=>c.text||"").join("");
 }
 const RL_VSTAGE={upload:"Uploading",send:"Sending to Gemini…",watch:"Gemini is watching and listening…",done:"Uploaded · Gemini watched it",err:"Not uploaded"};

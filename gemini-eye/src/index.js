@@ -225,16 +225,33 @@ async function fallbacks(model, env) {
   } catch { return []; }
 }
 
-/* Google accepts upload pieces only in 8 MiB steps, while a page can only send small pieces through MCP.
-   So the pieces wait in a Durable Object (UploadStore) and go to Gemini in one upload when the last piece arrives. */
+/* Google accepts a multi-part upload only in 8 MiB steps, while a page can send only small pieces through MCP.
+   So the pieces wait in a Durable Object (UploadStore); every full 8 MiB goes on to Google at once and is then forgotten,
+   so even a long video never has to sit in memory. The last piece finalises the upload. */
+const GSTEP = 8 * 1024 * 1024;
+const UP_MAX = 2000 * 1024 * 1024;
 async function upStart(args, env) {
   if (!env.GEMINI_API_KEY) return toolError("GEMINI_API_KEY is not set on the worker.");
   if (!env.UPLOADS) return toolError("The UPLOADS Durable Object is not configured on the worker.");
   const bytes = Math.floor(+args.bytes || 0), mime = String(args.mime || "video/mp4");
-  if (!bytes || bytes > FETCH_MAX) return toolError(`bytes must be the file size (up to ${FETCH_MAX / 1048576} MB).`);
+  if (!bytes || bytes > UP_MAX) return toolError(`bytes must be the file size (up to ${UP_MAX / 1048576} MB).`);
   if (!/^video\//.test(mime)) return toolError("Only video files.");
+  const r = await fetch("https://generativelanguage.googleapis.com/upload/v1beta/files", {
+    method: "POST",
+    headers: {
+      "x-goog-api-key": env.GEMINI_API_KEY,
+      "X-Goog-Upload-Protocol": "resumable",
+      "X-Goog-Upload-Command": "start",
+      "X-Goog-Upload-Header-Content-Length": String(bytes),
+      "X-Goog-Upload-Header-Content-Type": mime,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ file: { display_name: String(args.name || "bae-reference").slice(0, 120) } }),
+  });
+  const gurl = r.headers.get("x-goog-upload-url");
+  if (!r.ok || !gurl) return toolError(`Gemini upload could not start (${r.status}).`);
   const id = "up_" + crypto.randomUUID().replace(/-/g, "");
-  await store(env, id).fetch("https://do/meta", { method: "PUT", body: JSON.stringify({ bytes, mime, name: String(args.name || "bae-reference").slice(0, 120), at: Date.now() }) });
+  await store(env, id).fetch("https://do/meta", { method: "PUT", body: JSON.stringify({ bytes, mime, gurl, sent: 0, at: Date.now() }) });
   const res = { upload_id: id, upload_url: id, chunk_bytes: CHUNK };
   return { content: [{ type: "text", text: JSON.stringify(res) }], structuredContent: res };
 }
@@ -245,45 +262,54 @@ async function upChunk(args, env) {
   const b64s = String(args.data || "");
   const bytes = typeof Uint8Array.fromBase64 === "function" ? Uint8Array.fromBase64(b64s) : new Uint8Array(Buffer.from(b64s, "base64"));
   const offset = Math.floor(+args.offset || 0);
-  const st = store(env, id);
-  const put = await st.fetch(`https://do/chunk?offset=${offset}`, { method: "PUT", body: bytes });
-  if (!put.ok) return toolError(`Could not keep the piece at ${offset} (${put.status}): ${(await put.text()).slice(0, 200)}`);
-  if (!args.last) { const res = { received: bytes.byteLength }; return { content: [{ type: "text", text: JSON.stringify(res) }], structuredContent: res }; }
-  const all = await st.fetch("https://do/assemble", { method: "POST" });
-  if (!all.ok) return toolError(`The video could not be put together (${all.status}): ${(await all.text()).slice(0, 200)}`);
-  const mime = all.headers.get("x-mime") || "video/mp4";
-  const buf = await all.arrayBuffer();
-  const file = await uploadFile(buf, mime, env.GEMINI_API_KEY, true);
-  await st.fetch("https://do/clear", { method: "POST" });
-  const res = { file: { name: file.name, uri: file.uri, state: file.state, mimeType: mime } };
+  const r = await store(env, id).fetch(`https://do/chunk?offset=${offset}&last=${args.last ? 1 : 0}`, { method: "PUT", body: bytes });
+  const j = await r.json().catch(() => ({ error: `status ${r.status}` }));
+  if (!r.ok || j.error) return toolError(`The piece at ${offset} was not taken: ${j.error || r.status}`);
+  if (!j.file) { const res = { received: bytes.byteLength, sent_to_gemini: j.sent || 0 }; return { content: [{ type: "text", text: JSON.stringify(res) }], structuredContent: res }; }
+  const res = { file: j.file };
   return { content: [{ type: "text", text: JSON.stringify(res) }], structuredContent: res };
 }
 const store = (env, id) => env.UPLOADS.get(env.UPLOADS.idFromName(id));
 
 export class UploadStore {
-  constructor(state) { this.storage = state.storage; }
+  constructor(state, env) { this.storage = state.storage; this.env = env; }
   async fetch(request) {
     const u = new URL(request.url);
-    if (u.pathname === "/meta") { await this.storage.put("meta", await request.json()); await this.storage.setAlarm(Date.now() + 3600e3); return new Response("ok"); }
-    if (u.pathname === "/chunk") {
-      const meta = await this.storage.get("meta");
-      if (!meta) return new Response("unknown upload", { status: 404 });
-      const off = +u.searchParams.get("offset");
-      await this.storage.put("c:" + String(off).padStart(12, "0"), new Uint8Array(await request.arrayBuffer()));
-      return new Response("ok");
+    const out = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json" } });
+    if (u.pathname === "/meta") { await this.storage.put("meta", await request.json()); await this.storage.setAlarm(Date.now() + 6 * 3600e3); return out({ ok: true }); }
+    if (u.pathname !== "/chunk") return out({ error: "not found" }, 404);
+    const meta = await this.storage.get("meta");
+    if (!meta) return out({ error: "unknown or expired upload; start again" }, 404);
+    const off = +u.searchParams.get("offset"), last = u.searchParams.get("last") === "1";
+    const piece = new Uint8Array(await request.arrayBuffer());
+    if (off < meta.sent) return out({ sent: meta.sent }); // already passed on (a retried piece)
+    if (off + piece.byteLength > meta.bytes) return out({ error: "piece goes past the end of the file" }, 400);
+    await this.storage.put("c:" + String(off).padStart(12, "0"), piece);
+    // pass every complete 8 MiB step (or, on the last piece, everything left) on to Google
+    for (;;) {
+      const left = meta.bytes - meta.sent;
+      const want = Math.min(GSTEP, left);
+      const finalStep = want === left;
+      if (!want) break;
+      const parts = [...(await this.storage.list({ prefix: "c:" }))].map(([k, v]) => [+k.slice(2), v]).sort((a, b) => a[0] - b[0]);
+      let have = 0, pos = meta.sent; const use = [];
+      for (const [o, v] of parts) { if (o !== pos || have >= want) break; use.push([o, v]); have += v.byteLength; pos += v.byteLength; }
+      if (have < want) break; // wait for more pieces
+      if (finalStep && !last && have === left) { /* all bytes are here; finalise now */ }
+      const buf = new Uint8Array(want); let at = 0;
+      for (const [, v] of use) { const take = Math.min(v.byteLength, want - at); buf.set(v.subarray(0, take), at); at += take; if (at >= want) break; }
+      const r = await fetch(meta.gurl, { method: "POST", headers: { "Content-Length": String(want), "X-Goog-Upload-Offset": String(meta.sent), "X-Goog-Upload-Command": finalStep ? "upload, finalize" : "upload" }, body: buf });
+      if (!r.ok) return out({ error: `Gemini refused bytes ${meta.sent}–${meta.sent + want} (${r.status}): ${(await r.text().catch(() => "")).slice(0, 200)}` }, 502);
+      for (const [o] of use) await this.storage.delete("c:" + String(o).padStart(12, "0"));
+      meta.sent += want; await this.storage.put("meta", meta);
+      if (finalStep) {
+        const f = (await r.json().catch(() => ({}))).file || {};
+        await this.storage.deleteAll();
+        return out({ sent: meta.sent, file: { name: f.name, uri: f.uri, state: f.state, mimeType: meta.mime } });
+      }
     }
-    if (u.pathname === "/assemble") {
-      const meta = await this.storage.get("meta");
-      if (!meta) return new Response("unknown upload", { status: 404 });
-      const parts = await this.storage.list({ prefix: "c:" });
-      const out = new Uint8Array(meta.bytes);
-      let got = 0;
-      for (const [k, v] of parts) { const off = +k.slice(2); if (off + v.byteLength > out.length) return new Response("piece past the end", { status: 400 }); out.set(v, off); got += v.byteLength; }
-      if (got !== meta.bytes) return new Response(`missing pieces: got ${got} of ${meta.bytes} bytes`, { status: 400 });
-      return new Response(out, { headers: { "x-mime": meta.mime } });
-    }
-    if (u.pathname === "/clear") { await this.storage.deleteAll(); return new Response("ok"); }
-    return new Response("not found", { status: 404 });
+    if (last) return out({ error: `the last piece arrived but only ${meta.sent} of ${meta.bytes} bytes are complete` }, 400);
+    return out({ sent: meta.sent });
   }
   async alarm() { await this.storage.deleteAll(); }
 }
