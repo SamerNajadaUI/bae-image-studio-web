@@ -154,14 +154,15 @@ async function watch(args, env) {
   };
   const t0 = Date.now();
   let used = model;
-  let r = await gen(model, req, env.GEMINI_API_KEY, deadline);
+  // the first model gets 35 s; if it is overloaded or slow, the faster fallbacks still fit in the time left
+  let r = await gen(model, req, env.GEMINI_API_KEY, Math.min(deadline, Date.now() + 35000));
   if (!r.ok && r.status === 400 && /video_metadata|fps|offset/i.test(r.message || "")) {
     delete part.video_metadata; // some models refuse custom fps: retry with defaults
     r = await gen(model, req, env.GEMINI_API_KEY, deadline);
   }
   // busy model: wait and retry, then fall back to other Gemini models that can watch video
   const busy = (x) => !x.ok && [408, 429, 500, 503, 504, 524].includes(x.status);
-  if (busy(r) && r.status !== 408 && deadline - Date.now() > 40000) {
+  if (busy(r) && r.status !== 408 && deadline - Date.now() > 50000) {
     await new Promise((res) => setTimeout(res, 3000));
     r = await gen(model, req, env.GEMINI_API_KEY, deadline);
   }
