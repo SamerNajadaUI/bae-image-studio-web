@@ -29,6 +29,7 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
+        detail: { type: "string", enum: ["default", "low"], description: "low = Gemini sees each frame at low resolution (~4x fewer tokens, so the free quota lasts ~4x longer). Fine for story, pacing, editing and sound; use default when small details, faces or on-screen text matter." },
         video_url: { type: "string", description: "Direct https URL of the video file (mp4/mov/webm) or a public YouTube link (watch, shorts, youtu.be). Or use file_name from upload_chunk." },
         file_name: { type: "string", description: "A video already uploaded with upload_start/upload_chunk (the file.name it returned, e.g. files/abc123)." },
         question: { type: "string", description: "What Gemini should look for and how to answer." },
@@ -190,7 +191,7 @@ async function watch(args, env) {
 
   const req = {
     contents: [{ role: "user", parts: [part, { text: question }] }],
-    generationConfig: { temperature: 0.2, ...(args.json ? { response_mime_type: "application/json" } : {}) },
+    generationConfig: { temperature: 0.2, ...(args.json ? { response_mime_type: "application/json" } : {}), ...(args.detail === "low" ? { mediaResolution: "MEDIA_RESOLUTION_LOW" } : {}) },
   };
   const t0 = Date.now();
   let used = model;
@@ -202,18 +203,24 @@ async function watch(args, env) {
   }
   // busy model: wait and retry, then fall back to other Gemini models that can watch video
   const busy = (x) => !x.ok && [408, 429, 500, 503, 504, 524].includes(x.status);
-  if (busy(r) && r.status !== 408 && deadline - Date.now() > 50000) {
+  const quota = (x) => !x.ok && x.status === 429 && /quota|exhaust|limit/i.test(x.message || "");
+  if (!r.ok && r.status === 400 && /media_?resolution/i.test(r.message || "")) {
+    delete req.generationConfig.mediaResolution;
+    r = await gen(model, req, env.GEMINI_API_KEY, deadline);
+  }
+  if (busy(r) && !quota(r) && r.status !== 408 && deadline - Date.now() > 50000) {
     await new Promise((res) => setTimeout(res, 3000));
     r = await gen(model, req, env.GEMINI_API_KEY, deadline);
   }
   if (busy(r)) {
-    for (const alt of await fallbacks(model, env)) {
+    for (const alt of await fallbacks(model, env, quota(r))) {
       if (deadline - Date.now() < 15000) break;
       const r2 = await gen(alt, req, env.GEMINI_API_KEY, deadline);
       if (r2.ok) { r = r2; used = alt; break; }
       if (!busy(r2)) { r = r2; used = alt; break; }
     }
   }
+  if (quota(r)) return toolError(`Gemini's free daily quota is used up on every model this key can use (${r.message}). It refills at midnight Pacific time (11:00 Amman in winter, 10:00 in summer). Tip: detail "low" + fps 1 + end_s 60 makes each watch about 8x cheaper.`);
   if (!r.ok) return toolError(`Gemini said ${r.status}: ${r.message}${busy(r) ? " — Google's models are busy right now; try again in a minute." : ""}`);
   const text = (r.json?.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("").trim();
   if (!text) return toolError(`Gemini returned no answer (${r.json?.candidates?.[0]?.finishReason || r.json?.promptFeedback?.blockReason || "unknown reason"}).`);
@@ -224,8 +231,9 @@ async function watch(args, env) {
 }
 
 /* other Gemini models to try when the chosen one is overloaded: GEMINI_FALLBACKS (comma list), else the newest flash/pro models this key can use */
-async function fallbacks(model, env) {
-  if (env.GEMINI_FALLBACKS) return env.GEMINI_FALLBACKS.split(",").map((s) => s.trim()).filter((m) => m && m !== model).slice(0, 3);
+async function fallbacks(model, env, wide = false) {
+  const n = wide ? 6 : 3; // when the free quota is used up, try more models: each model has its own free daily quota
+  if (env.GEMINI_FALLBACKS) return env.GEMINI_FALLBACKS.split(",").map((s) => s.trim()).filter((m) => m && m !== model).slice(0, n);
   try {
     const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", { headers: { "x-goog-api-key": env.GEMINI_API_KEY } });
     const j = await r.json();
@@ -233,9 +241,9 @@ async function fallbacks(model, env) {
     return (j.models || [])
       .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent"))
       .map((m) => m.name.replace(/^models\//, ""))
-      .filter((n) => /^gemini-\d+(\.\d+)?-(flash|pro)(-preview)?$/.test(n) && n !== model)
+      .filter((x) => (wide ? /^gemini-\d+(\.\d+)?-(flash|flash-lite|pro)(-preview)?$/ : /^gemini-\d+(\.\d+)?-(flash|pro)(-preview)?$/).test(x) && x !== model)
       .sort((a, b) => ver(b) - ver(a) || (/flash/.test(a) ? -1 : 1))
-      .slice(0, 3);
+      .slice(0, n);
   } catch { return []; }
 }
 
