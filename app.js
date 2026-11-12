@@ -2020,6 +2020,19 @@ function rlShowBrain(){
 
 /* ---------- staying alive: retry dropped connections, keep the screen awake, resume when the user comes back ---------- */
 const rlTransient=e=>/upstream_error|unavailable|network|timeout|cancel|connection|failed to fetch|load failed|aborted/i.test(((e?.code)||"")+" "+((e?.message)||""));
+/* a long answer can arrive cut off or wrapped in prose: recover the JSON instead of failing */
+function rlLooseJSON(t){ t=String(t||"").replace(/```(?:json)?/gi,""); const i=t.indexOf("{"); if(i<0) return null; t=t.slice(i);
+  try{ return JSON.parse(t.slice(0,t.lastIndexOf("}")+1)); }catch{}
+  /* close a truncated object: walk it, track open strings/brackets, cut at the last complete value */
+  let st=[],inS=false,esc=false,lastOK=-1;
+  for(let k=0;k<t.length;k++){ const c=t[k];
+    if(inS){ if(esc) esc=false; else if(c==="\\") esc=true; else if(c==='"') inS=false; continue; }
+    if(c==='"') inS=true; else if(c==="{"||c==="[") st.push(c==="{"?"}":"]"); else if(c==="}"||c==="]"){ st.pop(); lastOK=k; if(!st.length) break; } else if(c===",") lastOK=k-1; }
+  for(let cut=lastOK;cut>0;cut=t.lastIndexOf(",",cut-1)-1){ const head=t.slice(0,cut+1); let st2=[],inS2=false,e2=false;
+    for(const c of head){ if(inS2){ if(e2) e2=false; else if(c==="\\") e2=true; else if(c==='"') inS2=false; continue; } if(c==='"') inS2=true; else if(c==="{"||c==="[") st2.push(c==="{"?"}":"]"); else if(c==="}"||c==="]") st2.pop(); }
+    if(inS2) continue; try{ const o=JSON.parse(head+st2.reverse().join("")); if(o&&typeof o==="object") return o; }catch{} if(cut<2) break; }
+  const m=t.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)("?)/); if(m) try{ return {reply:JSON.parse('"'+m[1].replace(/\\$/,"")+'"')+(m[2]?"":"…")}; }catch{}
+  return null; }
 async function rlAsk(prompt,opts){
   for(let i=0;;i++){ try{ return await sample.json(prompt,opts); }
     catch(e){ if(i<2&&rlTransient(e)&&e?.code!=="cancelled"){ await new Promise(r=>setTimeout(r,i?6000:2500)); if(document.hidden) await new Promise(r=>{ const f=()=>{ if(!document.hidden){ document.removeEventListener("visibilitychange",f); r(); } }; document.addEventListener("visibilitychange",f); }); continue; } throw e; } }
@@ -2225,7 +2238,7 @@ ${agent?`YOU ARE AN AGENT WITH FULL CONTROL OF THE STUDIO. You can read every ta
 - studio_read: read any section completely (characters, locations, props, scenes, script, an element, a scene, activity…). The overview below is a summary — before changing something, read it if you can't see all of it.
 - studio_upsert_element / studio_delete / studio_upsert_scene / studio_script / studio_set: make EXACTLY the change needed, one item at a time. Nothing else is touched, images and the user's edits are kept. Do several calls in one turn when the user asks for several things.
 - studio_action: start generations/renders/reviews (they cost credits — only when the user asks or approves).
-You have only a few tool rounds per reply, so call SEVERAL tools at once in the same round (e.g. all the elements you add or edit together), read only what isn't already shown below, and then answer. Never say you can't see or can't change a tab: read it and do it. After acting, the reply tells the user in one or two short lines what you changed (the studio also lists the changes under your message with an Undo button). If something is ambiguous and costly, ask; otherwise act.
+Big jobs (writing all the scenes, all the locations) go through the tools — e.g. one studio_upsert_scene call per scene, several in the same round — never as one giant JSON answer. Your final JSON answer stays SHORT (reply, chips, advisors; under ~2500 characters) once you've used tools. You have only a few tool rounds per reply, so call SEVERAL tools at once in the same round (e.g. all the elements you add or edit together), read only what isn't already shown below, and then answer. Never say you can't see or can't change a tab: read it and do it. After acting, the reply tells the user in one or two short lines what you changed (the studio also lists the changes under your message with an Undo button). If something is ambiguous and costly, ask; otherwise act.
 The JSON keys characters/locations/scenes below still work but are for building a whole stage from scratch; for any targeted change use the tools.
 
 PROJECT OVERVIEW (JSON): ${trimJSON(rlOverview(),14000)}
@@ -2297,7 +2310,10 @@ async function rlSend(text,{retry}={}){
     rlStep(mem.count?`Recalled ${mem.ids.length} of ${mem.count} memories`:"Memory ready",{done:true});
     rlStep("The Director is thinking with the five assistant directors");
     const slow=setTimeout(()=>rlStep("Writing the answer"),9000);
-    const out=await rlAsk(rlPromptFor(text,mem.text,!!opts.tools?.some(t=>t.name==="search_memory"),!!opts.tools?.some(t=>t.name==="studio_upsert_element")),opts).finally(()=>clearTimeout(slow));
+    const out=await rlAsk(rlPromptFor(text,mem.text,!!opts.tools?.some(t=>t.name==="search_memory"),!!opts.tools?.some(t=>t.name==="studio_upsert_element")),opts)
+      .catch(e=>{ if(e?.code!=="invalid_json") throw e; const o=rlLooseJSON(e.text);
+        if(o) return o; if(turn.changes.length||turn.scenes.length) return {reply:rlAr()?"خلصت التغييرات اللي تحت. ردّي المكتوب انقطع، فاسألني إذا بدك تفاصيل.":"I made the changes below; my written reply got cut off — ask me for details."}; throw e; })
+      .finally(()=>clearTimeout(slow));
     RL.chatPending=null;
     const own=[...(Array.isArray(out?.characters)?out.characters:[]),...(Array.isArray(out?.locations)?out.locations:[])].filter(x=>x&&x.from_attachment!=null&&imgs[+x.from_attachment-1]).map(x=>({handle:x.handle,name:x.name,tag:x.tag,blob:imgs[+x.from_attachment-1].blob}));
     if(!turn.snap&&out&&["characters","locations","scenes","script","ideas","film_look","title"].some(k=>out[k]!=null)) turn.snap=rlSnap();
@@ -2327,12 +2343,13 @@ function rlApply(o){
   const merge=(oldL,newL)=>newL.map(n=>{ const o2=oldL.find(x=>n.tag&&x.tag===n.tag)||oldL.find(x=>n.handle&&x.handle&&x.handle.toLowerCase()===String(n.handle).toLowerCase())||oldL.find(x=>x.name&&n.name&&x.name.toLowerCase()===String(n.name).toLowerCase());
     if(o2){ const m={...o2,...n,tag:o2.tag,handle:o2.handle||n.handle,id:o2.id,web:o2.web,lib:n.library!==undefined?n.library:o2.lib,status:o2.status}; if(o2.id&&n.prompt&&n.prompt!==o2.prompt&&!o2.fromUser) m.stale=true; delete m.library; return m; }
     const m={...n,lib:n.library||null,tag:"@img"+(RL.nextTag++)}; delete m.library; return m; });
-  const upsert=(oldL,newL)=>{ const m=merge(oldL,newL.filter(x=>x&&typeof x==="object")); return [...oldL.map(x=>m.find(y=>y.tag===x.tag)||x),...m.filter(y=>!oldL.some(x=>x.tag===y.tag))]; };
+  const upsert=(oldL,newL)=>{ const m=merge(oldL,newL.filter(x=>x&&typeof x==="object"&&(x.prompt||x.library||x.lib||x.from_attachment!=null||oldL.some(y=>(x.tag&&y.tag===x.tag)||(x.handle&&String(y.handle).toLowerCase()===String(x.handle).toLowerCase()))))); return [...oldL.map(x=>m.find(y=>y.tag===x.tag)||x),...m.filter(y=>!oldL.some(x=>x.tag===y.tag))]; };
   if(Array.isArray(o.characters)) RL.characters=upsert(RL.characters,o.characters);
   if(Array.isArray(o.locations)) RL.locations=upsert(RL.locations,o.locations);
   rlEnsureHandles(RL); rlLinkLibrary();
   if(typeof o.film_look==="string"&&o.film_look.trim()) RL.look=o.film_look.trim();
   let toCheck=[];
+  if(Array.isArray(o.scenes)) o.scenes=o.scenes.filter(sc=>sc&&typeof sc==="object"&&(sc.prompt||RL.scenes.some(x=>+x.n===+sc.n)));
   if(Array.isArray(o.scenes)){ const kept=RL.scenes.filter(x=>!o.scenes.some(sc=>+sc.n===+x.n)); RL.scenes=[...kept,...o.scenes.map(sc=>{ const old=RL.scenes.find(x=>+x.n===+sc.n); if(!old){ toCheck.push(sc.n); return {...sc}; }
     const m={...old,...sc}; if(sc.prompt&&sc.prompt!==old.prompt) Object.assign(m,{status:null,clip:null,url:null,note:null,_src:null,web:null});
     if((sc.prompt&&sc.prompt!==old.prompt)||(sc.frame_prompt&&sc.frame_prompt!==old.frame_prompt)||(sc.blueprint&&JSON.stringify(sc.blueprint)!==JSON.stringify(old.blueprint))){ toCheck.push(sc.n); if(m.frame?.id&&sc.frame_prompt&&sc.frame_prompt!==old.frame_prompt) m.frame={...m.frame,stale:true}; }
