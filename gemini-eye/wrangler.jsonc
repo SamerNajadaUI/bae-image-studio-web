@@ -5,5 +5,7 @@
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  "durable_objects": { "bindings": [{ "name": "UPLOADS", "class_name": "UploadStore" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UploadStore"] }],
   "vars": { "GEMINI_MODEL": "gemini-3.5-flash" }
 }

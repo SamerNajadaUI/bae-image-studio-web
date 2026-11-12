@@ -50,8 +50,8 @@ const TOOLS = [
   {
     name: "upload_chunk",
     title: "Send part of the video",
-    description: "Sends one base64 chunk of the video (512 KiB = 524288 bytes per chunk, except the last). Set last=true on the final chunk; the result then holds file {name, uri, state} for watch_video.",
-    inputSchema: { type: "object", properties: { upload_url: { type: "string" }, offset: { type: "number" }, data: { type: "string", description: "base64 bytes" }, last: { type: "boolean" } }, required: ["upload_url", "offset", "data"] },
+    description: "Sends one base64 piece of the video (chunk_bytes from upload_start, except the last). Set last=true on the final piece; the result then holds file {name, uri, state} for watch_video.",
+    inputSchema: { type: "object", properties: { upload_id: { type: "string" }, upload_url: { type: "string", description: "Same as upload_id (older pages)." }, offset: { type: "number" }, data: { type: "string", description: "base64 bytes" }, last: { type: "boolean" } }, required: ["offset", "data"] },
   },
   {
     name: "gemini_status",
@@ -225,43 +225,67 @@ async function fallbacks(model, env) {
   } catch { return []; }
 }
 
+/* Google accepts upload pieces only in 8 MiB steps, while a page can only send small pieces through MCP.
+   So the pieces wait in a Durable Object (UploadStore) and go to Gemini in one upload when the last piece arrives. */
 async function upStart(args, env) {
   if (!env.GEMINI_API_KEY) return toolError("GEMINI_API_KEY is not set on the worker.");
+  if (!env.UPLOADS) return toolError("The UPLOADS Durable Object is not configured on the worker.");
   const bytes = Math.floor(+args.bytes || 0), mime = String(args.mime || "video/mp4");
-  if (!bytes || bytes > 2e9) return toolError("bytes must be the file size (up to 2 GB).");
+  if (!bytes || bytes > FETCH_MAX) return toolError(`bytes must be the file size (up to ${FETCH_MAX / 1048576} MB).`);
   if (!/^video\//.test(mime)) return toolError("Only video files.");
-  const r = await fetch("https://generativelanguage.googleapis.com/upload/v1beta/files", {
-    method: "POST",
-    headers: {
-      "x-goog-api-key": env.GEMINI_API_KEY,
-      "X-Goog-Upload-Protocol": "resumable",
-      "X-Goog-Upload-Command": "start",
-      "X-Goog-Upload-Header-Content-Length": String(bytes),
-      "X-Goog-Upload-Header-Content-Type": mime,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ file: { display_name: String(args.name || "bae-reference").slice(0, 120) } }),
-  });
-  const url = r.headers.get("x-goog-upload-url");
-  if (!r.ok || !url) return toolError(`Gemini upload could not start (${r.status}).`);
-  return { content: [{ type: "text", text: JSON.stringify({ upload_url: url, chunk_bytes: CHUNK }) }], structuredContent: { upload_url: url, chunk_bytes: CHUNK } };
+  const id = "up_" + crypto.randomUUID().replace(/-/g, "");
+  await store(env, id).fetch("https://do/meta", { method: "PUT", body: JSON.stringify({ bytes, mime, name: String(args.name || "bae-reference").slice(0, 120), at: Date.now() }) });
+  const res = { upload_id: id, upload_url: id, chunk_bytes: CHUNK };
+  return { content: [{ type: "text", text: JSON.stringify(res) }], structuredContent: res };
 }
 
 async function upChunk(args, env) {
-  const url = String(args.upload_url || "");
-  if (!/^https:\/\/generativelanguage\.googleapis\.com\/upload\//.test(url)) return toolError("upload_url must come from upload_start.");
+  const id = String(args.upload_id || args.upload_url || "");
+  if (!/^up_[0-9a-f]{32}$/.test(id)) return toolError("upload_id must come from upload_start.");
   const b64s = String(args.data || "");
   const bytes = typeof Uint8Array.fromBase64 === "function" ? Uint8Array.fromBase64(b64s) : new Uint8Array(Buffer.from(b64s, "base64"));
-  const r = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Length": String(bytes.byteLength), "X-Goog-Upload-Offset": String(Math.floor(+args.offset || 0)), "X-Goog-Upload-Command": args.last ? "upload, finalize" : "upload" },
-    body: bytes,
-  });
-  if (!r.ok) return toolError(`Gemini rejected the chunk (${r.status}).`);
-  if (!args.last) return { content: [{ type: "text", text: JSON.stringify({ received: bytes.byteLength }) }], structuredContent: { received: bytes.byteLength } };
-  const j = await r.json().catch(() => ({}));
-  const f = j.file || {};
-  return { content: [{ type: "text", text: JSON.stringify({ file: { name: f.name, uri: f.uri, state: f.state, mimeType: f.mimeType } }) }], structuredContent: { file: { name: f.name, uri: f.uri, state: f.state, mimeType: f.mimeType } } };
+  const offset = Math.floor(+args.offset || 0);
+  const st = store(env, id);
+  const put = await st.fetch(`https://do/chunk?offset=${offset}`, { method: "PUT", body: bytes });
+  if (!put.ok) return toolError(`Could not keep the piece at ${offset} (${put.status}): ${(await put.text()).slice(0, 200)}`);
+  if (!args.last) { const res = { received: bytes.byteLength }; return { content: [{ type: "text", text: JSON.stringify(res) }], structuredContent: res }; }
+  const all = await st.fetch("https://do/assemble", { method: "POST" });
+  if (!all.ok) return toolError(`The video could not be put together (${all.status}): ${(await all.text()).slice(0, 200)}`);
+  const mime = all.headers.get("x-mime") || "video/mp4";
+  const buf = await all.arrayBuffer();
+  const file = await uploadFile(buf, mime, env.GEMINI_API_KEY, true);
+  await st.fetch("https://do/clear", { method: "POST" });
+  const res = { file: { name: file.name, uri: file.uri, state: file.state, mimeType: mime } };
+  return { content: [{ type: "text", text: JSON.stringify(res) }], structuredContent: res };
+}
+const store = (env, id) => env.UPLOADS.get(env.UPLOADS.idFromName(id));
+
+export class UploadStore {
+  constructor(state) { this.storage = state.storage; }
+  async fetch(request) {
+    const u = new URL(request.url);
+    if (u.pathname === "/meta") { await this.storage.put("meta", await request.json()); await this.storage.setAlarm(Date.now() + 3600e3); return new Response("ok"); }
+    if (u.pathname === "/chunk") {
+      const meta = await this.storage.get("meta");
+      if (!meta) return new Response("unknown upload", { status: 404 });
+      const off = +u.searchParams.get("offset");
+      await this.storage.put("c:" + String(off).padStart(12, "0"), new Uint8Array(await request.arrayBuffer()));
+      return new Response("ok");
+    }
+    if (u.pathname === "/assemble") {
+      const meta = await this.storage.get("meta");
+      if (!meta) return new Response("unknown upload", { status: 404 });
+      const parts = await this.storage.list({ prefix: "c:" });
+      const out = new Uint8Array(meta.bytes);
+      let got = 0;
+      for (const [k, v] of parts) { const off = +k.slice(2); if (off + v.byteLength > out.length) return new Response("piece past the end", { status: 400 }); out.set(v, off); got += v.byteLength; }
+      if (got !== meta.bytes) return new Response(`missing pieces: got ${got} of ${meta.bytes} bytes`, { status: 400 });
+      return new Response(out, { headers: { "x-mime": meta.mime } });
+    }
+    if (u.pathname === "/clear") { await this.storage.deleteAll(); return new Response("ok"); }
+    return new Response("not found", { status: 404 });
+  }
+  async alarm() { await this.storage.deleteAll(); }
 }
 
 async function waitActive(name, key) {
@@ -295,7 +319,7 @@ async function gen(model, req, key, deadline) {
   } finally { clearTimeout(timer); }
 }
 
-async function uploadFile(buf, mime, key) {
+async function uploadFile(buf, mime, key, full) {
   const start = await fetch("https://generativelanguage.googleapis.com/upload/v1beta/files", {
     method: "POST",
     headers: {
@@ -325,7 +349,7 @@ async function uploadFile(buf, mime, key) {
     const s = await fetch(`https://generativelanguage.googleapis.com/v1beta/${file.name}`, { headers: { "x-goog-api-key": key } });
     Object.assign(file, await s.json().catch(() => ({})));
   }
-  return file.uri;
+  return full ? file : file.uri;
 }
 
 /* helpers */
