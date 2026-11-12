@@ -2152,6 +2152,12 @@ function rlStudioTools(turn){
         if(a.new_n!=null&&+a.new_n!==n) turn.moves.push([n,+a.new_n]);
         rlEvent(`Director ${old?"changed":"added"} scene ${n}.`); turn.dirty=true;
         return `${old?"Updated":"Added"} scene ${n}.`; }},
+    {name:"studio_write_scenes",description:"THE WAY TO WRITE MANY SCENES (e.g. starting Video Directing): give a short plan per scene and the studio writes each full scene (blueprint, first-frame prompt, Seedance prompt) in its own focused pass, two at a time, then checks it. Use this instead of writing several full scenes yourself. Existing scenes with the same n are rewritten from your brief.",
+      inputSchema:{type:"object",properties:{scenes:{type:"array",items:{type:"object",properties:{n:{type:"number"},title:{type:"string"},logline:{type:"string"},duration_s:{type:"number"},refs:{type:"array",items:{type:"string"}},brief:{type:"string",description:"what happens, shot sizes/camera idea, performance, sound, dialogue lines — 2–6 sentences"}},required:["n","title","brief"]}}},required:["scenes"]},
+      execute:async({scenes})=>{ const L=(Array.isArray(scenes)?scenes:[]).filter(x=>x&&x.n!=null&&x.brief); if(!L.length) return "Give scenes with n, title and brief.";
+        changed(`✍ writing scene${L.length>1?"s":""} ${L.map(x=>x.n).join(", ")}`); T(`Planning ${L.length} scene${L.length>1?"s":""}`);
+        turn.writes.push(...L); rlEvent(`Director planned scenes ${L.map(x=>x.n).join(", ")} and the studio is writing them.`); turn.dirty=true;
+        return `The studio will write scenes ${L.map(x=>x.n).join(", ")} right after your reply (about a minute each, two at a time). Tell the user they appear in Shots as they finish.`; }},
     {name:"studio_script",description:"Change the script: pass 'scene' to add or change ONE script scene (by n, only given fields change), or 'script' to replace the whole script (title, duration_s, scenes).",
       inputSchema:{type:"object",properties:{scene:{type:"object",description:"{n,time,title,action,dialogue:[{who,line}],on_screen_text,sound}"},script:{type:"object"}}},
       execute:async({scene,script})=>{ if(script&&typeof script==="object"){ changed("✎ script (whole)"); T("Rewriting the script"); RL.script=script; rlEvent("Director rewrote the script."); turn.dirty=true; return "Script replaced."; }
@@ -2193,7 +2199,17 @@ function rlApplyTurn(turn){
     if(toCheck.length) setTimeout(()=>rlCheckScenes(toCheck,{quiet:true}),60); }
   if(turn.openTab) RL.view=turn.openTab;
 }
+async function rlWriteScenes(L){
+  for(const p of L){ const n=+p.n; let sc=RL.scenes.find(x=>+x.n===n);
+    const base={title:String(p.title||""),logline:String(p.logline||""),duration_s:Math.max(4,Math.min(15,+p.duration_s||8)),refs:Array.isArray(p.refs)?p.refs.map(String):(sc?.refs||[])};
+    if(!sc){ sc={n,...base,prompt:"",frame_prompt:""}; RL.scenes.push(sc); } else Object.assign(sc,base);
+    sc.improvePending={instruction:`WRITE THIS SCENE IN FULL${sc.prompt?" (replace the current version)":" (it is empty now)"}: ${p.brief}`}; }
+  RL.scenes.sort((x,y)=>+x.n-+y.n); rlSave(); rlBoard();
+  const q=L.map(p=>+p.n); const worker=async()=>{ while(q.length){ const n=q.shift(); const sc=RL.scenes.find(x=>+x.n===n); if(sc?.improvePending) await rlImproveScene(n,sc.improvePending.instruction); } };
+  await Promise.all([worker(),worker()]);
+}
 function rlRunActions(turn){
+  if(turn.writes?.length) rlWriteScenes(turn.writes);
   for(const [a,t] of turn.actions){
     if(a==="generate_image") rlGenElement(rlElByTag(t)?.tag||t);
     else if(a==="generate_frame") rlGenFrame(t);
@@ -2238,7 +2254,7 @@ ${agent?`YOU ARE AN AGENT WITH FULL CONTROL OF THE STUDIO. You can read every ta
 - studio_read: read any section completely (characters, locations, props, scenes, script, an element, a scene, activity…). The overview below is a summary — before changing something, read it if you can't see all of it.
 - studio_upsert_element / studio_delete / studio_upsert_scene / studio_script / studio_set: make EXACTLY the change needed, one item at a time. Nothing else is touched, images and the user's edits are kept. Do several calls in one turn when the user asks for several things.
 - studio_action: start generations/renders/reviews (they cost credits — only when the user asks or approves).
-Big jobs (writing all the scenes, all the locations) go through the tools — e.g. one studio_upsert_scene call per scene, several in the same round — never as one giant JSON answer. Your final JSON answer stays SHORT (reply, chips, advisors; under ~2500 characters) once you've used tools. You have only a few tool rounds per reply, so call SEVERAL tools at once in the same round (e.g. all the elements you add or edit together), read only what isn't already shown below, and then answer. Never say you can't see or can't change a tab: read it and do it. After acting, the reply tells the user in one or two short lines what you changed (the studio also lists the changes under your message with an Undo button). If something is ambiguous and costly, ask; otherwise act.
+Big jobs go through the tools, never as one giant JSON answer: to write several scenes (e.g. starting Video Directing) call studio_write_scenes ONCE with a short plan per scene — the studio writes each full scene itself; use studio_upsert_scene only for a targeted edit. For many elements, several studio_upsert_element calls in one round. Your final JSON answer stays SHORT (reply, chips, advisors; under ~2500 characters) once you've used tools. You have only a few tool rounds per reply, so call SEVERAL tools at once in the same round (e.g. all the elements you add or edit together), read only what isn't already shown below, and then answer. Never say you can't see or can't change a tab: read it and do it. After acting, the reply tells the user in one or two short lines what you changed (the studio also lists the changes under your message with an Undo button). If something is ambiguous and costly, ask; otherwise act.
 The JSON keys characters/locations/scenes below still work but are for building a whole stage from scratch; for any targeted change use the tools.
 
 PROJECT OVERVIEW (JSON): ${trimJSON(rlOverview(),14000)}
@@ -2303,15 +2319,15 @@ async function rlSend(text,{retry}={}){
     const mem=await rlMemFor([text,RL.title,RL.picked?.title,RL.picked?.logline,RL.view!==RL.stage?RL.view:""].filter(Boolean).join(" "),RL.stage==="render"?"directing":RL.stage);
     const used=new Set(), searched=[];
     const lim=await sample.limits?.().catch(()=>null);
-    const turn={changes:[],scenes:[],moves:[],actions:[],snap:null,dirty:false};
+    const turn={changes:[],scenes:[],moves:[],actions:[],writes:[],snap:null,dirty:false};
     if(lim?.tools){ const st=rlStudioTools(turn), mt=MEM.cards.length?memTools((ids,q)=>{ ids.forEach(i=>used.add(i)); if(q&&!searched.includes(q)){ searched.push(q); rlStep(`Searching memory: “${q}”`); } }):[];
-      const order=["studio_read","studio_upsert_element","studio_upsert_scene","studio_delete","studio_set","search_memory","studio_action","studio_script","open_memory"];
+      const order=["studio_read","studio_upsert_element","studio_write_scenes","studio_upsert_scene","studio_delete","studio_set","search_memory","studio_action","studio_script","open_memory"];
       opts.tools=[...st,...mt].sort((x,y)=>order.indexOf(x.name)-order.indexOf(y.name)).slice(0,Math.max(1,+lim.tools.maxCount||9)); }
     rlStep(mem.count?`Recalled ${mem.ids.length} of ${mem.count} memories`:"Memory ready",{done:true});
     rlStep("The Director is thinking with the five assistant directors");
     const slow=setTimeout(()=>rlStep("Writing the answer"),9000);
     const out=await rlAsk(rlPromptFor(text,mem.text,!!opts.tools?.some(t=>t.name==="search_memory"),!!opts.tools?.some(t=>t.name==="studio_upsert_element")),opts)
-      .catch(e=>{ if(e?.code!=="invalid_json") throw e; const o=rlLooseJSON(e.text);
+      .catch(e=>{ if(e?.code!=="invalid_json"&&e?.code!=="empty_completion") throw e; const o=rlLooseJSON(e.text);
         if(o) return o; if(turn.changes.length||turn.scenes.length) return {reply:rlAr()?"خلصت التغييرات اللي تحت. ردّي المكتوب انقطع، فاسألني إذا بدك تفاصيل.":"I made the changes below; my written reply got cut off — ask me for details."}; throw e; })
       .finally(()=>clearTimeout(slow));
     RL.chatPending=null;
@@ -2656,6 +2672,7 @@ const RL_OPEN=new Set();
 const rlOpenAttr=(k,def)=>RL_OPEN.has(k)?" open":RL_OPEN.has("!"+k)?"":def?" open":"";
 function rlShotNext(sc){
   const f=sc.frame||{};
+  if(sc._improving||sc.improvePending) return {label:sc.prompt?"Updating the prompt…":"Writing the scene…",busy:true};
   if(f.status==="run"||f.pending) return {label:"Generating first frame…",busy:true};
   if(sc.status==="run"||sc.pending) return {label:sc.pending?"Rendering in Magnific…":"Rendering video…",busy:true};
   if(sc._reviewing) return {label:"Gemini is watching…",busy:true};
@@ -2863,13 +2880,13 @@ async function rlImproveScene(n,instruction){
   const sc=RL.scenes.find(x=>+x.n===+n); if(!sc||!sample||sc._improving) return;
   instruction=String(instruction||"").trim();
   sc._improving=instruction?"edit":"upgrade"; sc._ask=false; sc.improveErr=null; sc.improvePending={instruction}; rlFlush(); rlBoard(); rlWake(true);
-  if(instruction) brSignal("shot","edit_requested",-1,{note:instruction,item:`Scene ${sc.n} · ${sc.title||""}`,before:sc.prompt,key:sc.n+instruction});
+  if(instruction&&!instruction.startsWith("WRITE THIS SCENE")) brSignal("shot","edit_requested",-1,{note:instruction,item:`Scene ${sc.n} · ${sc.title||""}`,before:sc.prompt,key:sc.n+instruction});
   await brLoad();
   const mem=await rlMemFor([instruction,sc.title,sc.logline,String(sc.prompt||"").slice(0,900)].filter(Boolean).join(" "),"directing",30);
   const set=rlSet(), before={title:sc.title,duration_s:sc.duration_s,refs:sc.refs,blueprint:sc.blueprint,frame_prompt:sc.frame_prompt,prompt:sc.prompt};
   let ok=false;
   try{
-    const out=await rlAsk(`You are the Director of a Bank al Etihad reel (${set.aspect}, Seedance 2.5 animating from a Nano Banana 2.1 first frame, dialogue ${set.lang}).
+    const out=await rlAsk(`You are the Director of a Bank al Etihad reel (${set.aspect}, Seedance 2.5 reference-to-video: every element is attached as @img references, no start frame, so the prompt must build the opening composition itself; a Nano Banana 2.1 first-frame still is an optional preview; dialogue ${set.lang}).
 ${instruction?`THE USER ASKED FOR THIS CHANGE TO SCENE ${sc.n}: "${instruction}"
 Apply it precisely and completely. Keep everything the user didn't ask to change (story beat, cast, wardrobe, location, tags), unless the change requires it.`:`UPDATE SHOT PROMPT: rewrite scene ${sc.n} so it is clearly BETTER than the current version, using everything in the brain below, especially the team's latest lessons and this morning's research. Raise the craft: a stronger first-second hook, more precise and motivated camera work (shot sizes, FOV°, moves with speed), better light, a more specific and natural performance, cleaner physics, tighter timing, sharper sound design. Do not change the story beat, the cast or the location.`}
 Rules: keep every element handle (@char_…, @loc_…, @prop_…) exactly; write in the SCENE PROMPT FORMAT of the brain (opener, SECTION + location, first-frame blocking, SHOT n (a–b s) with mm + FOV°, one move with distance and speed, framing limits, camera height, ACTING micro-detail and what not to do, per-second action for continuous takes, HEAD PRIORITY framing, props, RULES, sound); do not add a REFERENCES block or the film look (the studio adds them); state the geography explicitly (zones, who is where, door direction, camera position and direction, head-count, light source); one action per shot; timestamps add up to duration_s (4–15 s). Update the blueprint if the blocking changes, and keep frame_prompt = the exact first moment of shot 1. Avoid every mistake in the AI-video rules.
