@@ -4,5 +4,5 @@
   "main": "src/index.js",
   "compatibility_date": "2026-10-01",
   "observability": { "enabled": true },
-  "vars": { "GEMINI_MODEL": "gemini-3.8-flash" }
+  "vars": { "GEMINI_MODEL": "gemini-3.5-flash" }
 }
