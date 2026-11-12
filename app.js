@@ -1875,7 +1875,7 @@ function memSearch(query,{stage,limit=20,kinds,expand=true}={}){
     top.push(...extra); }
   return top;
 }
-const memLine=({c,via})=>`[${c.id} · ${c.k}${(+c.ev||1)>1?` · ×${c.ev}`:""}${c.at?` · ${new Date(c.at).toLocaleDateString("en-CA")}`:""}${via?` · linked (${via.r}) to ${via.from}`:""}${c.sup?` · superseded by ${c.sup}`:""}] ${c.cx?`(${c.cx}) `:""}${c.t}`;
+const memLine=({c,via},full)=>`[${c.id} · ${c.k}${(+c.ev||1)>1?` · ×${c.ev}`:""}${c.at?` · ${new Date(c.at).toLocaleDateString("en-CA")}`:""}${via?` · linked (${via.r}) to ${via.from}`:""}${c.sup?` · superseded by ${c.sup}`:""}] ${c.cx?`(${c.cx}) `:""}${!full&&c.t.length>1600?c.t.slice(0,1100)+` … [${c.t.length.toLocaleString()} characters — open_memory ${c.id} reads it in full]`:c.t}`;
 /* short-term memory: today's signals and lessons not yet consolidated into cards */
 async function memShortTerm(){
   if(!RLS.db) return [];
@@ -1892,7 +1892,7 @@ async function memContext(query,stage,{limit=36}={}){
   const st=await memShortTerm();
   const used=[...hits,...lessons].map(x=>x.c.id);
   const txt=MEM.cards.length?`### LONG-TERM MEMORY — ${MEM.cards.length} memories kept word for word; here are the ${used.length} most relevant to this moment (team lessons win over general knowledge; a superseded memory yields to the one that replaced it)
-${[...hits,...lessons].map(memLine).join("\n")}`:"";
+${[...hits,...lessons].map(x=>memLine(x)).join("\n")}`:"";
   const sTxt=st.length?`### SHORT-TERM MEMORY — today's team signals, not yet consolidated
 ${st.map(x=>`- ${x.kind}${x.signal?`/${x.signal}`:""}${x.verdict===1?" 👍":x.verdict===-1?" 👎":""}: ${String(x.note||"").slice(0,300)}${x.before?` | BEFORE: ${String(x.before).slice(0,200)} | AFTER: ${String(x.after||"").slice(0,200)}`:""}${x.item&&!x.before?` | on: ${String(x.item).slice(0,160)}`:""}`).join("\n")}`:"";
   return {text:[txt,sTxt].filter(Boolean).join("\n\n"),ids:used,count:MEM.cards.length};
@@ -1902,13 +1902,13 @@ function memTools(onUse){
   return [
     {name:"search_memory",description:"Search the Director's long-term memory (everything the team and the research ever taught it, word for word). Use English or Arabic keywords; add a stage to focus. Returns the most relevant memory cards with ids.",
       inputSchema:{type:"object",properties:{query:{type:"string"},stage:{type:"string",enum:["idea","script","characters","locations","directing","render","any"]},kind:{type:"string",enum:["lesson","insight","technique","fact","trend","rule","example","mistake","research","any"]},limit:{type:"number"}},required:["query"]},
-      execute:async({query,stage,kind,limit})=>{ await memLoad(); const r=memSearch(String(query||""),{stage:stage&&stage!=="any"?stage:null,kinds:kind&&kind!=="any"?[kind]:null,limit:Math.max(3,Math.min(25,+limit||12))}); onUse?.(r.map(x=>x.c.id),String(query||"")); return r.length?r.map(memLine).join("\n"):"No memory matches. Try other words."; }},
+      execute:async({query,stage,kind,limit})=>{ await memLoad(); const r=memSearch(String(query||""),{stage:stage&&stage!=="any"?stage:null,kinds:kind&&kind!=="any"?[kind]:null,limit:Math.max(3,Math.min(25,+limit||12))}); onUse?.(r.map(x=>x.c.id),String(query||"")); return r.length?r.map(x=>memLine(x)).join("\n"):"No memory matches. Try other words."; }},
     {name:"open_memory",description:"Open one memory card by id with everything linked to it (the graph neighbours) and where it came from.",
       inputSchema:{type:"object",properties:{id:{type:"string"}},required:["id"]},
       execute:async({id})=>{ await memLoad(); const c=MEM.byId.get(String(id)); if(!c) return "Not found."; onUse?.([c.id]);
         const links=(c.ln||[]).map(l=>({r:l.r,c:MEM.byId.get(l.id)})).filter(x=>x.c);
         const back=MEM.cards.filter(x=>(x.ln||[]).some(l=>l.id===c.id)).slice(0,10);
-        return `${memLine({c})}\nTopics: ${(c.tp||[]).join(", ")} | stages: ${(c.st||[]).join(", ")} | sources: ${trimJSON(c.src||[],600)}\nLINKS:\n${links.map(x=>`(${x.r}) ${memLine({c:x.c})}`).join("\n")||"none"}\nLINKED FROM:\n${back.map(x=>memLine({c:x})).join("\n")||"none"}`; }}];
+        return `${memLine({c},true)}\nTopics: ${(c.tp||[]).join(", ")} | stages: ${(c.st||[]).join(", ")} | sources: ${trimJSON(c.src||[],600)}\nLINKS:\n${links.map(x=>`(${x.r}) ${memLine({c:x.c})}`).join("\n")||"none"}\nLINKED FROM:\n${back.map(x=>memLine({c:x})).join("\n")||"none"}`; }}];
 }
 /* read-only handle for checking recall from the browser console */
 try{ Object.defineProperty(window,"baeMemory",{value:Object.freeze({search:(q,o)=>memSearch(String(q||""),o||{}).map(x=>({id:x.c.id,kind:x.c.k,score:x.score,text:x.c.t,via:x.via})),stats:()=>({cards:MEM.cards.length,shards:MEM.catalog?.shards?.length||0}),_bench:(n)=>{ const base=MEM.cards; if(!base.length) return null; const big=[]; for(let i=0;i<n;i++){ const b=base[i%base.length]; big.push({...b,id:"x"+i,t:b.t+" v"+i,ln:[]}); } const keep={cards:MEM.cards,byId:MEM.byId,df:MEM.df,avg:MEM.avg}; const t0=performance.now(); const ix=memIndex(big); const t1=performance.now(); Object.assign(MEM,ix); const t2=performance.now(); memSearch("door inside outside باب",{stage:"directing",limit:36}); const t3=performance.now(); Object.assign(MEM,keep); return {cards:n,indexMs:Math.round(t1-t0),searchMs:Math.round(t3-t2)}; }})}); }catch{}
