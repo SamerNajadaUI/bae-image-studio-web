@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 /* BAE Gemini Eye — a tiny remote MCP server that lets Claude "watch" a video through Google Gemini.
    Gemini reads the moving picture AND the soundtrack; Claude gets back what happened, second by second.
 
@@ -14,6 +15,7 @@ const PROTOCOLS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const DEFAULT_MODEL = "gemini-3.8-flash";
 const INLINE_MAX = 2 * 1024 * 1024; // tiny clips go inline; everything else through the Files API (no base64 work, fits the free CPU limit)
 const FETCH_MAX = 90 * 1024 * 1024;
+const CHUNK = 512 * 1024; // upload chunk size (a multiple of 256 KiB), small enough for the free CPU limit
 
 const TOOLS = [
   {
@@ -27,7 +29,8 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        video_url: { type: "string", description: "Direct https URL of the video file (mp4/mov/webm)." },
+        video_url: { type: "string", description: "Direct https URL of the video file (mp4/mov/webm). Or use file_name from upload_chunk." },
+        file_name: { type: "string", description: "A video already uploaded with upload_start/upload_chunk (the file.name it returned, e.g. files/abc123)." },
         question: { type: "string", description: "What Gemini should look for and how to answer." },
         fps: { type: "number", description: "Frames per second Gemini samples, 1–10. Default 4 for short shots (fast action needs 5+)." },
         start_s: { type: "number", description: "Optional start of the clip to review, in seconds." },
@@ -35,8 +38,20 @@ const TOOLS = [
         json: { type: "boolean", description: "Ask Gemini for a JSON reply (describe the shape in the question)." },
         model: { type: "string", description: "Optional Gemini model id to use instead of the default." },
       },
-      required: ["video_url", "question"],
+      required: ["question"],
     },
+  },
+  {
+    name: "upload_start",
+    title: "Start uploading a video to Gemini",
+    description: "Starts a resumable upload of a video the user picked (for pages that cannot reach the web). Returns upload_url; then send the bytes with upload_chunk.",
+    inputSchema: { type: "object", properties: { bytes: { type: "number" }, mime: { type: "string" }, name: { type: "string" } }, required: ["bytes", "mime"] },
+  },
+  {
+    name: "upload_chunk",
+    title: "Send part of the video",
+    description: "Sends one base64 chunk of the video (512 KiB = 524288 bytes per chunk, except the last). Set last=true on the final chunk; the result then holds file {name, uri, state} for watch_video.",
+    inputSchema: { type: "object", properties: { upload_url: { type: "string" }, offset: { type: "number" }, data: { type: "string", description: "base64 bytes" }, last: { type: "boolean" } }, required: ["upload_url", "offset", "data"] },
   },
   {
     name: "gemini_status",
@@ -102,6 +117,8 @@ async function handle(msg, env, request) {
         const name = params?.name, args = params?.arguments || {};
         if (name === "gemini_status") return ok(id, await status(env));
         if (name === "watch_video") return ok(id, await watch(args, env));
+        if (name === "upload_start") return ok(id, await upStart(args, env));
+        if (name === "upload_chunk") return ok(id, await upChunk(args, env));
         return rpcError(id, -32602, `Unknown tool: ${name}`);
       }
       default:
@@ -124,13 +141,21 @@ async function status(env) {
 async function watch(args, env) {
   if (!env.GEMINI_API_KEY) return toolError("GEMINI_API_KEY is not set on the worker.");
   const videoUrl = String(args.video_url || "");
+  const fileName = String(args.file_name || "");
   const question = String(args.question || "").trim();
-  if (!/^https:\/\//i.test(videoUrl)) return toolError("video_url must be a direct https URL of the video file.");
+  if (!fileName && !/^https:\/\//i.test(videoUrl)) return toolError("Give video_url (a direct https URL) or file_name (from upload_chunk).");
+  if (fileName && !/^files\/[\w-]+$/.test(fileName)) return toolError("file_name must look like files/abc123.");
   if (!question) return toolError("question is required.");
   const model = String(args.model || "") || env.GEMINI_MODEL || DEFAULT_MODEL;
   const deadline = Date.now() + 85000; // stay under Cloudflare's ~100 s response limit
   const fps = clamp(Number(args.fps) || 4, 0.5, 10);
 
+  let part, size = 0;
+  if (fileName) {
+    const f = await waitActive(fileName, env.GEMINI_API_KEY);
+    part = { file_data: { mime_type: f.mimeType || "video/mp4", file_uri: f.uri } };
+    size = +f.sizeBytes || 0;
+  } else {
   // 1. download the video
   const vr = await fetch(videoUrl, { redirect: "follow" });
   if (!vr.ok) return toolError(`Could not download the video (${vr.status}). The link may have expired; get a fresh one.`);
@@ -140,9 +165,10 @@ async function watch(args, env) {
   if (buf.byteLength > FETCH_MAX) return toolError(`The video is ${(buf.byteLength / 1e6).toFixed(0)} MB; the limit here is ${FETCH_MAX / 1e6} MB.`);
 
   // 2. hand it to Gemini (inline when small, Files API when large)
-  let part;
+  size = buf.byteLength;
   if (buf.byteLength <= INLINE_MAX) part = { inline_data: { mime_type: mime, data: b64(buf) } };
   else part = { file_data: { mime_type: mime, file_uri: await uploadFile(buf, mime, env.GEMINI_API_KEY) } };
+  }
   const meta = { fps };
   if (Number.isFinite(+args.start_s)) meta.start_offset = `${Math.max(0, +args.start_s)}s`;
   if (Number.isFinite(+args.end_s)) meta.end_offset = `${Math.max(0, +args.end_s)}s`;
@@ -179,7 +205,7 @@ async function watch(args, env) {
   if (!text) return toolError(`Gemini returned no answer (${r.json?.candidates?.[0]?.finishReason || r.json?.promptFeedback?.blockReason || "unknown reason"}).`);
   return {
     content: [{ type: "text", text }],
-    structuredContent: { model: used, seconds: Math.round((Date.now() - t0) / 1000), bytes: buf.byteLength, fps, answer: text },
+    structuredContent: { model: used, seconds: Math.round((Date.now() - t0) / 1000), bytes: size, fps, answer: text },
   };
 }
 
@@ -197,6 +223,58 @@ async function fallbacks(model, env) {
       .sort((a, b) => ver(b) - ver(a) || (/flash/.test(a) ? -1 : 1))
       .slice(0, 3);
   } catch { return []; }
+}
+
+async function upStart(args, env) {
+  if (!env.GEMINI_API_KEY) return toolError("GEMINI_API_KEY is not set on the worker.");
+  const bytes = Math.floor(+args.bytes || 0), mime = String(args.mime || "video/mp4");
+  if (!bytes || bytes > 2e9) return toolError("bytes must be the file size (up to 2 GB).");
+  if (!/^video\//.test(mime)) return toolError("Only video files.");
+  const r = await fetch("https://generativelanguage.googleapis.com/upload/v1beta/files", {
+    method: "POST",
+    headers: {
+      "x-goog-api-key": env.GEMINI_API_KEY,
+      "X-Goog-Upload-Protocol": "resumable",
+      "X-Goog-Upload-Command": "start",
+      "X-Goog-Upload-Header-Content-Length": String(bytes),
+      "X-Goog-Upload-Header-Content-Type": mime,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ file: { display_name: String(args.name || "bae-reference").slice(0, 120) } }),
+  });
+  const url = r.headers.get("x-goog-upload-url");
+  if (!r.ok || !url) return toolError(`Gemini upload could not start (${r.status}).`);
+  return { content: [{ type: "text", text: JSON.stringify({ upload_url: url, chunk_bytes: CHUNK }) }], structuredContent: { upload_url: url, chunk_bytes: CHUNK } };
+}
+
+async function upChunk(args, env) {
+  const url = String(args.upload_url || "");
+  if (!/^https:\/\/generativelanguage\.googleapis\.com\/upload\//.test(url)) return toolError("upload_url must come from upload_start.");
+  const b64s = String(args.data || "");
+  const bytes = typeof Uint8Array.fromBase64 === "function" ? Uint8Array.fromBase64(b64s) : new Uint8Array(Buffer.from(b64s, "base64"));
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Length": String(bytes.byteLength), "X-Goog-Upload-Offset": String(Math.floor(+args.offset || 0)), "X-Goog-Upload-Command": args.last ? "upload, finalize" : "upload" },
+    body: bytes,
+  });
+  if (!r.ok) return toolError(`Gemini rejected the chunk (${r.status}).`);
+  if (!args.last) return { content: [{ type: "text", text: JSON.stringify({ received: bytes.byteLength }) }], structuredContent: { received: bytes.byteLength } };
+  const j = await r.json().catch(() => ({}));
+  const f = j.file || {};
+  return { content: [{ type: "text", text: JSON.stringify({ file: { name: f.name, uri: f.uri, state: f.state, mimeType: f.mimeType } }) }], structuredContent: { file: { name: f.name, uri: f.uri, state: f.state, mimeType: f.mimeType } } };
+}
+
+async function waitActive(name, key) {
+  let f = {};
+  for (let i = 0; i < 30; i++) {
+    const s = await fetch(`https://generativelanguage.googleapis.com/v1beta/${name}`, { headers: { "x-goog-api-key": key } });
+    f = await s.json().catch(() => ({}));
+    if (!s.ok) throw new Error(`Gemini doesn't know ${name} (${s.status}). Upload it again.`);
+    if (f.state === "ACTIVE" || !f.state) return f;
+    if (f.state === "FAILED") throw new Error("Gemini could not process the video file.");
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  throw new Error("Gemini is still processing the video. Try again in a minute.");
 }
 
 async function gen(model, req, key, deadline) {

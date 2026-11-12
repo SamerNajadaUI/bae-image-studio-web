@@ -3,6 +3,7 @@
   "name": "bae-gemini-eye",
   "main": "src/index.js",
   "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
   "vars": { "GEMINI_MODEL": "gemini-3.5-flash" }
 }

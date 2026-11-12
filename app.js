@@ -2034,7 +2034,8 @@ function rlState(){
 }
 function rlPromptFor(text,memText,canSearch){
   const set=rlSet();
-  const hist=RL.chat.filter(m=>m.role!=="sys").slice(-14).map(m=>`${m.role==="u"?"USER":"YOU"}: ${m.text}${m.n?` [attached ${m.n} image(s)]`:""}`).join("\n");
+  const hist=RL.chat.filter(m=>m.role!=="sys").slice(-14).map(m=>`${m.role==="u"?"USER":"YOU"}: ${m.text}${m.n?` [attached ${m.n} image(s)]`:""}${m.videos?.length?` [attached ${m.videos.length} video(s): ${m.videos.map(v=>v.name).join(", ")}]`:""}`).join("\n");
+  const vids=RL.chat.filter(m=>m.role==="u"&&m.videos?.some(v=>v.analysis)).slice(-2).flatMap(m=>m.videos.filter(v=>v.analysis));
   return `You are the creative director and AI film director of Bank al Etihad (Jordan) in a reels production studio. You talk with a BAE designer in a chat and build the production with them, one stage at a time. Answer in the user's language (Arabic or English, Jordanian tone is fine), warm and direct, short paragraphs.
 
 ${RL_METHOD}
@@ -2056,7 +2057,10 @@ PROJECT STATE (JSON): ${trimJSON(rlState(),26000)}
 CONVERSATION SO FAR:
 ${hist||"(none)"}
 
-USER NOW: ${text||"(attachments only)"}
+${vids.length?`VIDEOS THE USER ATTACHED — Gemini watched them (picture and sound) for you; treat this as what is in the video, and record the useful facts in "notes":
+${vids.map(v=>`### ${v.name}${v.dur?` (${Math.round(v.dur)} s)`:""}\n${String(v.analysis).slice(0,9000)}`).join("\n\n")}
+
+`:""}USER NOW: ${text||"(attachments only)"}
 
 Reply with ONLY one JSON object. Always include "reply" (the chat message, no markdown tables) and "stage" (the furthest stage the production has reached after this turn). Include a key ONLY when you create or change it, and then give its COMPLETE new value (the full list, including the elements you did not change, with their tags):
 - "title": short reel title
@@ -2076,16 +2080,28 @@ async function rlSend(text,{retry}={}){
   if(rlBusy||!RL) return; text=(text||"").trim(); const atts=retry?[]:rlPending.slice(); if(!text&&!atts.length) return;
   if(!sample){ rlSys("Claude isn't available in this view. Open the page in claude.ai and allow Claude.",true); return; }
   rlBusy=true; $("rlSend").disabled=true; RL.chatPending=null;
+  const imgs=atts.filter(a=>!a.video), vids=atts.filter(a=>a.video);
+  let um=null;
   if(!retry){
-    const thumbs=[]; for(const a of atts){ const t=await rlThumb(a.url,160); if(t) thumbs.push(t); }
-    RL.chat.push({role:"u",text,thumbs,n:atts.length,t:Date.now()});
-    if(text) brSignal("chat","request",0,{note:text,item:`stage ${RL.stage} · viewing ${RL.view}${atts.length?` · ${atts.length} image(s) attached`:""}`,key:text});
+    const thumbs=[]; for(const a of imgs){ const t=await rlThumb(a.url,160); if(t) thumbs.push(t); }
+    const videos=[]; for(const a of vids){ const v=await rlVideoThumb(a.url); if(v.thumb) thumbs.push(v.thumb); videos.push({name:a.name||"video",size:a.blob.size,dur:v.dur}); }
+    um={role:"u",text,thumbs,n:imgs.length,videos:videos.length?videos:undefined,t:Date.now()}; RL.chat.push(um);
+    if(text) brSignal("chat","request",0,{note:text,item:`stage ${RL.stage} · viewing ${RL.view}${imgs.length?` · ${imgs.length} image(s) attached`:""}${vids.length?` · ${vids.length} video(s) attached`:""}`,key:text});
     rlPending=[]; rlRenderAtt(); $("rlInput").value="";
   }
   RL.chatPending={text,at:Date.now()}; rlFlush(); rlRenderChat(); rlTyping(true);
   await rlJob(async()=>{ try{
     const opts={modelTier:"complex",cache:false};
-    if(atts.length){ if(sampleImages) opts.images=atts.map(a=>a.blob).slice(0,10); else rlSys("This view can't send images to Claude, so only your text was used.",true); }
+    for(let i=0;i<vids.length&&um;i++){ const a=vids[i], v=um.videos[i];
+      if(a.blob.size>RL_VMAX){ v.err="too large"; rlSys(`${v.name} is larger than 200 MB, so Gemini can't watch it here. Trim it and attach it again.`,true); continue; }
+      try{ rlTyping(true,`Gemini is watching ${v.name}… uploading 0%`);
+        v.analysis=await rlGeminiWatchBlob(a.blob,rlVideoQuestion(text),p=>rlTyping(true,p<100?`Gemini is watching ${v.name}… uploading ${p}%`:`Gemini is watching ${v.name}…`));
+        brSignal("chat","video_reference",0,{note:`Gemini watched "${v.name}": ${String(v.analysis).slice(0,700)}`,item:text||"",key:"vid"+v.name+v.size});
+        rlFlush(); rlTyping(true);
+      }catch(e){ v.err=String(e?.code||"error"); const c=e?.code||"";
+        rlSys(c==="server_not_connected"||c==="not_granted"||/not.?connected|manifest/i.test(String(e?.message||""))?"To let Gemini watch videos, add the “BAE Gemini Eye” connector in claude.ai (Settings → Connectors). Your text was sent without the video.":`Gemini couldn't watch ${v.name}: ${String(e?.message||c).slice(0,200)}. Your text was sent without it.`,true); rlTyping(true); }
+    }
+    if(imgs.length){ if(sampleImages) opts.images=imgs.map(a=>a.blob).slice(0,10); else rlSys("This view can't send images to Claude, so only your text was used.",true); }
     await brLoad();
     const mem=await rlMemFor([text,RL.title,RL.picked?.title,RL.picked?.logline,RL.view!==RL.stage?RL.view:""].filter(Boolean).join(" "),RL.stage==="render"?"directing":RL.stage);
     const used=new Set(), searched=[];
@@ -2124,7 +2140,37 @@ function rlApply(o){
 }
 function rlLinkLibrary(){ for(const c of RL.characters){ if(!c.lib){ if(c.fromLib){ c.fromLib=false; c.id=null; } continue; } const id="ch_"+String(c.lib).toLowerCase(); const mid=S.magIds?.[id]; if(refById(id)){ c.fromLib=true; if(mid) c.id=mid; } } }
 function rlSys(t,bad){ RL.chat.push({role:"sys",text:t,err:!!bad}); rlRenderChat(); }
-function rlTyping(on){ const b=$("rlMsgs"); b.querySelector(".rl-typing-m")?.remove(); if(on){ const d=document.createElement("div"); d.className="rl-m a rl-typing-m"; d.innerHTML='<span class="rl-typing" aria-label="Claude is thinking"><i></i><i></i><i></i></span>'; b.appendChild(d); b.scrollTop=b.scrollHeight; } }
+function rlTyping(on,note){ const b=$("rlMsgs"); b.querySelector(".rl-typing-m")?.remove(); if(on){ const d=document.createElement("div"); d.className="rl-m a rl-typing-m"; d.innerHTML='<span class="rl-typing" aria-label="Claude is thinking"><i></i><i></i><i></i></span>'+(note?`<span class="t12 muted rl-typnote">${esc(note)}</span>`:""); b.appendChild(d); b.scrollTop=b.scrollHeight; } }
+/* ---------- videos in the chat: the page can't reach the web, so the video goes to Gemini through the BAE Gemini Eye connector in small pieces ---------- */
+const RL_VMAX=200*1024*1024;
+async function rlVideoThumb(url){ try{ const v=document.createElement("video"); v.muted=true; v.playsInline=true; v.preload="auto"; v.src=url; await new Promise((res,rej)=>{ v.onloadeddata=res; v.onerror=rej; setTimeout(rej,6000); }); v.currentTime=Math.min(0.6,(v.duration||1)/3); await new Promise(res=>{ v.onseeked=res; setTimeout(res,2500); }); const k=Math.min(1,160/Math.max(v.videoWidth,v.videoHeight)); const c=document.createElement("canvas"); c.width=Math.max(1,Math.round(v.videoWidth*k)); c.height=Math.max(1,Math.round(v.videoHeight*k)); c.getContext("2d").drawImage(v,0,0,c.width,c.height); return {thumb:c.toDataURL("image/jpeg",.75),dur:v.duration||0}; }catch{ return {thumb:null,dur:0}; } }
+async function rlGeminiWatchBlob(blob,question,onStep){
+  if(!mcp) throw {code:"no_mcp"};
+  const toB64=async b=>{ const u=new Uint8Array(await b.arrayBuffer()); let s=""; for(let i=0;i<u.length;i+=0x8000) s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000)); return btoa(s); };
+  const val=r=>r?.payload&&typeof r.payload==="object"?r.payload:(()=>{ try{ return JSON.parse((r?.content||[]).map(c=>c.text||"").join("")); }catch{ return {}; } })();
+  const st=val(await mcp.callTool(GEYE,"upload_start",{bytes:blob.size,mime:blob.type||"video/mp4",name:blob.name||"reference.mp4"},{cache:false}));
+  if(!st.upload_url) throw {code:"tool_error",message:"Gemini upload didn't start."};
+  const CH=+st.chunk_bytes||524288; let file=null;
+  for(let off=0;off<blob.size;off+=CH){
+    const last=off+CH>=blob.size;
+    const r=val(await mcp.callTool(GEYE,"upload_chunk",{upload_url:st.upload_url,offset:off,data:await toB64(blob.slice(off,off+CH)),last},{cache:false}));
+    if(last) file=r.file;
+    onStep?.(Math.min(99,Math.round((off+CH)/blob.size*100)));
+  }
+  if(!file?.name) throw {code:"tool_error",message:"Gemini didn't confirm the upload."};
+  onStep?.(100);
+  const w=await mcp.callTool(GEYE,"watch_video",{file_name:file.name,question,fps:3},{cache:false});
+  return typeof w?.payload==="string"?w.payload:w?.payload?.answer||(w?.content||[]).map(c=>c.text||"").join("");
+}
+function rlVideoQuestion(userText){
+  return `You are the eyes of an AI commercial director at Bank al Etihad (Jordan). The user attached this video to the chat${userText?` with the message: "${String(userText).slice(0,600)}"`:""}. Watch ALL of it, picture and sound together, and write a precise, factual breakdown the director can use (never guess; say when unsure). Use MM:SS timestamps.
+1. OVERVIEW: what it is (ad, storyboard animatic, reference clip, behind-the-scenes, trend), length, aspect ratio, overall idea and why it works or doesn't.
+2. SHOT BY SHOT: for each shot — timecode range, shot size, angle, lens feel (wide/normal/tele, depth of field), camera move (and speed), who is where and what they do, acting/expressions, props, location, light (direction, quality, colour temperature), colour grade, on-screen text (exact words), transitions.
+3. SOUND: transcribe all speech exactly (and the language/dialect), music (mood, tempo, where it hits), SFX, silence.
+4. RHYTHM & STORY: hook in the first 2 seconds, beats (setup, problem, choice, resolution), pacing and cut rhythm, the payoff and brand moment.
+5. TO RECREATE WITH SEEDANCE 2.5: the characters, locations and props it would need as assets, and the 3–5 most important things to get right.`;
+}
+
 
 /* Claude writes or revises ONE element without touching the rest of the project */
 async function rlWriteElement(kind,base,instruction){
@@ -2237,7 +2283,7 @@ function rlMemChip(m){
 function rlRenderChat(){
   const b=$("rlMsgs");
   if(!RL.chat.length) b.innerHTML=`<div class="rl-m a" dir="auto">Hi! Tell me the reel you need — the product, the message, who it's for. Attach a storyboard, character photos, places or a script and I'll analyse them.\n\nYou can come back to this project any time to change an idea, a character, a location or a shot.</div>`;
-  else b.innerHTML=RL.chat.map((m,mi)=>`<div class="rl-m ${m.role==="u"?"u":m.role==="a"?"a":"sys"}${m.err?" err":""}" dir="auto">${esc(m.text||"")}${m.thumbs?.length?`<div class="imgs">${m.thumbs.map(t=>`<img src="${t}" alt="">`).join("")}</div>`:m.n?`<div class="t12" style="opacity:.7;margin-top:6px">${m.n} image${m.n>1?"s":""} attached</div>`:""}</div>${m.advisors?.length?`<div class="rl-advs" dir="auto">${m.advisors.map((x,ai)=>{ const A=rlAdv(x.id); return `<div class="rl-adv"><span class="ic" aria-hidden="true">${esc(A.icon||"•")}</span><div><b>${esc(A.name||x.id)}</b> ${esc(x.note)} <button type="button" class="rl-advuse" data-adv="${mi}:${ai}">Use</button></div></div>`; }).join("")}</div>`:""}${m.mem?rlMemChip(m.mem):""}`).join("");
+  else b.innerHTML=RL.chat.map((m,mi)=>`<div class="rl-m ${m.role==="u"?"u":m.role==="a"?"a":"sys"}${m.err?" err":""}" dir="auto">${esc(m.text||"")}${m.thumbs?.length?`<div class="imgs">${m.thumbs.map(t=>`<img src="${t}" alt="">`).join("")}</div>`:m.n?`<div class="t12" style="opacity:.7;margin-top:6px">${m.n} image${m.n>1?"s":""} attached</div>`:""}${m.videos?.length?m.videos.map(v=>v.analysis?`<details class="rl-vsaw"><summary>🎬 ${esc(v.name)} · Gemini watched it</summary><div dir="auto">${esc(String(v.analysis).slice(0,6000))}</div></details>`:`<div class="t12" style="opacity:.7;margin-top:6px">🎬 ${esc(v.name)}${v.err?" · not watched":" · Gemini is watching…"}</div>`).join(""):""}</div>${m.advisors?.length?`<div class="rl-advs" dir="auto">${m.advisors.map((x,ai)=>{ const A=rlAdv(x.id); return `<div class="rl-adv"><span class="ic" aria-hidden="true">${esc(A.icon||"•")}</span><div><b>${esc(A.name||x.id)}</b> ${esc(x.note)} <button type="button" class="rl-advuse" data-adv="${mi}:${ai}">Use</button></div></div>`; }).join("")}</div>`:""}${m.mem?rlMemChip(m.mem):""}`).join("");
   if(RL.chatPending&&!rlBusy) b.insertAdjacentHTML("beforeend",`<div class="rl-m sys rl-retry" dir="auto">The connection dropped before Claude answered. Your message is saved. <button type="button" class="a-btn" id="rlRetry">Answer it now</button></div>`);
   b.scrollTop=b.scrollHeight;
   const last=[...RL.chat].reverse().find(m=>m.role==="a");
@@ -3000,10 +3046,10 @@ async function rlBible(){
   $("rlMsgs").addEventListener("click",e=>{ if(e.target.closest("#rlRetry")&&RL?.chatPending) rlSend(RL.chatPending.text,{retry:true});
     const u=e.target.closest("[data-adv]"); if(u&&RL){ const [mi,ai]=u.dataset.adv.split(":").map(Number); const x=RL.chat[mi]?.advisors?.[ai]; if(x){ const A=rlAdv(x.id); brSignal("chat","advisor_used",1,{note:x.note,item:A.name,key:x.note}); rlSend(rlAr()?`طبّق اقتراح ${A.name}: ${x.note}`:`Apply the ${A.name}'s suggestion: ${x.note}`); } } });
   $("rlChips").onclick=e=>{ const b=e.target.closest("button"); if(b) rlSend(b.textContent); };
-  $("rlFile").onchange=e=>{ for(const f of [...e.target.files].slice(0,10-rlPending.length)) rlPending.push({blob:f,url:URL.createObjectURL(f),name:f.name}); e.target.value=""; rlRenderAtt(); };
+  $("rlFile").onchange=e=>{ for(const f of [...e.target.files].slice(0,10-rlPending.length)) rlPending.push({blob:f,url:URL.createObjectURL(f),name:f.name,video:/^video\//.test(f.type)}); e.target.value=""; rlRenderAtt(); };
   $("rlInput").addEventListener("paste",e=>{ const fs=[...(e.clipboardData?.files||[])].filter(f=>/^image\//.test(f.type)); if(fs.length){ fs.forEach(f=>rlPending.push({blob:f,url:URL.createObjectURL(f),name:f.name})); rlRenderAtt(); } });
   $("rlChatPane").addEventListener("dragover",e=>e.preventDefault());
-  $("rlChatPane").addEventListener("drop",e=>{ e.preventDefault(); [...(e.dataTransfer?.files||[])].filter(f=>/^image\//.test(f.type)).slice(0,10).forEach(f=>rlPending.push({blob:f,url:URL.createObjectURL(f),name:f.name})); rlRenderAtt(); });
+  $("rlChatPane").addEventListener("drop",e=>{ e.preventDefault(); [...(e.dataTransfer?.files||[])].filter(f=>/^(image|video)\//.test(f.type)).slice(0,10).forEach(f=>rlPending.push({blob:f,url:URL.createObjectURL(f),name:f.name,video:/^video\//.test(f.type)})); rlRenderAtt(); });
   $("rlAtt").onclick=e=>{ const b=e.target.closest("[data-i]"); if(b){ rlPending.splice(+b.dataset.i,1); rlRenderAtt(); } };
   $("rlSettingsBtn").onclick=()=>{ const s=$("rlSettings"); s.hidden=!s.hidden; $("rlSettingsBtn").setAttribute("aria-expanded",String(!s.hidden)); };
   const keyOf={rlLen:"length",rlAspect:"aspect",rlLang:"lang",rlRes:"res"};
@@ -3071,7 +3117,7 @@ async function rlBible(){
     if(before!=null&&before!==t.value){ const p=t.dataset.rlEdit.split(":"), kind=p[0]==="b"?"script":p[0]==="s"||p[0]==="f"?"shot":p[0]==="c"?"character":"location";
       brSignal(kind,"edited_by_user",0,{note:`The user rewrote ${p[0]==="b"?"script "+p[2]:p[0]==="s"?"the Seedance prompt":p[0]==="f"?"the first-frame prompt":(p[2]||"prompt")} by hand — learn from the difference.`,before,after:t.value,key:t.dataset.rlEdit}); } });
 })();
-function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>`<span class="th"><img src="${a.url}" alt="${esc(a.name||"")}"><button type="button" data-i="${i}" aria-label="Remove">×</button></span>`).join(""); }
+function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span class="th vid" title="${esc(a.name||"")}"><video src="${a.url}" muted playsinline preload="metadata"></video><span class="vb" aria-hidden="true">▶</span><button type="button" data-i="${i}" aria-label="Remove">×</button></span>`:`<span class="th"><img src="${a.url}" alt="${esc(a.name||"")}"><button type="button" data-i="${i}" aria-label="Remove">×</button></span>`).join(""); }
 
 boot();
 })();
