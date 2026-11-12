@@ -2084,7 +2084,7 @@ async function rlSend(text,{retry}={}){
   let um=null;
   if(!retry){
     const thumbs=[]; for(const a of imgs){ const t=await rlThumb(a.url,160); if(t) thumbs.push(t); }
-    const videos=[]; for(const a of vids){ const v=await rlVideoThumb(a.url); if(v.thumb) thumbs.push(v.thumb); videos.push({name:a.name||"video",size:a.blob.size,dur:v.dur}); }
+    const videos=[]; for(const a of vids){ const v=await rlVideoThumb(a.url); if(v.thumb) thumbs.push(v.thumb); videos.push({id:"v"+Date.now().toString(36)+videos.length,name:a.name||"video",size:a.blob.size,dur:v.dur,_stage:"upload",_p:0}); }
     um={role:"u",text,thumbs,n:imgs.length,videos:videos.length?videos:undefined,t:Date.now()}; RL.chat.push(um);
     if(text) brSignal("chat","request",0,{note:text,item:`stage ${RL.stage} · viewing ${RL.view}${imgs.length?` · ${imgs.length} image(s) attached`:""}${vids.length?` · ${vids.length} video(s) attached`:""}`,key:text});
     rlPending=[]; rlRenderAtt(); $("rlInput").value="";
@@ -2093,12 +2093,13 @@ async function rlSend(text,{retry}={}){
   await rlJob(async()=>{ try{
     const opts={modelTier:"complex",cache:false};
     for(let i=0;i<vids.length&&um;i++){ const a=vids[i], v=um.videos[i];
-      if(a.blob.size>RL_VMAX){ v.err="too large"; rlSys(`${v.name} is larger than 200 MB, so Gemini can't watch it here. Trim it and attach it again.`,true); continue; }
-      try{ rlTyping(true,`Gemini is watching ${v.name}… uploading 0%`);
-        v.analysis=await rlGeminiWatchBlob(a.blob,rlVideoQuestion(text),p=>rlTyping(true,p<100?`Gemini is watching ${v.name}… uploading ${p}%`:`Gemini is watching ${v.name}…`));
+      if(a.blob.size>RL_VMAX){ v.err="too large"; v._stage="err"; rlVProgUpdate(v); rlSys(`${v.name} is larger than 200 MB, so Gemini can't watch it here. Trim it and attach it again.`,true); continue; }
+      try{ rlTyping(true,`Uploading ${v.name}…`);
+        v.analysis=await rlGeminiWatchBlob(a.blob,rlVideoQuestion(text),({stage,p})=>{ v._stage=stage; v._p=p; rlVProgUpdate(v); rlTyping(true,stage==="upload"?`Uploading ${v.name}… ${p}%`:RL_VSTAGE[stage]); });
+        v._stage="done"; rlVProgUpdate(v);
         brSignal("chat","video_reference",0,{note:`Gemini watched "${v.name}": ${String(v.analysis).slice(0,700)}`,item:text||"",key:"vid"+v.name+v.size});
         rlFlush(); rlTyping(true);
-      }catch(e){ v.err=String(e?.code||"error"); const c=e?.code||"";
+      }catch(e){ v.err=String(e?.code||"error"); v._stage="err"; rlVProgUpdate(v); const c=e?.code||"";
         rlSys(/not available on this connector/i.test(String(e?.message||""))?"Claude still has the old tool list of the “BAE Gemini Eye” connector. In claude.ai open Settings → Connectors → BAE Gemini Eye, press Disconnect, then connect it again (it should show 4 tools), and resend. Your text was sent without the video.":c==="server_not_connected"||c==="not_granted"||/not.?connected|manifest/i.test(String(e?.message||""))?"To let Gemini watch videos, add the “BAE Gemini Eye” connector in claude.ai (Settings → Connectors). Your text was sent without the video.":`Gemini couldn't watch ${v.name}: ${String(e?.message||c).slice(0,200)}. Your text was sent without it.`,true); rlTyping(true); }
     }
     if(imgs.length){ if(sampleImages) opts.images=imgs.map(a=>a.blob).slice(0,10); else rlSys("This view can't send images to Claude, so only your text was used.",true); }
@@ -2151,17 +2152,25 @@ async function rlGeminiWatchBlob(blob,question,onStep){
   const st=val(await mcp.callTool(GEYE,"upload_start",{bytes:blob.size,mime:blob.type||"video/mp4",name:blob.name||"reference.mp4"},{cache:false}));
   if(!st.upload_url) throw {code:"tool_error",message:"Gemini upload didn't start."};
   const CH=+st.chunk_bytes||524288; let file=null;
+  onStep?.({stage:"upload",p:0});
   for(let off=0;off<blob.size;off+=CH){
     const last=off+CH>=blob.size;
+    if(last) onStep?.({stage:"send",p:100});
     const r=val(await mcp.callTool(GEYE,"upload_chunk",{upload_url:st.upload_url,offset:off,data:await toB64(blob.slice(off,off+CH)),last},{cache:false}));
-    if(last) file=r.file;
-    onStep?.(Math.min(99,Math.round((off+CH)/blob.size*100)));
+    if(last) file=r.file; else onStep?.({stage:"upload",p:Math.min(99,Math.round((off+CH)/blob.size*100))});
   }
   if(!file?.name) throw {code:"tool_error",message:"Gemini didn't confirm the upload."};
-  onStep?.(100);
+  onStep?.({stage:"watch",p:100});
   const w=await mcp.callTool(GEYE,"watch_video",{file_name:file.name,question,fps:3},{cache:false});
   return typeof w?.payload==="string"?w.payload:w?.payload?.answer||(w?.content||[]).map(c=>c.text||"").join("");
 }
+const RL_VSTAGE={upload:"Uploading",send:"Sending to Gemini…",watch:"Gemini is watching and listening…",done:"Uploaded · Gemini watched it",err:"Not uploaded"};
+function rlVProgHTML(v){
+  const st=v._stage||(v.analysis?"done":v.err?"err":"upload"), p=st==="upload"?(v._p||0):100;
+  const busy=st==="send"||st==="watch";
+  return `<div class="rl-vprog ${st}" data-vprog="${esc(v.id||"")}" role="progressbar" aria-label="${esc(v.name)}" aria-valuemin="0" aria-valuemax="100" ${busy?"":`aria-valuenow="${p}"`}><div class="rl-vprog-h"><span>🎬 ${esc(v.name)}${v.size?` · ${(v.size/1048576).toFixed(1)} MB`:""}</span><b>${st==="upload"?`Uploading ${p}%`:st==="done"?"✓ "+RL_VSTAGE.done:st==="err"?"✕ "+RL_VSTAGE.err:RL_VSTAGE[st]}</b></div><div class="rl-vprog-t"><i style="width:${p}%"${busy?' class="run"':""}></i></div></div>`;
+}
+function rlVProgUpdate(v){ const el=document.querySelector(`[data-vprog="${CSS.escape(v.id||"")}"]`); if(el) el.outerHTML=rlVProgHTML(v); }
 function rlVideoQuestion(userText){
   return `You are the eyes of an AI commercial director at Bank al Etihad (Jordan). The user attached this video to the chat${userText?` with the message: "${String(userText).slice(0,600)}"`:""}. Watch ALL of it, picture and sound together, and write a precise, factual breakdown the director can use (never guess; say when unsure). Use MM:SS timestamps.
 1. OVERVIEW: what it is (ad, storyboard animatic, reference clip, behind-the-scenes, trend), length, aspect ratio, overall idea and why it works or doesn't.
@@ -2283,7 +2292,7 @@ function rlMemChip(m){
 function rlRenderChat(){
   const b=$("rlMsgs");
   if(!RL.chat.length) b.innerHTML=`<div class="rl-m a" dir="auto">Hi! Tell me the reel you need — the product, the message, who it's for. Attach a storyboard, character photos, places or a script and I'll analyse them.\n\nYou can come back to this project any time to change an idea, a character, a location or a shot.</div>`;
-  else b.innerHTML=RL.chat.map((m,mi)=>`<div class="rl-m ${m.role==="u"?"u":m.role==="a"?"a":"sys"}${m.err?" err":""}" dir="auto">${esc(m.text||"")}${m.thumbs?.length?`<div class="imgs">${m.thumbs.map(t=>`<img src="${t}" alt="">`).join("")}</div>`:m.n?`<div class="t12" style="opacity:.7;margin-top:6px">${m.n} image${m.n>1?"s":""} attached</div>`:""}${m.videos?.length?m.videos.map(v=>v.analysis?`<details class="rl-vsaw"><summary>🎬 ${esc(v.name)} · Gemini watched it</summary><div dir="auto">${esc(String(v.analysis).slice(0,6000))}</div></details>`:`<div class="t12" style="opacity:.7;margin-top:6px">🎬 ${esc(v.name)}${v.err?" · not watched":" · Gemini is watching…"}</div>`).join(""):""}</div>${m.advisors?.length?`<div class="rl-advs" dir="auto">${m.advisors.map((x,ai)=>{ const A=rlAdv(x.id); return `<div class="rl-adv"><span class="ic" aria-hidden="true">${esc(A.icon||"•")}</span><div><b>${esc(A.name||x.id)}</b> ${esc(x.note)} <button type="button" class="rl-advuse" data-adv="${mi}:${ai}">Use</button></div></div>`; }).join("")}</div>`:""}${m.mem?rlMemChip(m.mem):""}`).join("");
+  else b.innerHTML=RL.chat.map((m,mi)=>`<div class="rl-m ${m.role==="u"?"u":m.role==="a"?"a":"sys"}${m.err?" err":""}" dir="auto">${esc(m.text||"")}${m.thumbs?.length?`<div class="imgs">${m.thumbs.map(t=>`<img src="${t}" alt="">`).join("")}</div>`:m.n?`<div class="t12" style="opacity:.7;margin-top:6px">${m.n} image${m.n>1?"s":""} attached</div>`:""}${m.videos?.length?m.videos.map(v=>v.analysis&&!v._stage?`<details class="rl-vsaw"><summary>🎬 ${esc(v.name)} · ✓ Uploaded · Gemini watched it</summary><div dir="auto">${esc(String(v.analysis).slice(0,6000))}</div></details>`:v._stage&&v._stage!=="done"&&v._stage!=="err"?rlVProgHTML(v):v.analysis?`${rlVProgHTML({...v,_stage:"done"})}<details class="rl-vsaw"><summary>What Gemini saw</summary><div dir="auto">${esc(String(v.analysis).slice(0,6000))}</div></details>`:rlVProgHTML({...v,_stage:"err"})).join(""):""}</div>${m.advisors?.length?`<div class="rl-advs" dir="auto">${m.advisors.map((x,ai)=>{ const A=rlAdv(x.id); return `<div class="rl-adv"><span class="ic" aria-hidden="true">${esc(A.icon||"•")}</span><div><b>${esc(A.name||x.id)}</b> ${esc(x.note)} <button type="button" class="rl-advuse" data-adv="${mi}:${ai}">Use</button></div></div>`; }).join("")}</div>`:""}${m.mem?rlMemChip(m.mem):""}`).join("");
   if(RL.chatPending&&!rlBusy) b.insertAdjacentHTML("beforeend",`<div class="rl-m sys rl-retry" dir="auto">The connection dropped before Claude answered. Your message is saved. <button type="button" class="a-btn" id="rlRetry">Answer it now</button></div>`);
   b.scrollTop=b.scrollHeight;
   const last=[...RL.chat].reverse().find(m=>m.role==="a");
