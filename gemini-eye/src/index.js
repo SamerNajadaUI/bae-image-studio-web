@@ -33,6 +33,7 @@ const TOOLS = [
         start_s: { type: "number", description: "Optional start of the clip to review, in seconds." },
         end_s: { type: "number", description: "Optional end of the clip to review, in seconds." },
         json: { type: "boolean", description: "Ask Gemini for a JSON reply (describe the shape in the question)." },
+        model: { type: "string", description: "Optional Gemini model id to use instead of the default." },
       },
       required: ["video_url", "question"],
     },
@@ -117,7 +118,7 @@ async function status(env) {
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}`, { headers: { "x-goog-api-key": env.GEMINI_API_KEY } });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) return toolError(`Gemini said ${r.status}: ${j?.error?.message || "unknown error"} (model ${model})`);
-  return textResult(JSON.stringify({ ok: true, model, displayName: j.displayName || model, inputTokenLimit: j.inputTokenLimit || null }));
+  return textResult(JSON.stringify({ ok: true, model, displayName: j.displayName || model, inputTokenLimit: j.inputTokenLimit || null, fallbacks: await fallbacks(model, env) }));
 }
 
 async function watch(args, env) {
@@ -126,7 +127,8 @@ async function watch(args, env) {
   const question = String(args.question || "").trim();
   if (!/^https:\/\//i.test(videoUrl)) return toolError("video_url must be a direct https URL of the video file.");
   if (!question) return toolError("question is required.");
-  const model = env.GEMINI_MODEL || DEFAULT_MODEL;
+  const model = String(args.model || "") || env.GEMINI_MODEL || DEFAULT_MODEL;
+  const deadline = Date.now() + 85000; // stay under Cloudflare's ~100 s response limit
   const fps = clamp(Number(args.fps) || 4, 0.5, 10);
 
   // 1. download the video
@@ -152,21 +154,21 @@ async function watch(args, env) {
   };
   const t0 = Date.now();
   let used = model;
-  let r = await gen(model, req, env.GEMINI_API_KEY);
+  let r = await gen(model, req, env.GEMINI_API_KEY, deadline);
   if (!r.ok && r.status === 400 && /video_metadata|fps|offset/i.test(r.message || "")) {
     delete part.video_metadata; // some models refuse custom fps: retry with defaults
-    r = await gen(model, req, env.GEMINI_API_KEY);
+    r = await gen(model, req, env.GEMINI_API_KEY, deadline);
   }
   // busy model: wait and retry, then fall back to other Gemini models that can watch video
-  const busy = (x) => !x.ok && (x.status === 503 || x.status === 429 || x.status === 500 || x.status === 504);
-  for (const wait of [3000, 8000]) {
-    if (!busy(r)) break;
-    await new Promise((res) => setTimeout(res, wait));
-    r = await gen(model, req, env.GEMINI_API_KEY);
+  const busy = (x) => !x.ok && [408, 429, 500, 503, 504, 524].includes(x.status);
+  if (busy(r) && r.status !== 408 && deadline - Date.now() > 40000) {
+    await new Promise((res) => setTimeout(res, 3000));
+    r = await gen(model, req, env.GEMINI_API_KEY, deadline);
   }
   if (busy(r)) {
     for (const alt of await fallbacks(model, env)) {
-      const r2 = await gen(alt, req, env.GEMINI_API_KEY);
+      if (deadline - Date.now() < 15000) break;
+      const r2 = await gen(alt, req, env.GEMINI_API_KEY, deadline);
       if (r2.ok) { r = r2; used = alt; break; }
       if (!busy(r2)) { r = r2; used = alt; break; }
     }
@@ -196,14 +198,22 @@ async function fallbacks(model, env) {
   } catch { return []; }
 }
 
-async function gen(model, req, key) {
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-goog-api-key": key },
-    body: JSON.stringify(req),
-  });
-  const j = await r.json().catch(() => ({}));
-  return { ok: r.ok, status: r.status, json: j, message: j?.error?.message || "" };
+async function gen(model, req, key, deadline) {
+  const ctl = new AbortController();
+  const ms = Math.max(5000, (deadline || Date.now() + 80000) - Date.now());
+  const timer = setTimeout(() => ctl.abort(), ms);
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify(req),
+      signal: ctl.signal,
+    });
+    const j = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, json: j, message: j?.error?.message || "", model };
+  } catch (e) {
+    return { ok: false, status: 408, json: {}, message: `${model} took too long to answer`, model };
+  } finally { clearTimeout(timer); }
 }
 
 async function uploadFile(buf, mime, key) {
