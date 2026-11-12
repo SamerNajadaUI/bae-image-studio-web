@@ -151,18 +151,49 @@ async function watch(args, env) {
     generationConfig: { temperature: 0.2, ...(args.json ? { response_mime_type: "application/json" } : {}) },
   };
   const t0 = Date.now();
+  let used = model;
   let r = await gen(model, req, env.GEMINI_API_KEY);
   if (!r.ok && r.status === 400 && /video_metadata|fps|offset/i.test(r.message || "")) {
     delete part.video_metadata; // some models refuse custom fps: retry with defaults
     r = await gen(model, req, env.GEMINI_API_KEY);
   }
-  if (!r.ok) return toolError(`Gemini said ${r.status}: ${r.message}`);
+  // busy model: wait and retry, then fall back to other Gemini models that can watch video
+  const busy = (x) => !x.ok && (x.status === 503 || x.status === 429 || x.status === 500 || x.status === 504);
+  for (const wait of [3000, 8000]) {
+    if (!busy(r)) break;
+    await new Promise((res) => setTimeout(res, wait));
+    r = await gen(model, req, env.GEMINI_API_KEY);
+  }
+  if (busy(r)) {
+    for (const alt of await fallbacks(model, env)) {
+      const r2 = await gen(alt, req, env.GEMINI_API_KEY);
+      if (r2.ok) { r = r2; used = alt; break; }
+      if (!busy(r2)) { r = r2; used = alt; break; }
+    }
+  }
+  if (!r.ok) return toolError(`Gemini said ${r.status}: ${r.message}${busy(r) ? " — Google's models are busy right now; try again in a minute." : ""}`);
   const text = (r.json?.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("").trim();
   if (!text) return toolError(`Gemini returned no answer (${r.json?.candidates?.[0]?.finishReason || r.json?.promptFeedback?.blockReason || "unknown reason"}).`);
   return {
     content: [{ type: "text", text }],
-    structuredContent: { model, seconds: Math.round((Date.now() - t0) / 1000), bytes: buf.byteLength, fps, answer: text },
+    structuredContent: { model: used, seconds: Math.round((Date.now() - t0) / 1000), bytes: buf.byteLength, fps, answer: text },
   };
+}
+
+/* other Gemini models to try when the chosen one is overloaded: GEMINI_FALLBACKS (comma list), else the newest flash/pro models this key can use */
+async function fallbacks(model, env) {
+  if (env.GEMINI_FALLBACKS) return env.GEMINI_FALLBACKS.split(",").map((s) => s.trim()).filter((m) => m && m !== model).slice(0, 3);
+  try {
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", { headers: { "x-goog-api-key": env.GEMINI_API_KEY } });
+    const j = await r.json();
+    const ver = (n) => parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || 0);
+    return (j.models || [])
+      .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent"))
+      .map((m) => m.name.replace(/^models\//, ""))
+      .filter((n) => /^gemini-\d+(\.\d+)?-(flash|pro)(-preview)?$/.test(n) && n !== model)
+      .sort((a, b) => ver(b) - ver(a) || (/flash/.test(a) ? -1 : 1))
+      .slice(0, 3);
+  } catch { return []; }
 }
 
 async function gen(model, req, key) {
