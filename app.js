@@ -3079,6 +3079,34 @@ Reply with only JSON: {"suggestions":[{"id":"trend","title":"3–6 words","why":
 }
 async function rlEnsureChecked(sc){ if(sc._checkP){ await sc._checkP; return; } if(!sc.check||sc.check.dirty||!sc.blueprint){ await rlCheckScenes([sc.n],{quiet:true}); } }
 /* ---------- Storyboard: one Seedream 5.5 still (2K) per script scene, each generated on its own ---------- */
+/* Put the scene's references into video_generate's own reference field, in the exact shape its schema asks for */
+let RL_LASTREFSCHEMA=null;
+async function rlPutRefs(args,refs,start,tool="video_generate"){
+  const sch=(await schemaOf(tool))?.inputSchema||{}; const P=sch.properties||{};
+  const idOf=it=>it?.properties||{};
+  const ID_PREF=["identifier","creationIdentifier","creation_identifier","creationId","url","uri","image","source","id"];
+  /* the array field whose items take a creation identifier/url and that the description calls references/images/media */
+  const cands=Object.entries(P).filter(([k,v])=>(v.type==="array"||v.items)&&v.items&&(typeof v.items==="object"));
+  const score=([k,v])=>(/^references?$/i.test(k)?6:/reference/i.test(k)?5:/^(images?|media|medias|inputs?|assets?)$/i.test(k)?4:/image|media/i.test(k)?3:0)+(/reference|@img|image/i.test(String(v.description||""))?1:0)-(/end|last|start|first|frame|audio|video/i.test(k)?3:0);
+  cands.sort((a,b)=>score(b)-score(a));
+  const pick=cands[0];
+  let key, item=(id)=>({identifier:id,type:"image"});
+  if(pick&&score(pick)>0){ key=pick[0]; const it=pick[1].items;
+    if(it.type==="string") item=id=>id;
+    else { const ip=idOf(it); const idK=ID_PREF.find(k=>k in ip)||Object.keys(ip).find(k=>/identifier|url|id$/i.test(k));
+      const tK=Object.keys(ip).find(k=>/^(type|kind|media_?type|role)$/i.test(k)); const tV=tK?((ip[tK].enum||[]).find(x=>/image|reference/i.test(x))||"image"):null;
+      item=id=>({[idK||"identifier"]:id,...(tK?{[tK]:tV}:{})}); } }
+  else key=Object.keys(args).find(k=>Array.isArray(args[k])&&/reference|image|media/i.test(k))||"references";
+  const out={...args};
+  /* drop any other reference-like arrays Claude may have filled, so nothing is duplicated or mislabelled */
+  for(const k of Object.keys(out)) if(k!==key&&Array.isArray(out[k])&&/reference|image|media/i.test(k)&&!/start|end|first|last/i.test(k)) delete out[k];
+  out[key]=refs.map(r=>item(r.id));
+  /* a start image field, only when the user chose one */
+  if(!start) for(const k of Object.keys(out)) if(k!==key&&/^(start|first|init)_?(image|frame)|image_?url$|^image$/i.test(k)&&!refs.some(r=>JSON.stringify(out[k]).includes(r.id))) delete out[k];
+  log("✓",tool+" references",{key,sample:out[key][0],count:out[key].length});
+  RL_LASTREFSCHEMA={key,item:pick?pick[1].items:null,props:Object.keys(P)};
+  return out;
+}
 /* every reference must be a real creation in the user's Magnific: check them all (free) before spending credits */
 let RL_GETPLAN=null;
 async function rlMissingCreations(ids){
@@ -3165,8 +3193,10 @@ function rlBoardCell(s,i){
 async function rlImage({prompt,aspect,refs=[],label,onQueued}){
   const model=$("selNano").value||null;
   const plan=await buildArgs("images_generate",`Generate exactly 1 photorealistic image with model "${model||"Seedream 5.5"}" (ByteDance Seedream 5.5). Use the prompt verbatim. Aspect ratio ${aspect}. Resolution 2K (the 2K tier, about 2048 px+ on the long side), highest quality. ${refs.length?"Attach EVERY item of Data.references as image references, in exactly this order (the first is @img1, the second @img2…), using each item's identifier.":"No references."}`,
-    {model, model_label:"Seedream 5.5", prompt, aspect_ratio:aspect, resolution:"2K", num_images:1, references:refs.length?refs.map(r=>({identifier:r.id,id:r.id,type:"image",name:r.tag})):undefined},"default");
-  const r=await callMag("images_generate",oneImage(refs.length?fixRefs(plan.args,refs.map(r=>({id:r.id}))):plan.args));
+    {model, model_label:"Seedream 5.5", prompt, aspect_ratio:aspect, resolution:"2K", num_images:1, references:refs.length?refs.map(r=>({identifier:r.id,type:"image"})):undefined},"default");
+  let iargs=oneImage(plan.args);
+  if(refs.length){ iargs=await rlPutRefs(iargs,refs,null,"images_generate"); const miss=refs.filter(r=>!JSON.stringify(iargs).includes(r.id)); if(miss.length) throw {code:"refs_missing",message:`Couldn't attach ${miss.map(r=>r.tag).join(", ")}; stopped before spending credits.`}; }
+  const r=await callMag("images_generate",iargs);
   let rr=readResult(r); if(!rr.ids.length&&!rr.images.length) rr=await extractWithClaude(r,"the creation identifier of the image being generated");
   const id0=rr.ids[0]; const web=rr.webUrl||null;
   if(id0&&onQueued) onQueued(id0,web);
@@ -3371,20 +3401,19 @@ async function rlRenderScene(n){
     const m=await rlModel(); const set=rlSet(); const dur=Math.max(4,Math.min(120,+sc.duration_s||8)); /* Seedance 2.5 takes 4–30 s; longer is sent as asked */
     sc.note=start?"Sending the first frame to Seedance 2.5…":"Sending to Seedance 2.5…"; rlBoard();
     const plan=await buildArgs("video_generate",`Generate ONE video with the Seedance 2.5 model${m.id?` (model id "${m.id}")`:""}. Use the prompt verbatim. Duration ${dur} seconds. Aspect ratio ${set.aspect}. ${set.res==="draft"?"Draft mode (480p preview) if the tool offers it.":`Resolution ${set.res}.`} Audio on (the prompt writes the sound). ${start?"IMAGE-TO-VIDEO: put Data.start_image.identifier in the tool's start image / first frame / init image field so the video starts on that frame. ":""}Attach EVERY item of Data.references as image references, in exactly this order, so the first is @img1, the second @img2 and so on; use each item's identifier.${start?" Do not add the start image to the references list unless the tool has no separate start image field; if it has none, put it FIRST in the references with role start/first frame and keep the others after it.":""} If the model id is not in Data, pick the Seedance 2.5 entry from Data.models.`,
-      {model:m.id, model_name:m.name, models:m.id?null:m.raw, prompt, duration_seconds:dur, aspect_ratio:set.aspect, resolution:set.res==="draft"?"480p":set.res, mode:set.res==="draft"?"draft":"standard", start_image:start?{identifier:start,type:"image"}:undefined, references:refs.map(r=>({identifier:r.id,type:"image",name:r.tag}))},"default");
+      {model:m.id, model_name:m.name, models:m.id?null:m.raw, prompt, duration_seconds:dur, aspect_ratio:set.aspect, resolution:set.res==="draft"?"480p":set.res, mode:set.res==="draft"?"draft":"standard", start_image:start?{identifier:start,type:"image"}:undefined, references:refs.map(r=>({identifier:r.id,type:"image"}))},"default");
     let args=fixRefs(plan.args,refs.map(r=>({id:r.id})));
     const lost=()=>refs.filter(r=>!JSON.stringify(args).includes(r.id));
     if(lost().length){ /* the arguments dropped some reference images: rebuild once, insisting on them */
-      const p2=await buildArgs("video_generate",`Generate ONE video with Seedance 2.5. EVERY ONE of the ${refs.length} items in Data.references MUST be attached as image references (media / references / reference images field), in this exact order, each by its identifier — the previous attempt left out ${lost().map(r=>r.tag).join(", ")}. No start image. Prompt verbatim, ${dur} seconds, aspect ${set.aspect}, audio on.`,{model:m.id,model_name:m.name,models:m.id?null:m.raw,prompt,duration_seconds:dur,aspect_ratio:set.aspect,resolution:set.res==="draft"?"480p":set.res,references:refs.map(r=>({identifier:r.id,type:"image",name:r.tag}))},"default");
+      const p2=await buildArgs("video_generate",`Generate ONE video with Seedance 2.5. EVERY ONE of the ${refs.length} items in Data.references MUST be attached as image references (media / references / reference images field), in this exact order, each by its identifier — the previous attempt left out ${lost().map(r=>r.tag).join(", ")}. No start image. Prompt verbatim, ${dur} seconds, aspect ${set.aspect}, audio on.`,{model:m.id,model_name:m.name,models:m.id?null:m.raw,prompt,duration_seconds:dur,aspect_ratio:set.aspect,resolution:set.res==="draft"?"480p":set.res,references:refs.map(r=>({identifier:r.id,type:"image"}))},"default");
       args=fixRefs(p2.args,refs.map(r=>({id:r.id})));
       if(lost().length) throw {code:"refs_missing",message:`Couldn't attach ${lost().map(r=>r.tag+" ("+r.name+")").join(", ")} to Seedance, so I stopped before spending credits. Try again; if it repeats, tell Claude.`}; }
-    /* only identifiers we know may reach Seedance: drop anything invented or mistyped */
-    { const known=new Set([...refs.map(r=>r.id),start].filter(Boolean)); const dropped=[];
-      const ID_K=/^(identifier|creationIdentifier|creation_identifier|creationId|assetIdentifier|id|url|uri)$/i;
-      const clean=v=>{ if(Array.isArray(v)) return v.filter(it=>{ if(it&&typeof it==="object"){ const bad=Object.entries(it).find(([k,x])=>ID_K.test(k)&&typeof x==="string"&&!known.has(x)&&!/^https?:/.test(x)); if(bad){ dropped.push(bad[1]); return false; } } return true; }).map(clean);
-        if(v&&typeof v==="object"){ const o={}; for(const [k,x] of Object.entries(v)){ if(ID_K.test(k)&&typeof x==="string"&&/identifier|id$/i.test(k)&&!known.has(x)&&k!=="model"&&/^[A-Za-z0-9_-]{6,40}$/.test(x)){ dropped.push(x); continue; } o[k]=clean(x); } return o; } return v; };
-      args=clean(args); if(dropped.length) log("⚠","video_generate: dropped unknown identifiers",{dropped});
-      sc.lastCall={at:Date.now(),args:JSON.parse(JSON.stringify(args,(k,v)=>k==="prompt"&&typeof v==="string"?v.slice(0,300)+"…":v)),dropped}; }
+    /* ROOT FIX: the reference list is written by the page from the tool's real schema — never left to a guess.
+       Each item carries the real creation identifier; labels like "@img1" never go in an id field. */
+    args=await rlPutRefs(args,refs,start);
+    { const sent=JSON.stringify(args); const missing=refs.filter(r=>!sent.includes(r.id));
+      sc.lastCall={at:Date.now(),schema:RL_LASTREFSCHEMA,args:JSON.parse(JSON.stringify(args,(k,v)=>k==="prompt"&&typeof v==="string"?v.slice(0,300)+"…":v))};
+      if(missing.length){ rlSave(); throw {code:"refs_missing",message:`${missing.length} reference image${missing.length>1?"s":""} (${missing.map(r=>r.tag).join(", ")}) couldn't be attached, so I stopped before spending credits. Send me a screenshot.`}; } }
     const r=await callMag("video_generate",args).catch(e=>{ if(sc.lastCall) sc.lastCall.error=String(e?.message||e?.code||e).slice(0,600); rlSave(); throw e; });
     let rr=readResult(r); if(!rr.ids.length&&!rr.urls.length) rr=await extractWithClaude(r,"the creation identifier of the video being generated");
     const id=rr.ids[0]; sc.web=rr.webUrl||sc.web||null;
