@@ -1690,6 +1690,17 @@ const RL_TPL={"char": "Three-panel cinematic character sheet, one horizontal 16:
 const rlTpl=k=>(BR?.sections?.find(s=>s.id==="templates")?.[k])||RL_TPL[k];
 const RL_ADV={"trend": {"name": "Trend Scout", "icon": "↗", "role": "Finds what is travelling right now: formats, hooks, sounds, memes and talking points in Jordan, the Arab world and global reels.", "order": 1}, "story": {"name": "Story Doctor", "icon": "✎", "role": "Guards the insight and the story: one human truth, a clear turn, a payoff that earns the brand.", "order": 2}, "dp": {"name": "Director of Photography", "icon": "◉", "role": "Camera, lens, light and composition that look expensive and stay readable to the AI.", "order": 3}, "performance": {"name": "Performance Coach", "icon": "☺", "role": "Acting, casting and wardrobe truth: performances that feel real, never 'ad acting'.", "order": 4}, "tech": {"name": "Seedance Technician", "icon": "⚙", "role": "Prompt engineering for Seedance 2.5 and Nano Banana: references, constraints and the failure modes that waste credits.", "order": 5}};
 const rlAdv=id=>({...(RL_ADV[id]||{name:id,icon:"•",role:""}),...((BR?.advisors||[]).find(x=>x.id===id)||{})});
+const RL_SD25=`SEEDANCE 2.5 — WHAT IT TAKES (ByteDance, July 2026):
+- Length: 4–30 s per generation in ONE pass (2.0 was 15 s). Longer films: multi-round extension — continue from the previous clip (reuse only its last 2–3 s as the hand-off; feeding more makes it replay finished action).
+- Inputs per generation: up to 30 reference images, 10 reference videos, 10 reference audio clips, plus optional start image / end image. Output 480p / 720p / 1080p (no 4K), aspect 16:9, 9:16, 4:3, 3:4, 1:1, 21:9. Audio is generated with the picture (switch it on).
+- Within 30 s it can tell a multi-shot story (setup, development, turn, resolution) with real cuts: write a timed shot list ("SHOT 1 (0–6 s)…") — timestamps steer pacing, they are not frame-exact.
+- Editing after generation: timestamp-level fixes (change only 12–15 s), swap a character/action, green-screen background swap, change ONLY the camera move, reference-guided edits — say what must stay unchanged.
+- References: cite them by tag (@img1, @Video 1, @Audio 1). Give each reference ONE job and say what must NOT transfer (identity only / location geometry only / motion only / voice only). Separate character, product and location images; character sheets neutral, no props; props as their own image with a role in the plot.
+- Max capacity is not the target: use the smallest set that adds unique information (a 5-character scene worked with ~11 visual refs, got confused at 14). Split crowded dialogue scenes into simpler shots.
+- Video refs guide camera path, blocking and timing (not exact mocap). Audio refs guide voice but don't lock words or accent — write the dialogue in the prompt too.
+- Clay/textureless 3D renders or a top-down plan as a reference can lock composition, blocking and light direction.
+- A long take needs something to travel toward (a walk, a push-in, an event); static subjects drift. Describe looks in plain visual terms — naming a film, studio or artist can be rejected by moderation.
+- Real cost/time: a 30 s 1080p clip with audio takes ~9–10 min; 15 s with 7 refs ~12 min. Judge by usable seconds per credit, draft at 480p first.`;
 const RL_JO=`JORDAN, FROM THE INSIDE (you are the best creative director in Jordan; think like a Jordanian, not a tourist):
 - Values that move people here: النخوة (stepping in for someone without being asked), الشهامة (gallantry, quiet decency), الغيرة (protective care for family and neighbourhood), الكرم (generosity: the host who insists, the extra plate), الشرف والسمعة (honour and how the family is seen), الجيرة (the neighbour is family), العونة (everyone helps: harvest, wedding, moving house), برّ الوالدين (caring for parents). Show these through ACTIONS, never slogans: a young man pays a stranger's taxi without a word, the son quietly settles his father's bill, the neighbour lends the gas cylinder.
 - Daily texture: Amman hills and stairs (Jabal al-Weibdeh, Jabal Amman, Lweibdeh, Rainbow St, Abdali, Sweifieh, Taj, Downtown/Balad), traffic at the 7th circle, servees and yellow taxis, the khaltour coffee, kaak with zaatar, knafeh from Habibah, mansaf at Friday lunch, the jameed, the shrak bread, falafel at Hashem, the gas truck's tune, the morning "ya sabah al-khair", the evening walk, the hookah on the balcony, winter sobba heater and the family around it, snow day in Amman, the Dead Sea Friday, Aqaba holidays, Wadi Rum, Ajloun forests, Jerash, Salt's yellow houses, Irbid students, Zarqa workers.
@@ -2098,7 +2109,7 @@ function rlUndoTurn(id){ const s=RL_UNDO.get(id); if(!s||!RL) return; Object.ass
   const m=RL.chat.find(x=>x.undo===id); if(m){ m.undone=true; delete m.undo; }
   rlEvent("The user undid the Director's changes from one reply."); rlSys(rlAr()?"رجّعت كل التغييرات تبعت هالرد.":"All changes from that reply were undone."); rlSave(); rlRender(); }
 function rlCleanHandle(h,kind){ const p={character:"char",location:"loc",prop:"prop"}[kind]||"loc"; let s=String(h||"").trim().replace(/^@/,"").toLowerCase().replace(/[^a-z0-9_]+/g,"_").replace(/^_+|_+$/g,""); if(!s) return null; if(!/^(char|loc|prop)_/.test(s)) s=p+"_"+s; return "@"+s.slice(0,32); }
-const RL_MAXS=15;
+const RL_MAXS=30;
 const rlTooLong=L=>{ const bad=L.filter(x=>+x.duration_s>RL_MAXS); return bad.length?`REFUSED: Seedance 2.5 renders at most ${RL_MAXS} seconds per scene (scene${bad.length>1?"s":""} ${bad.map(x=>x.n+" = "+x.duration_s+" s").join(", ")}). For a longer continuous moment, split it into consecutive parts of at most ${RL_MAXS} s (e.g. 30 s → two 15 s scenes titled "… (part 1/2)" and "… (part 2/2)"), where each part starts exactly on the previous part's END STATE (same positions, wardrobe, light, camera grammar, sound continuing) so they cut together as one take; the studio joins all scenes into one film in Deliver. Nothing was changed — call again with the parts, and tell the user why.`:""; };
 /* tools the Director calls while it thinks; mutations are recorded so the reply shows them and can be undone */
 function rlStudioTools(turn){
@@ -2237,6 +2248,8 @@ function rlPromptFor(text,memText,canSearch,agent){
   return `You are the creative director and AI film director of Bank al Etihad (Jordan) in a reels production studio. You talk with a BAE designer in a chat and build the production with them, one stage at a time. Answer in the user's language (Arabic or English, Jordanian tone is fine), warm and direct, short paragraphs.
 
 ${RL_METHOD}
+
+${RL_SD25}
 
 ${RL_BAE}
 
@@ -2893,6 +2906,8 @@ ${instruction?`THE USER ASKED FOR THIS CHANGE TO SCENE ${sc.n}: "${instruction}"
 Apply it precisely and completely. Keep everything the user didn't ask to change (story beat, cast, wardrobe, location, tags), unless the change requires it.`:`UPDATE SHOT PROMPT: rewrite scene ${sc.n} so it is clearly BETTER than the current version, using everything in the brain below, especially the team's latest lessons and this morning's research. Raise the craft: a stronger first-second hook, more precise and motivated camera work (shot sizes, FOV°, moves with speed), better light, a more specific and natural performance, cleaner physics, tighter timing, sharper sound design. Do not change the story beat, the cast or the location.`}
 Rules: keep every element handle (@char_…, @loc_…, @prop_…) exactly; write in the SCENE PROMPT FORMAT of the brain (opener, SECTION + location, first-frame blocking, SHOT n (a–b s) with mm + FOV°, one move with distance and speed, framing limits, camera height, ACTING micro-detail and what not to do, per-second action for continuous takes, HEAD PRIORITY framing, props, RULES, sound); do not add a REFERENCES block or the film look (the studio adds them); state the geography explicitly (zones, who is where, door direction, camera position and direction, head-count, light source); one action per shot; timestamps add up to duration_s (the length the user asked for). Update the blueprint if the blocking changes, and keep frame_prompt = the exact first moment of shot 1. Avoid every mistake in the AI-video rules.
 
+${RL_SD25}
+
 ${RL_BAE}
 
 ${brText(mem.text)}
@@ -3220,7 +3235,7 @@ async function rlRenderScene(n){
   sc.status="run"; sc.note="Finding Seedance 2.5…"; sc._blocked=false; sc._live=true; rlBoard(); rlWake(true);
   const t0=Date.now();
   try{
-    const m=await rlModel(); const set=rlSet(); const dur=Math.max(4,Math.min(120,+sc.duration_s||8));
+    const m=await rlModel(); const set=rlSet(); const dur=Math.max(4,Math.min(120,+sc.duration_s||8)); /* Seedance 2.5 takes 4–30 s; longer is sent as asked */
     sc.note=start?"Sending the first frame to Seedance 2.5…":"Sending to Seedance 2.5…"; rlBoard();
     const plan=await buildArgs("video_generate",`Generate ONE video with the Seedance 2.5 model${m.id?` (model id "${m.id}")`:""}. Use the prompt verbatim. Duration ${dur} seconds. Aspect ratio ${set.aspect}. ${set.res==="draft"?"Draft mode (480p preview) if the tool offers it.":`Resolution ${set.res}.`} Audio on (the prompt writes the sound). ${start?"IMAGE-TO-VIDEO: put Data.start_image.identifier in the tool's start image / first frame / init image field so the video starts on that frame. ":""}Attach EVERY item of Data.references as image references, in exactly this order, so the first is @img1, the second @img2 and so on; use each item's identifier.${start?" Do not add the start image to the references list unless the tool has no separate start image field; if it has none, put it FIRST in the references with role start/first frame and keep the others after it.":""} If the model id is not in Data, pick the Seedance 2.5 entry from Data.models.`,
       {model:m.id, model_name:m.name, models:m.id?null:m.raw, prompt, duration_seconds:dur, aspect_ratio:set.aspect, resolution:set.res==="draft"?"480p":set.res, mode:set.res==="draft"?"draft":"standard", start_image:start?{identifier:start,type:"image"}:undefined, references:refs.map(r=>({identifier:r.id,type:"image",name:r.tag}))},"default");
