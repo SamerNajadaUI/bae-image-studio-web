@@ -3079,6 +3079,17 @@ Reply with only JSON: {"suggestions":[{"id":"trend","title":"3–6 words","why":
 }
 async function rlEnsureChecked(sc){ if(sc._checkP){ await sc._checkP; return; } if(!sc.check||sc.check.dirty||!sc.blueprint){ await rlCheckScenes([sc.n],{quiet:true}); } }
 /* ---------- Storyboard: one Seedream 5.5 still (2K) per script scene, each generated on its own ---------- */
+/* every reference must be a real creation in the user's Magnific: check them all (free) before spending credits */
+let RL_GETPLAN=null;
+async function rlMissingCreations(ids){
+  ids=[...new Set(ids.filter(Boolean))]; if(!ids.length) return [];
+  if(!RL_GETPLAN){ try{ RL_GETPLAN=(await buildArgs("creations_get","Get this one creation's details by its identifier.",{identifier:"__ID__"},"quick")).args; }catch{ return []; }
+    if(!JSON.stringify(RL_GETPLAN||{}).includes("__ID__")) RL_GETPLAN={...(RL_GETPLAN||{}),identifier:"__ID__"}; }
+  const bad=[];
+  await Promise.all(ids.map(async id=>{ try{ await callMag("creations_get",replaceDeep(RL_GETPLAN,"__ID__",id)); }
+    catch(e){ if(/not found|does not exist|no such|unknown (creation|identifier)|invalid identifier/i.test(String(e?.message||"")+" "+String(e?.code||""))) bad.push(id); } }));
+  return bad;
+}
 async function rlBoardFrame(i){
   const sc=RL.script?.scenes?.[i]; if(!sc) return;
   const b=sc.board=Object.assign(sc.board||{},{status:"write",err:null}); rlSave(); rlBoard();
@@ -3226,7 +3237,14 @@ async function rlUploadMag(blob,name){
   if(!rr.ids.length) throw {code:"tool_error",message:"Magnific accepted the upload but returned no identifier"};
   /* an upload may still be processing: wait until it is ready to be used as a reference */
   try{ await waitFor([rr.ids[0]],"upload",4); }catch{}
-  return {id:rr.ids[0],web:rr.links?.find(u=>/magnific\.com/.test(u))||null};
+  /* the upload result can carry several ids (upload, asset, creation): keep the one Magnific knows as a creation */
+  let good=rr.ids[0];
+  if((await rlMissingCreations([good])).length){
+    const alts=rr.ids.slice(1); let x=null; for(const a of alts) if(!(await rlMissingCreations([a])).length){ x=a; break; }
+    if(!x){ const ex=await extractWithClaude(r,"the Pikaso CREATION identifier of the uploaded image (the id that creations_get / creations_list use — not an upload, asset or file id)"); for(const a of ex.ids||[]) if(a!==good&&!(await rlMissingCreations([a])).length){ x=a; break; } }
+    if(!x) throw {code:"tool_error",message:"Magnific took the upload but didn't return a creation id it can find again. Try once more; if it repeats, send me this message."};
+    good=x; }
+  return {id:good,web:rr.links?.find(u=>/magnific\.com/.test(u))||null};
 }
 /* study the user's own image so every description and prompt matches it exactly */
 async function rlStudyImage(e,blob){
@@ -3339,6 +3357,11 @@ async function rlRenderScene(n){
   if(!sc.check||sc.check.dirty||!sc.blueprint){ sc.status="run"; sc.note="The script supervisor is checking the scene first…"; rlBoard(); await rlEnsureChecked(sc); sc.status=null; }
   const {prompt:p0,refs,missing}=rlSceneRefs(sc);
   if(missing.length){ sc.status="err"; sc.note=`Generate ${missing.join(", ")} first (Cast / Locations), so they can be attached.`; rlBoard(); return; }
+  { const bad=await rlMissingCreations(refs.filter(r=>!r.map).map(r=>r.id));
+    if(bad.length){ const els=rlEls().filter(e=>bad.includes(e.id));
+      for(const e of els){ e.err="This image isn't in your Magnific (Creation not found). "+(e.fromUser?"Press “Replace my image” and upload it again.":e.fromLib?"Relink the BAE library (Photography → References).":"Press Generate image."); e.id=null; e.status="err"; e.fromUser=false; }
+      sc.status="err"; sc.note=`${els.length?els.map(e=>`${e.handle} (${e.name||""})`).join(", "):bad.join(", ")} ${bad.length>1?"aren't":"isn't"} in your Magnific, so Seedance would refuse it. I stopped before spending credits — upload or generate ${bad.length>1?"them":"it"} again (marked red in Cast / Locations), then press Generate video.`;
+      rlEvent(`Render of scene ${sc.n} stopped: missing creations ${els.map(e=>e.handle).join(", ")}.`); rlSave(); rlBoard(); return; } }
   if(!refs.length){ sc.status="err"; sc.note="This scene names no characters, locations or props, so no images would be attached. Add their handles (@char_…, @loc_…) to the prompt or ask the Director to fix the scene."; rlBoard(); return; }
   const start=sc.useFrame===true&&sc.frame?.id?sc.frame.id:null;
   const prompt=start?`START FRAME: the video begins exactly on the provided start image and animates from it; keep its composition, faces, wardrobe, place and light.\n\n${p0}`:p0;
