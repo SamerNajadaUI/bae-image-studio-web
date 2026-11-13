@@ -57,8 +57,8 @@ const TOOLS = [
   {
     name: "host_file",
     title: "Give a file a temporary public link",
-    description: "Stores a small file (an image up to ~700 KB, base64) for 24 hours and returns a public https URL, for tools that can only fetch a file from a URL (e.g. uploading a reference image to Magnific).",
-    inputSchema: { type: "object", properties: { data: { type: "string", description: "base64 bytes" }, mime: { type: "string" }, name: { type: "string" } }, required: ["data", "mime"] },
+    description: "Stores a file (an image or video at full quality, up to 200 MB) for 24 hours and returns a public https URL, for tools that can only fetch a file from a URL (e.g. uploading a reference image to Magnific). Small file: one call with data. Big file: send it in pieces — first call with bytes (total size), mime, offset 0 and the first piece; it returns host_id; then one call per piece with host_id and offset; the call that completes the file returns url.",
+    inputSchema: { type: "object", properties: { data: { type: "string", description: "base64 bytes (the whole file, or one piece)" }, mime: { type: "string" }, name: { type: "string" }, bytes: { type: "number", description: "total file size, for a file sent in pieces" }, offset: { type: "number", description: "where this piece starts" }, host_id: { type: "string", description: "from the first piece's result" } }, required: ["data"] },
   },
   {
     name: "gemini_status",
@@ -83,7 +83,9 @@ export default {
     const fm = url.pathname.match(/^\/f\/(hf_[0-9a-f]{32})(\.[a-z0-9]{2,5})?$/);
     if (fm && (request.method === "GET" || request.method === "HEAD") && env.UPLOADS) {
       const r = await store(env, fm[1]).fetch("https://do/file", { method: "GET" });
-      return new Response(request.method === "HEAD" ? null : r.body, { status: r.status, headers: { "content-type": r.headers.get("content-type") || "application/octet-stream", "cache-control": "private, max-age=3600", ...cors } });
+      const h = { "content-type": r.headers.get("content-type") || "application/octet-stream", "cache-control": "private, max-age=3600", ...cors };
+      if (r.headers.get("content-length")) h["content-length"] = r.headers.get("content-length");
+      return new Response(request.method === "HEAD" ? null : r.body, { status: r.status, headers: h });
     }
     const m = url.pathname.match(/^\/mcp\/([^/]+)\/?$/);
     if (!m || !env.ACCESS_TOKEN || !safeEqual(decodeURIComponent(m[1]), env.ACCESS_TOKEN))
@@ -280,6 +282,7 @@ async function upStart(args, env) {
 
 async function hostFile(args, env, request) {
   if (!env.UPLOADS) return toolError("The UPLOADS Durable Object is not configured on the worker.");
+  if (args.host_id || (+args.bytes > 0)) return hostPart(args, env, request);
   const mime = String(args.mime || "image/jpeg");
   if (!/^(image|video)\//.test(mime)) return toolError("Only images or videos.");
   const b64s = String(args.data || "");
@@ -291,6 +294,28 @@ async function hostFile(args, env, request) {
   const ext = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "video/mp4": ".mp4" }[mime] || "";
   const u = new URL(request.url); const link = `${u.origin}/f/${id}${ext}`;
   return { content: [{ type: "text", text: JSON.stringify({ url: link, expires_in_hours: 24 }) }], structuredContent: { url: link, expires_in_hours: 24 } };
+}
+
+const EXT = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/heic": ".heic", "image/tiff": ".tif", "video/mp4": ".mp4", "video/quicktime": ".mov", "video/webm": ".webm" };
+async function hostPart(args, env, request) {
+  const b64s = String(args.data || "");
+  const piece = typeof Uint8Array.fromBase64 === "function" ? Uint8Array.fromBase64(b64s) : new Uint8Array(Buffer.from(b64s, "base64"));
+  let id = String(args.host_id || "");
+  const off = Math.floor(+args.offset || 0);
+  if (!id) {
+    const mime = String(args.mime || "image/jpeg"), bytes = Math.floor(+args.bytes || 0);
+    if (!/^(image|video)\//.test(mime)) return toolError("Only images or videos.");
+    if (bytes <= 0 || bytes > 200 * 1024 * 1024) return toolError("bytes must be between 1 and 200 MB.");
+    id = "hf_" + crypto.randomUUID().replace(/-/g, "");
+    const r0 = await store(env, id).fetch("https://do/hmeta", { method: "PUT", body: JSON.stringify({ bytes, mime }) });
+    if (!r0.ok) return toolError("Could not start the file.");
+  } else if (!/^hf_[0-9a-f]{32}$/.test(id)) return toolError("host_id must come from the first piece.");
+  const r = await store(env, id).fetch(`https://do/part?offset=${off}`, { method: "PUT", body: piece });
+  const j = await r.json().catch(() => ({ error: `status ${r.status}` }));
+  if (!r.ok || j.error) return toolError(`The piece at ${off} was not taken: ${j.error || r.status}`);
+  const res = { host_id: id, received: j.got, of: j.bytes };
+  if (j.complete) { const u = new URL(request.url); res.url = `${u.origin}/f/${id}${EXT[j.mime] || ""}`; res.expires_in_hours = 24; }
+  return { content: [{ type: "text", text: JSON.stringify(res) }], structuredContent: res };
 }
 
 async function upChunk(args, env) {
@@ -313,7 +338,28 @@ export class UploadStore {
   async fetch(request) {
     const u = new URL(request.url);
     const out = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json" } });
+    if (u.pathname === "/hmeta") { await this.storage.put("hmeta", { ...(await request.json()), got: 0 }); await this.storage.setAlarm(Date.now() + 24 * 3600e3); return out({ ok: true }); }
+    if (u.pathname === "/part") {
+      const hm = await this.storage.get("hmeta"); if (!hm) return out({ error: "unknown or expired file; start again" }, 404);
+      const off = +u.searchParams.get("offset"); const piece = new Uint8Array(await request.arrayBuffer());
+      if (off + piece.byteLength > hm.bytes) return out({ error: "piece goes past the end of the file" }, 400);
+      const key = "p:" + String(off).padStart(12, "0");
+      /* DO values are limited in size: keep each piece in 1 MiB slices */
+      const had = await this.storage.get(key + ":n");
+      if (!had) { let n = 0; for (let i = 0; i < piece.byteLength; i += 1048576) await this.storage.put(key + ":" + String(n++).padStart(4, "0"), piece.subarray(i, i + 1048576)); await this.storage.put(key + ":n", n); hm.got += piece.byteLength; (hm.parts = hm.parts || []).push([off, n]); }
+      if (hm.got >= hm.bytes) hm.complete = true;
+      await this.storage.put("hmeta", hm);
+      return out({ got: hm.got, bytes: hm.bytes, complete: !!hm.complete, mime: hm.mime });
+    }
     if (u.pathname === "/file") {
+      if (request.method !== "PUT" && !(await this.storage.get("file"))) {
+        const hm = await this.storage.get("hmeta");
+        if (!hm?.complete) return new Response("gone", { status: 404 });
+        const keys = (hm.parts || []).sort((x, y) => x[0] - y[0]).flatMap(([o, n]) => Array.from({ length: n }, (_, k) => "p:" + String(o).padStart(12, "0") + ":" + String(k).padStart(4, "0")));
+        const st = this.storage; let i = 0;
+        const body = new ReadableStream({ async pull(c) { if (i >= keys.length) return c.close(); c.enqueue(new Uint8Array(await st.get(keys[i++]))); } });
+        return new Response(body, { headers: { "content-type": hm.mime, "content-length": String(hm.bytes) } });
+      }
       if (request.method === "PUT") { await this.storage.put("file", new Uint8Array(await request.arrayBuffer())); await this.storage.put("mime", request.headers.get("content-type") || "application/octet-stream"); await this.storage.setAlarm(Date.now() + 24 * 3600e3); return out({ ok: true }); }
       const f = await this.storage.get("file");
       if (!f) return new Response("gone", { status: 404 });

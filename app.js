@@ -2328,7 +2328,7 @@ async function rlSend(text,{retry}={}){
       }catch(e){ v.err=String(e?.code||"error"); v._stage="err"; rlVProgUpdate(v); const c=e?.code||"";
         rlSys(/not available on this connector/i.test(String(e?.message||""))?"Claude still has the old tool list of the “BAE Gemini Eye” connector. In claude.ai open Settings → Connectors → BAE Gemini Eye, press Disconnect, then connect it again (it should show 4 tools), and resend. Your text was sent without the video.":c==="server_not_connected"||c==="not_granted"||/not.?connected|manifest/i.test(String(e?.message||""))?"To let Gemini watch videos, add the “BAE Gemini Eye” connector in claude.ai (Settings → Connectors). Your text was sent without the video.":`Gemini couldn't watch ${v.name}: ${String(e?.message||c).slice(0,200)}. Your text was sent without it.`,true); rlTyping(true); }
     }
-    if(imgs.length){ if(sampleImages) opts.images=imgs.map(a=>a.blob).slice(0,10); else rlSys("This view can't send images to Claude, so only your text was used.",true); }
+    if(imgs.length){ if(sampleImages){ opts.images=[]; for(const a of imgs.slice(0,10)) opts.images.push(a.blob.size>4e6?await toJpeg(a.blob,2000).catch(()=>a.blob):a.blob); } else rlSys("This view can't send images to Claude, so only your text was used.",true); }
     rlStep("Reading the Director’s memory");
     await brLoad();
     const mem=await rlMemFor([text,RL.title,RL.picked?.title,RL.picked?.logline,RL.view!==RL.stage?RL.view:""].filter(Boolean).join(" "),RL.stage==="render"?"directing":RL.stage);
@@ -3082,6 +3082,22 @@ async function rlImage({prompt,aspect,refs=[],label,onQueued}){
   return {id, web:rr.webUrl||web};
 }
 /* the user's own image becomes the element's reference (uploaded to Magnific, used as @img in every frame and shot) */
+async function toJpegFull(blob,q=.95){ const bmp=await createImageBitmap(blob); const c=document.createElement("canvas"); c.width=bmp.width; c.height=bmp.height; c.getContext("2d").drawImage(bmp,0,0); return await new Promise(r=>c.toBlob(r,"image/jpeg",q)); }
+/* give a file of any size a temporary public link (BAE Gemini Eye), sent in pieces at full quality */
+async function rlHostFile(file,mime,name,onP){
+  const big=S.fileArgs, step=big?12*1048576:700*1024; let hostId=null, url=null;
+  for(let off=0;off<file.size;off+=step){
+    const piece=file.slice(off,off+step);
+    const data=big?{$file:{data:piece,name:(name||"file").replace(/\.[^.]+$/,"")+"_"+off+({"image/png":".png","image/webp":".webp"}[mime]||".jpg"),type:mime}}:await toB64(piece);
+    let r; try{ r=await mcp.callTool(GEYE,"host_file",{data,mime,name,bytes:file.size,offset:off,...(hostId?{host_id:hostId}:{})},{cache:false}); }
+    catch(e){ if(big&&off===0&&!/not_connected|not_granted|not in the manifest/i.test(String(e?.code||"")+String(e?.message||""))){ return rlHostFileSmall(file,mime,name); } throw {code:"tool_error",message:`BAE Gemini Eye couldn't keep the image (${e?.code||e?.message||"error"}). Reconnect the BAE Gemini Eye connector (Settings → Connectors), then try again.`}; }
+    const o=r?.payload&&typeof r.payload==="object"?r.payload:(()=>{ try{ return JSON.parse((r?.content||[]).map(c=>c.text||"").join("")); }catch{ return {}; } })();
+    hostId=o.host_id||hostId; if(o.url) url=o.url; onP?.(Math.min(1,(off+piece.size)/file.size));
+  }
+  if(!url) throw {code:"tool_error",message:"BAE Gemini Eye didn't return a link for the image."};
+  return url;
+}
+async function rlHostFileSmall(file,mime,name){ const keep=S.fileArgs; S.fileArgs=false; try{ return await rlHostFile(file,mime,name); } finally{ S.fileArgs=keep; } }
 async function rlUploadMag(blob,name){
   if(!S.connected) await connect(true);
   const sc=await schemaOf("creations_upload_image");
@@ -3092,25 +3108,34 @@ async function rlUploadMag(blob,name){
     ||Object.keys(props).find(k=>/base64|bytes/.test(descOf(k))&&!/name|mime|folder/i.test(k));
   const urlKey=Object.keys(props).find(k=>/url|uri|link|source/i.test(k)&&!/folder|project/i.test(k))
     ||Object.keys(props).find(k=>/\burl\b|https?:/.test(descOf(k))&&!/name|mime|folder/i.test(k));
-  const jpg=await toJpeg(blob,1600).catch(()=>blob);
-  let link=null;
-  if(!fileKey&&urlKey){
-    /* URL-only: give the image a temporary public link through BAE Gemini Eye */
-    try{ const small=jpg.size>1300000?await toJpeg(blob,1200).catch(()=>jpg):jpg;
-      const r=await mcp.callTool(GEYE,"host_file",{data:await toB64(small),mime:"image/jpeg",name},{cache:false});
-      link=(r?.payload&&typeof r.payload==="object"?r.payload.url:null)||(()=>{ try{ return JSON.parse((r?.content||[]).map(c=>c.text||"").join("")).url; }catch{ return null; } })();
-    }catch(e){ throw {code:"tool_error",message:`Magnific only takes images from a web link here, and BAE Gemini Eye couldn't host it (${e?.code||e?.message||"error"}). Reconnect the BAE Gemini Eye connector (Settings → Connectors) so it shows 5 tools, then try again.`}; }
-    if(!link) throw {code:"tool_error",message:"BAE Gemini Eye didn't return a link for the image."};
-  }
-  if(!fileKey&&!urlKey) throw {code:"tool_error",message:`Magnific's upload tool takes: ${Object.keys(props).join(", ")||"(no schema)"} — none of them is an image. Send me this message.`};
-  const hint=fileKey?`The image bytes go in "${fileKey}": put the placeholder "${/data:|data url|dataurl/i.test(descOf(fileKey))?"__FILE_DATAURL__":"__FILE__"}" there.`:`The image is at this public URL; put it in "${urlKey}": ${link}`;
-  const plan=await buildArgs("creations_upload_image",`Upload one JPEG image named ${name} to the user's Magnific creations so it can be used as a reference image (@img) in image and video generation. ${hint}`,fileKey?{filename:name,mime_type:"image/jpeg",[fileKey]:"__FILE__"}:{filename:name,mime_type:"image/jpeg",[urlKey]:link});
+  /* full quality: the original file goes to Magnific untouched (no resize, no re-compression) */
+  const mime=/^image\/(jpeg|png|webp)$/.test(blob.type)?blob.type:"image/jpeg";
+  const orig=blob.type===mime?blob:await toJpegFull(blob).catch(()=>blob);
+  const ext={"image/jpeg":".jpg","image/png":".png","image/webp":".webp"}[mime];
+  name=String(name||"image").replace(/\.[a-z0-9]{2,5}$/i,"")+ext;
+  const FILE_MAX=15.5*1048576;
+  const hostIt=async()=>rlHostFile(orig,mime,name);
+  let link=null, val=null, mode="";
+  if(fileKey&&S.fileArgs&&orig.size<=FILE_MAX){ mode="file"; }
+  else if(urlKey){ mode="url"; link=await hostIt(); }
+  else if(fileKey&&S.fileArgs){ mode="file"; } /* bigger than 16 MB and no link field: re-encode at FULL resolution below */
+  else if(fileKey){ mode="inline"; }
+  else throw {code:"tool_error",message:`Magnific's upload tool takes: ${Object.keys(props).join(", ")||"(no schema)"} — none of them is an image. Send me this message.`};
+  const hint=mode==="url"?`The image is at this public URL; put it in "${urlKey}": ${link}`:`The image bytes go in "${fileKey}": put the placeholder "${/data:|data url|dataurl/i.test(descOf(fileKey))?"__FILE_DATAURL__":"__FILE__"}" there.`;
+  const plan=await buildArgs("creations_upload_image",`Upload one image named ${name} (${mime}, full resolution) to the user's Magnific creations so it can be used as a reference image (@img) in image and video generation. ${hint}`,mode==="url"?{filename:name,mime_type:mime,[urlKey]:link}:{filename:name,mime_type:mime,[fileKey]:"__FILE__"});
   let args=plan.args||{};
-  if(fileKey){
+  if(mode!=="url"){
     if(!/__FILE(_DATAURL)?__/.test(JSON.stringify(args))) args={...args,[fileKey]:"__FILE__"};
     const usesDataUrl=JSON.stringify(args).includes("__FILE_DATAURL__");
-    let val; if(S.fileArgs&&!usesDataUrl) val={$file:{data:jpg,name,type:"image/jpeg"}}; else { const small=jpg.size>700000?await toJpeg(blob,1100).catch(()=>jpg):jpg; const b64=await toB64(small); val=usesDataUrl?"data:image/jpeg;base64,"+b64:b64; }
-    args=replaceDeep(args,"__FILE__",val); args=replaceDeep(args,"__FILE_DATAURL__",val);
+    if(mode==="file"&&!usesDataUrl){
+      let f=orig, fm=mime; if(f.size>FILE_MAX){ for(const q of [.95,.9,.85]){ f=await toJpegFull(orig,q); fm="image/jpeg"; if(f.size<=FILE_MAX) break; } }
+      val={$file:{data:f,name:name.replace(/\.[a-z0-9]+$/i,fm==="image/jpeg"?".jpg":ext),type:fm}};
+    } else {
+      /* this view can't pass files: only ~1 MB fits inline, so use a link if the tool takes one */
+      if(urlKey){ link=link||await hostIt(); args={...args}; delete args[fileKey]; args[urlKey]=link; }
+      else { const small=await toJpeg(blob,2048).catch(()=>blob); const b64=await toB64(small); val=usesDataUrl?"data:image/jpeg;base64,"+b64:b64; }
+    }
+    if(val){ args=replaceDeep(args,"__FILE__",val); args=replaceDeep(args,"__FILE_DATAURL__",val); }
   } else if(!JSON.stringify(args).includes(link)) args={...args,[urlKey]:link};
   const r=await callMag("creations_upload_image",args);
   let rr=readResult(r); if(!rr.ids.length&&!rr.urls.length) rr=await extractWithClaude(r,"the uploaded creation's identifier and url");
@@ -3121,6 +3146,7 @@ async function rlUploadMag(blob,name){
 }
 /* study the user's own image so every description and prompt matches it exactly */
 async function rlStudyImage(e,blob){
+  if(blob.size>4e6) blob=await toJpeg(blob,2000).catch(()=>blob); /* only Claude's copy is smaller; Magnific gets the original */
   if(!sampleImages) return false;
   const isChar=RL.characters.includes(e), isProp=e.kind==="prop";
   const kind=isChar?"character":isProp?"prop/product":"location";
