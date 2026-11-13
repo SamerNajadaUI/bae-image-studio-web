@@ -3378,7 +3378,14 @@ async function rlRenderScene(n){
       const p2=await buildArgs("video_generate",`Generate ONE video with Seedance 2.5. EVERY ONE of the ${refs.length} items in Data.references MUST be attached as image references (media / references / reference images field), in this exact order, each by its identifier — the previous attempt left out ${lost().map(r=>r.tag).join(", ")}. No start image. Prompt verbatim, ${dur} seconds, aspect ${set.aspect}, audio on.`,{model:m.id,model_name:m.name,models:m.id?null:m.raw,prompt,duration_seconds:dur,aspect_ratio:set.aspect,resolution:set.res==="draft"?"480p":set.res,references:refs.map(r=>({identifier:r.id,type:"image",name:r.tag}))},"default");
       args=fixRefs(p2.args,refs.map(r=>({id:r.id})));
       if(lost().length) throw {code:"refs_missing",message:`Couldn't attach ${lost().map(r=>r.tag+" ("+r.name+")").join(", ")} to Seedance, so I stopped before spending credits. Try again; if it repeats, tell Claude.`}; }
-    const r=await callMag("video_generate",args);
+    /* only identifiers we know may reach Seedance: drop anything invented or mistyped */
+    { const known=new Set([...refs.map(r=>r.id),start].filter(Boolean)); const dropped=[];
+      const ID_K=/^(identifier|creationIdentifier|creation_identifier|creationId|assetIdentifier|id|url|uri)$/i;
+      const clean=v=>{ if(Array.isArray(v)) return v.filter(it=>{ if(it&&typeof it==="object"){ const bad=Object.entries(it).find(([k,x])=>ID_K.test(k)&&typeof x==="string"&&!known.has(x)&&!/^https?:/.test(x)); if(bad){ dropped.push(bad[1]); return false; } } return true; }).map(clean);
+        if(v&&typeof v==="object"){ const o={}; for(const [k,x] of Object.entries(v)){ if(ID_K.test(k)&&typeof x==="string"&&/identifier|id$/i.test(k)&&!known.has(x)&&k!=="model"&&/^[A-Za-z0-9_-]{6,40}$/.test(x)){ dropped.push(x); continue; } o[k]=clean(x); } return o; } return v; };
+      args=clean(args); if(dropped.length) log("⚠","video_generate: dropped unknown identifiers",{dropped});
+      sc.lastCall={at:Date.now(),args:JSON.parse(JSON.stringify(args,(k,v)=>k==="prompt"&&typeof v==="string"?v.slice(0,300)+"…":v)),dropped}; }
+    const r=await callMag("video_generate",args).catch(e=>{ if(sc.lastCall) sc.lastCall.error=String(e?.message||e?.code||e).slice(0,600); rlSave(); throw e; });
     let rr=readResult(r); if(!rr.ids.length&&!rr.urls.length) rr=await extractWithClaude(r,"the creation identifier of the video being generated");
     const id=rr.ids[0]; sc.web=rr.webUrl||sc.web||null;
     if(id){ sc.pending=id; sc.pendingAt=Date.now(); rlFlush(); }
