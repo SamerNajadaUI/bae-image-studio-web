@@ -2836,16 +2836,17 @@ const RL_CHECKLIST=`CHECK, in order (fix only what is wrong):
 3 One action per shot; timestamps add up to the duration; "Hard cut." between shots.
 4 Props and hands (which hand, screen facing which way); no gibberish text or logos.
 5 Light: one motivated source and direction, same time of day; exterior brighter than interior through a doorway.
-6 Exact head-count, "no other people, no duplicates"; mirrors/reflections avoided or controlled; same faces and wardrobe (zero drift).
+6 Exact head-count stated positively ("exactly two people in frame: …"); mirrors/reflections controlled; same faces and wardrobe (zero drift).
+6b House standard (Higgsfield): block order, ACTIVE REFERENCES first, FOV in degrees from the anchor table, ACTING TASK block per character before the timeline, END STATE per stage, positive phrasing only, HOLD FOR THE FULL TIMELINE last.
 7 Who speaks in which shot; others keep mouths closed.
 8 BAE: modern Amman, BAE wardrobe, no logos.`;
 function rlQuickCheck(sc){
   const w=[], P=sc.prompt||"", F=sc.frame_prompt||"", bp=sc.blueprint;
-  const ts=[...P.matchAll(/(\d+):(\d{2}(?:\.\d+)?)\s*[–-]\s*(\d+):(\d{2}(?:\.\d+)?)/g)].map(m=>(+m[3])*60+(+m[4]));
+  const ts=[...[...P.matchAll(/(\d+):(\d{2}(?:\.\d+)?)\s*[–-]\s*(\d+):(\d{2}(?:\.\d+)?)/g)].map(m=>(+m[3])*60+(+m[4])),...[...P.matchAll(/(?:^|\n)\s*(\d+(?:\.\d+)?)\s*(?:s\s*)?(?:–|-|to)\s*(\d+(?:\.\d+)?)\s*s\b/gi)].map(m=>+m[2])];
   if(ts.length&&Math.abs(Math.max(...ts)-(+sc.duration_s||0))>0.6) w.push(`Shot timings end at ${Math.max(...ts)}s but the scene is ${sc.duration_s}s.`);
   for(const t of new Set([...rlTokens(P),...rlTokens(F)])) if(!rlElByTag(t)) w.push(`${t} isn't in Cast or Locations.`);
   if(bp&&(bp.zones||[]).length>1){ const zonesUsed=new Set((bp.people||[]).map(p=>p.zone)); if(zonesUsed.size>1&&!/inside|interior/i.test(F+P)&&!/outside|exterior/i.test(F+P)) w.push("The prompts don't say who is inside and who is outside."); }
-  if(!/exactly (one|two|three|four|\d+) (person|people|women|men)|no other people/i.test(P+F)&&(bp?.people||[]).length) w.push("Head-count isn't stated.");
+  if(!/exactly (one|two|three|four|five|\d+) (person|people|women|men|characters?)|no other people|only (one|two|three|\d+) people/i.test(P+F)&&(bp?.people||[]).length) w.push("Head-count isn't stated.");
   return w;
 }
 function rlPatch(text,edits){
@@ -2916,7 +2917,11 @@ async function rlImproveScene(n,instruction){
     const out=await rlAsk(`You are the Director of a Bank al Etihad reel (${set.aspect}, Seedance 2.5 reference-to-video: every element is attached as @img references, no start frame, so the prompt must build the opening composition itself; a Seedream 5.5 first-frame still is an optional preview; dialogue ${set.lang}).
 ${instruction?`THE USER ASKED FOR THIS CHANGE TO SCENE ${sc.n}: "${instruction}"
 Apply it precisely and completely. Keep everything the user didn't ask to change (story beat, cast, wardrobe, location, tags), unless the change requires it.`:`UPDATE SHOT PROMPT: rewrite scene ${sc.n} so it is clearly BETTER than the current version, using everything in the brain below, especially the team's latest lessons and this morning's research. Raise the craft: a stronger first-second hook, more precise and motivated camera work (shot sizes, FOV°, moves with speed), better light, a more specific and natural performance, cleaner physics, tighter timing, sharper sound design. Do not change the story beat, the cast or the location.`}
-Rules: keep every element handle (@char_…, @loc_…, @prop_…) exactly; write in the SCENE PROMPT FORMAT of the brain (opener, SECTION + location, first-frame blocking, SHOT n (a–b s) with mm + FOV°, one move with distance and speed, framing limits, camera height, ACTING micro-detail and what not to do, per-second action for continuous takes, HEAD PRIORITY framing, props, RULES, sound); do not add a REFERENCES block or the film look (the studio adds them); state the geography explicitly (zones, who is where, door direction, camera position and direction, head-count, light source); one action per shot; timestamps add up to duration_s (the length the user asked for). Update the blueprint if the blocking changes, and keep frame_prompt = the exact first moment of shot 1. Avoid every mistake in the AI-video rules.
+Rules: keep every element handle (@char_…, @loc_…, @prop_…) exactly. WRITE THE SEEDANCE PROMPT BY THE HOUSE STANDARD — the "Higgsfield Seedance Prompt Writer" and "Higgsfield Acting Director" sections of the brain, which win over any older format note:
+- Block order: SCENE CONTEXT → ACTIVE REFERENCES (one line per handle: what it defines ONLY, "100% matches the reference") → LOCATION MAP (foreground/midground/background, camera position, light source) → FIRST FRAME / BLOCKING → FORMAT MODE (oner / CUT 1… / timed multishot) → OPTICS (shot size + FOV in degrees from the anchor table: 107/84/63/47/29/18/12/8°, "no drift mid-segment") → CAMERA (third core layer: height, distance, one motivated move, speed in km/h) → ACTION (cause → effect) → PERFORMANCE with an ACTING TASK block per character in frame (scene direction unspoken, motive, goal, obstacle, tactic with eye-work as purposeful action, one safety line for living eyes) placed before the timeline → PHYSICS → LIGHTING (source, direction, white balance in Kelvin) → COLOR GRADE / WARDROBE only if needed → AUDIO → STYLE + OUTPUT SETTINGS (short suffix) → POSITIVE LOCKS → HOLD FOR THE FULL TIMELINE (3–6 lines).
+- Timed scenes: stage headings lead with the timestamp ("0–2.5s — SHOT 1 — MCU, 29° FOV:"), stages never overlap or leave gaps, the last ends exactly at duration_s, every stage closes with an END STATE; inside notes and acting tasks refer to moments by timestamps, never shot numbers. Cuts only where stated ("the camera does not cut on its own").
+- Positive phrasing only (state the target, never "no/not/don't"); emotion through muscle and eye-work, never adjectives; left/right from the camera; color as material + light + role; no director, film, camera or lens model names; English only; never put an @handle in a stage where that thing isn't present.
+- The studio attaches the reference images and the film look itself: write the ACTIVE REFERENCES lines with handles (they're renumbered to @img1… automatically), and fold the film look into LIGHTING / COLOR GRADE / STYLE in your own words. State the geography explicitly (zones, who is where, door direction, camera position and direction, exact head-count, light source). Update the blueprint if the blocking changes, and keep frame_prompt = the exact first moment of the first stage. Avoid every mistake in the AI-video rules.
 
 ${RL_SD25}
 
@@ -3362,9 +3367,9 @@ async function rlModel(){
 /* At send time: the elements a prompt names (by handle or tag) are attached in tag order and renumbered @img1…,
    a REFERENCES block says what each image is for, the shared FILM LOOK goes on top, and an optional position map is attached last */
 function rlRefLine(r){ const e=r.el;
-  if(RL.characters.includes(e)) return `${r.tag} = ${e.name} (${e.handle}): identity reference from a three-panel character sheet — use this person's face, hair, build and wardrobe only; ignore the grey backdrop, the panel layout and the headless body panels.`;
-  if(e.kind==="prop") return `${r.tag} = ${e.name} (${e.handle}): the exact prop — shape, materials, colours and details.`;
-  return `${r.tag} = ${e.name} (${e.handle}): the location as a STYLE reference — architecture, materials, textures and light; not a fixed frame.`; }
+  if(RL.characters.includes(e)) return `${r.tag} = ${e.name} — defines face, hair, build and wardrobe ONLY, 100% matches the reference. Pose, backdrop, panel layout and lighting of the sheet are not inherited.`;
+  if(e.kind==="prop") return `${r.tag} = ${e.name} — defines the exact object ONLY: shape, materials, colours, printed details, 100% matches the reference.`;
+  return `${r.tag} = ${e.name} — defines the place ONLY: architecture, materials, textures and light character. Its camera angle is not inherited.`; }
 function rlSceneRefs(sc,field="prompt",{compose=true}={}){
   const txt=sc[field]||"";
   const els=[]; for(const t of [...(field==="prompt"?(sc.refs||[]):[]),...rlTokens(txt)]){ const el=rlElByTag(t); if(el&&!els.includes(el)) els.push(el); }
@@ -3375,9 +3380,13 @@ function rlSceneRefs(sc,field="prompt",{compose=true}={}){
   if(sc.map?.id&&sc.useMap!==false) refs.push({tag:"@img"+(refs.length+1),global:"map",id:sc.map.id,name:"position map",map:true});
   if(compose){
     const lines=refs.map(r=>r.map?`${r.tag} = POSITION MAP of the location seen from above: it ONLY defines where people stand (${(sc.map.legend||[]).join("; ")}) and where the camera is (C). Never copy its top-down view, circles or numbers into the ${field==="prompt"?"video":"image"}.`:rlRefLine(r));
-    const parts=[]; if(RL.look&&!/GLOBAL STYLE\s*:|FILM LOOK\s*:/i.test(body)) parts.push(`FILM LOOK: ${RL.look}`);
-    if(lines.length&&!/^REFERENCES\s*:/im.test(body)) parts.push(`REFERENCES:\n${lines.join("\n")}`);
-    parts.push(body); body=parts.join("\n\n");
+    /* house standard: ACTIVE REFERENCES open the prompt; the film look sits in the STYLE suffix, never as a prefix */
+    if(lines.length){
+      if(/^\s*ACTIVE REFERENCES\b/im.test(body)){ /* keep the writer's own lines; add any reference it didn't describe */
+        const miss=refs.filter(r=>!new RegExp(r.tag.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"(?!\\d)\\s*[=:—-]").test(body)).map(r=>lines[refs.indexOf(r)]);
+        if(miss.length) body=body.replace(/(^|\n)(\s*ACTIVE REFERENCES[^\n]*\n)/i,(m,p,h)=>`${p}${h}${miss.join("\n")}\n`); }
+      else body=`ACTIVE REFERENCES\n${lines.join("\n")}\n\n${body}`; }
+    if(RL.look&&!/^\s*STYLE\b/im.test(body)&&!/FILM LOOK\s*:/i.test(body)) body=body.replace(/\n\s*(POSITIVE LOCKS|HOLD FOR THE FULL TIMELINE)\b/i,m=>`\n\nSTYLE\n${RL.look}\n${m}`)+(/(POSITIVE LOCKS|HOLD FOR THE FULL TIMELINE)/i.test(body)?"":`\n\nSTYLE\n${RL.look}`);
   }
   return {prompt:body, refs:refs.map(({el,...r})=>r), missing:els.filter(el=>!el.id).map(el=>el.tag)};
 }
