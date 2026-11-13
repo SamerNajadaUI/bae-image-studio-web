@@ -351,7 +351,7 @@ function readResult(r){
       if(/^data:image\/(png|jpe?g|webp);base64,/.test(v)) out.images.push({data:v.split(",")[1],mime:v.slice(5,v.indexOf(";"))});
     }
     if(typeof v==="number"){ if(/^width$/i.test(k)) out.w=Math.max(out.w,v); if(/^height$/i.test(k)) out.h=Math.max(out.h,v); }
-    if(typeof v==="string"&&/^resolution$/i.test(k)&&/^4k$/i.test(v)) out.res4k=true;
+    if(typeof v==="string"&&/^resolution$/i.test(k)&&/^[24]k$/i.test(v)) out.res4k=true;
   }
   if(p&&typeof p==="object") walk(p,scan);
   else if(typeof p==="string") scanText(p);
@@ -399,14 +399,14 @@ function collectModels(p){
 }
 function ver(s){ const m=String(s).match(/(\d+(?:\.\d+)*)/g); if(!m) return 0; return Math.max(...m.map(x=>{ const [a,b="0",c="0"]=x.split("."); return (+a)*10000+(+b)*100+(+c); })); }
 function pickModels(list){
-  /* Locked to Nano Banana 2.1; other Nano Banana versions only appear if 2.1 is missing */
-  const nanoAll=list.filter(m=>/nano[\s._-]*banana/i.test(m.id+" "+m.name)).sort((a,b)=>ver(b.id+" "+b.name)-ver(a.id+" "+a.name));
-  const exact=nanoAll.filter(m=>/2[\s._-]?1(?!\d)/.test(m.id+" "+m.name)&&!/pro/i.test(m.id+" "+m.name));
+  /* Locked to Seedream 5.5 (ByteDance); other Seedream versions only appear if 5.5 is missing */
+  const nanoAll=list.filter(m=>/seedream/i.test(m.id+" "+m.name)).sort((a,b)=>ver(b.id+" "+b.name)-ver(a.id+" "+a.name));
+  const exact=nanoAll.filter(m=>/5[\s._-]?5(?!\d)/.test(m.id+" "+m.name));
   const nano=exact.length?exact.slice(0,1):nanoAll;
   S.models={nano};
   const sel=$("selNano"); sel.innerHTML="";
-  if(!nano.length) sel.innerHTML=`<option value="">Nano Banana 2.1 (not found in your Magnific models)</option>`;
-  nano.forEach(m=>{ const o=document.createElement("option"); o.value=m.id; o.textContent=m.name+(exact.length?" · locked":" · 2.1 not found, pick one"); sel.appendChild(o); });
+  if(!nano.length) sel.innerHTML=`<option value="">Seedream 5.5 (not found in your Magnific models)</option>`;
+  nano.forEach(m=>{ const o=document.createElement("option"); o.value=m.id; o.textContent=m.name+(exact.length?" · locked":" · 5.5 not found, pick one"); sel.appendChild(o); });
   sel.disabled=!!exact.length;
   if(nano[0]) S.nanoName=nano[0].name;
   log("·","model locked",{nano:nano.map(m=>m.name)});
@@ -419,7 +419,7 @@ function pickModels(list){
   gpt.forEach(m=>{ const o=document.createElement("option"); o.value=m.id; o.textContent=m.name+(g25.length?" · locked":" · 2.5 not found, newest GPT"); gs.appendChild(o); });
   gs.disabled=true; log("·","icon model locked",{gpt:gpt.map(m=>m.name)});
   if(gpt[0]) S.gptName=gpt[0].name;
-  $("mNanoName").textContent=S.mode==="icon"?`${S.gptName||"GPT 2.5"} · via Magnific`:(S.nanoName||"Nano Banana 2.1")+" · via Magnific";
+  $("mNanoName").textContent=S.mode==="icon"?`${S.gptName||"GPT 2.5"} · via Magnific`:(S.nanoName||"Seedream 5.5")+" · via Magnific";
 }
 
 /* ---------------- UI: brief, segs, upload, refs ---------------- */
@@ -490,7 +490,7 @@ function syncTabs(){ document.querySelectorAll("#refTabs button").forEach(b=>b.s
   $("refHint").textContent=({
     ic:"BAE illustration set (guidelines p.101, light mode). Sent to GPT 2.5 as style direction only: material, translucency, gradient, angle and lighting.",
     user:"Your own reference photos, kept only on this device. Add licensed images that show the light, wardrobe or camera angle you want.",
-    bae:"Photos from the Bank al Etihad guidelines. Picked frames go to Claude for style analysis and to Nano Banana 2.1 as references. Up to 6, from any set. Choosing Studio picks the BAE studio frames for you.",
+    bae:"Photos from the Bank al Etihad guidelines. Picked frames go to Claude for style analysis and to Seedream 5.5 as references. Up to 6, from any set. Choosing Studio picks the BAE studio frames for you.",
     yt:"Youth campaign set: bold streetwear, low-angle wide camera, blue sky, hard sun and friends mid-laugh. Used for wardrobe, camera and energy; their logos and orange clothing are never copied.",
     mj:"Mari Juliano lifestyle set, for clean natural light and candid energy. Mix with the other sets, up to 6 in total.",
     ch:"Characters keep the same face in every image. Write a name in the brief (e.g. \"a young man like Wissam\") and that character is added automatically, or tap one to cast them. Rename under each photo; add other spellings after a slash."})[S.refTab]; }
@@ -577,7 +577,7 @@ async function writePrompts(){
   if(S.mode==="icon") return writeIconPrompt();
   stage(2,"active"); flash($("s2state"),"Writing…"); $("btnPrompt").disabled=true;
   try{
-    const prompt=`Write one production image prompt for Google Nano Banana 2.1 for this Bank al Etihad photograph.
+    const prompt=`Write one production image prompt for ByteDance Seedream 5.5 for this Bank al Etihad photograph.
 ${BAE_RULES}
 
 ${REF_STYLE}
@@ -591,13 +591,13 @@ ${settingRule()}
 ${lookRule()}
 
 Scene breakdown: ${JSON.stringify(S.analysis||{brief:$("brief").value})}
-Brief: "${$("brief").value}". Setting: ${S.setting}. Shot: ${S.shot}. Aspect ratio: ${aspectText()}. Output: native 4K, highest quality. Channel: ${$("channel").value}. Copy space for the gradient shape: ${$("copySpace").checked?"yes, keep calm, even space around the centred subject":"no"}.
+Brief: "${$("brief").value}". Setting: ${S.setting}. Shot: ${S.shot}. Aspect ratio: ${aspectText()}. Output: native 2K, highest quality. Channel: ${$("channel").value}. Copy space for the gradient shape: ${$("copySpace").checked?"yes, keep calm, even space around the centred subject":"no"}.
 Reference images (${S.picked.length}) will be attached. Character references carry identity (see CAST). The others are STYLE references; what they show is for YOUR understanding of the photography only — never describe or reuse that content in the prompt: ${S.picked.filter(id=>!isChar(id)).map(id=>`${refById(id)?.set==="bae"?"BAE guideline":refById(id)?.set==="yt"?"Youth campaign":"Mari Juliano"} — ${refById(id)?.d}`).join("; ")}
 ${castText()}${S.upload&&$("useUpAsRef").checked?"; plus the user's own image as the first reference for content":""}.
 
 Requirements:
 - Begin with exactly: "Professional photography, clean natural light."
-- Photorealistic, 4K, real camera language (lens, aperture, angle), believable Jordanian people in modern places.
+- Photorealistic, 2K, real camera language (lens, aperture, angle), believable Jordanian people in modern places.
 - Apply every point of the CLIENT ART DIRECTION explicitly in the prompt: modern upscale setting, modern elegant wardrobe, no hijab or traditional Arab clothing, professionally retouched even skin tone, iPhone 18 for any phone, modern IKEA-style decor.
 - State the composition explicitly: the person centred on the vertical centre line, balanced framing, equal space left and right.
 - ${S.setting==="Studio"?"STUDIO: describe the studio set, backdrop and softbox light explicitly; translate any location in the brief into one or two modern props on the set; no real location.":"ON-LOCATION: encode depth layers and foreground bokeh in a modern real place."}
@@ -638,7 +638,7 @@ function enforce(p){
   if(S.mode==="icon") return enforceIcon(p);
   let t=p.trim();
   if(!/professional photography/i.test(t)||!/clean natural light/i.test(t)) t="Professional photography, clean natural light. "+t;
-  if(!/4k/i.test(t)) t+=" Ultra-detailed 4K resolution.";
+  if(!/2k/i.test(t)) t+=" Ultra-detailed 2K resolution.";
   t=t.replace(/\n*Mandatory art direction:[^\n]*/g,"").replace(/\n*Look lock:[^\n]*/g,"");
   t+="\n\n"+CLIENT_LINE+"\n"+lookLine();
   if(!/Composition lock:/.test(t)) t+="\n"+COMPOSITION_LINE;
@@ -648,20 +648,20 @@ function enforce(p){
 }
 
 /* ---------------- STEP 3: generate ---------------- */
-const MODELS={ nano:{el:"rNano",sel:"selNano",mode:"modeNano",prompt:"pNano",label:"Nano Banana 2.1"}, icon:{el:"rNano",sel:"selIcon",mode:"modeIcon",prompt:"pNano",label:"GPT 2.5"}, iconNano:{el:"rNano2",sel:"selNano",mode:"modeNano",prompt:"pNano",label:"Nano Banana 2.1"} };
+const MODELS={ nano:{el:"rNano",sel:"selNano",mode:"modeNano",prompt:"pNano",label:"Seedream 5.5"}, icon:{el:"rNano",sel:"selIcon",mode:"modeIcon",prompt:"pNano",label:"GPT 2.5"}, iconNano:{el:"rNano2",sel:"selNano",mode:"modeNano",prompt:"pNano",label:"Seedream 5.5"} };
 const genKey=()=>S.mode==="icon"?"icon":"nano";
-/* Icons render with GPT 2.5 only; photography with Nano Banana 2.1 */
+/* Icons render with GPT 2.5 only; photography with Seedream 5.5 */
 const genKeys=()=>S.mode==="icon"?["icon"]:["nano"];
 const isIconKey=k=>k==="icon"||k==="iconNano";
 function negativeNow(){ if(S.mode==="icon") return ICON_NEG; return [S.negative||"logos, text, watermark, signage, oversaturated, HDR, extra fingers",CLIENT_NEG,COMPOSITION_NEG,S.setting==="Studio"?STUDIO_NEG:"",S.look==="Bold"?LOOK_BOLD_NEG:LOOK_CALM_NEG].filter(Boolean).join(", "); }
-const STEPS=["Upload references","Render in 4K","4K check","Ready"];
+const STEPS=["Upload references","Render in 2K","2K check","Ready"];
 function aspectVal(){ if(S.mode==="icon") return "16:9"; const v=$("aspect").value; if(v==="custom"){ const w=parseInt($("cw").value,10)||0,h=parseInt($("ch").value,10)||0; return w&&h?{width:w,height:h}:"auto"; } return v; }
 function aspectText(){ const a=aspectVal(); return typeof a==="string"?a:`${a.width}×${a.height}px`; }
 function ratioCSS(){ const a=aspectVal(); if(a==="auto") return "4 / 3"; if(typeof a==="object") return `${a.width} / ${a.height}`; const [w,h]=a.split(":").map(Number); return `${w} / ${h}`; }
 function renderCard(key,st){
   const m=MODELS[key]; const el=$(m.el); const name=$(m.sel).selectedOptions[0]?.textContent?.replace(" · latest","")||m.label;
   const outs=st.outs||[]; const o=outs[st.sel||0];
-  const res=o&&o.long?(o.long>=3800?`4K · ${o.long}px`:`${o.long}px`):"";
+  const res=o&&o.long?(o.long>=2000?`2K · ${o.long}px`:`${o.long}px`):"";
   el.innerHTML=`<div class="head"><b>${esc(m.label)}</b><span class="count">${esc(name)}</span></div>
   <div class="frame ${st.busy?"busy":""}${isIconKey(key)?" iconframe":""}" style="aspect-ratio:${ratioCSS()}">${o?.img?`<img src="${o.img}" alt="Generated image ${(st.sel||0)+1} from ${esc(m.label)}">`:`${!o&&!st.busy?`<div class="ph-empty" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="6" y="10" width="36" height="28" rx="6"/><circle cx="18" cy="21" r="4"/><path d="M8 34l10-9 8 7 6-5 10 8"/></svg></div>`:""}<span class="ph-txt">${esc(o?"Magnific sent a link but not the image itself, and claude.ai blocks outside images inside pages. Open the PNG below to view or save it.":(st.ph||"Your image appears here"))}</span>`}${res?`<span class="badge">${esc(res)}</span>`:""}${st.busy?`<span class="elapsed" id="elapsed-${key}">${fmtTime(st.t0)}</span>`:""}</div>
   ${outs.length>1?`<div class="thumbs">${outs.map((x,i)=>`<button type="button" data-i="${i}" aria-pressed="${i===(st.sel||0)}" aria-label="Show image ${i+1}">${x.img?`<img src="${x.img}" alt="">`:i+1}</button>`).join("")}</div>`:""}
@@ -679,7 +679,7 @@ function renderCard(key,st){
   el.querySelectorAll("[data-exp]").forEach(b=>b.addEventListener("click",()=>exportIcon(o,b.dataset.exp==="wide"?"wide":+b.dataset.exp,MODELS[key].label)));
 }
 const cards={nano:{},icon:{}};
-function idle(){ for(const k of genKeys()){ if(!cards[k]) cards[k]={}; if(!cards[k].steps) cards[k]={ph:S.mode==="icon"?`Your icon appears here on Light Stone, 16:9. Describe the icon above and press Create icon.`:"Your 4K image appears here. Write a brief above and press Create image.",steps:[]}; renderCard(k,cards[k]); } }
+function idle(){ for(const k of genKeys()){ if(!cards[k]) cards[k]={}; if(!cards[k].steps) cards[k]={ph:S.mode==="icon"?`Your icon appears here on Light Stone, 16:9. Describe the icon above and press Create icon.`:"Your 2K image appears here. Write a brief above and press Create image.",steps:[]}; renderCard(k,cards[k]); } }
 function fmtTime(t0){ if(!t0) return "0:00"; const s=Math.max(0,Math.round((Date.now()-t0)/1000)); return Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); }
 idle();
 function onAspect(){ $("customWrap").hidden=S.mode==="icon"||$("aspect").value!=="custom"; $("aspectPill").textContent=S.mode==="icon"?"16:9 · locked":aspectText(); for(const k of genKeys()) if(cards[k]) renderCard(k,cards[k]); }
@@ -701,7 +701,7 @@ async function loadOptions(key){
       let parsed={};
       if(raw) parsed=await sample.json(`From these Magnific settings for image model "${id}", extract the user-facing choices.
 Settings: ${trimJSON(raw,16000)}
-Reply with only JSON: {"modes":[{"value":"exact value","label":"short label","param":"setting name"}],"best_mode":"value of the highest-quality mode or null","res_4k":"exact value that means 4K, or null if 4K is not offered","max_res":"largest resolution value","best_quality":"exact highest quality value or null","quality_param":"setting name or null","max_images":4}
+Reply with only JSON: {"modes":[{"value":"exact value","label":"short label","param":"setting name"}],"best_mode":"value of the highest-quality mode or null","res_4k":"exact value that means 2K (about 2048 px on the long side), or null if 2K is not offered","max_res":"largest resolution value","best_quality":"exact highest quality value or null","quality_param":"setting name or null","max_images":4}
 "modes" are the model's variant/mode/style choices (a dropdown such as "Flare"); leave it empty if the model has none.`,{modelTier:"quick"}).catch(()=>({}));
       S.opts[id]={raw,parsed:parsed||{}};
     }
@@ -961,7 +961,7 @@ async function generate(keys){
   keys.forEach(k=>{ const c=cards[k]; c.steps=[!wanted||refs.length===wanted?"ok":"err"];
     c.stepNote=[!wanted?"none picked":`${refs.length} of ${wanted} attached${refs.length?" as "+refs.map(r=>r.tag).join(", "):""}`];
     c.refWarn=upErr.length?`References not attached: ${upErr.join(" · ")}. Open the Connector log for details.`:""; renderCard(k,c); });
-  flash($("s3state"),"Rendering with Nano Banana 2.1…");
+  flash($("s3state"),"Rendering with Seedream 5.5…");
   await Promise.allSettled(keys.map(k=>runModel(k,refs)));
   clearInterval(tick);
   const ok=keys.some(k=>cards[k].done&&!cards[k].err);
@@ -976,21 +976,21 @@ async function runModel(key,refs){
   const up=()=>renderCard(key,c);
   try{
     if(!prompt) throw {code:"tool_error",message:"Write the prompt first (step 2)."};
-    c.steps[1]="run"; c.ph=`Rendering ${count} in 4K…`; up();
+    c.steps[1]="run"; c.ph=`Rendering ${count} in 2K…`; up();
     if(modelId&&!(modelId in S.opts)) await loadOptions(key);
     const opt=(modelId&&S.opts[modelId])||{raw:await modelDetails(modelId),parsed:{}}; const P=opt.parsed||{};
     const modeParam=(P.modes||[]).find(x=>String(x.value)===String(mode))?.param||null;
     const plan=await buildArgs("images_generate",
       `Generate exactly 1 ${S.mode==="icon"?"3D icon illustration image, 16:9 widescreen, on a flat Light Stone #ECE8DF background,":"photorealistic image"} with model "${modelId||m.label}". Use the prompt verbatim.
-Resolution: 4K. Use the exact 4K value from the model settings${P.res_4k?` ("${P.res_4k}")`:""}; if 4K is not offered, use the largest value${P.max_res?` ("${P.max_res}")`:""}.
+Resolution: 2K. Use the exact 2K value from the model settings${P.res_4k?` ("${P.res_4k}")`:""}; if 2K is not offered, use the closest larger value, else the largest${P.max_res?` ("${P.max_res}")`:""}.
 Quality: the highest available${P.best_quality?` ("${P.best_quality}"${P.quality_param?` on "${P.quality_param}"`:""})`:""}.
 ${mode?`Mode: "${mode}"${modeParam?` on setting "${modeParam}"`:""}.`:"Mode: model default."}
 Aspect ratio: ${typeof aspect==="string"?(aspect==="auto"?"auto (let the model choose)":aspect):`custom ${aspect.width}x${aspect.height} px`}.
 Number of images: 1 (the page calls this tool once per image).
 REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this order, so the first becomes @img1, the second @img2 and so on (the prompt refers to them by those tags). Use the schema's reference field(s) with the uploaded creation identifiers (or URLs if the schema takes URLs). Put EVERY reference in the GENERAL image reference list (reference type "image", shown as @img1, @img2… in Magnific), keeping the order. NEVER use the "style" reference type/slot and NEVER the "character" or "product" slot: the style slot must stay empty/default because it changes the rendering type (photo vs illustration vs 3D). Each reference object carries the creation id in the field "identifier" (exactly that name). If the schema needs a type per reference, set it to "image". Do not drop any reference. Fill the negative prompt field if the schema has one. Turn off any prompt auto-enhancement so the brand prompt stays as written.`,
-      {model:modelId, model_label:m.label, model_settings:opt.raw, prompt, negative_prompt:negativeNow(), composition:"person centred on the vertical centre line", setting:S.setting, aspect_ratio:aspect, resolution:P.res_4k||"4K", quality:P.best_quality||"high", mode, num_images:1, references:refs},"default");
+      {model:modelId, model_label:m.label, model_settings:opt.raw, prompt, negative_prompt:negativeNow(), composition:"person centred on the vertical centre line", setting:S.setting, aspect_ratio:aspect, resolution:P.res_4k||"2K", quality:P.best_quality||"high", mode, num_images:1, references:refs},"default");
     plan.args=oneImage(fixRefs(plan.args,refs));
-    const asked4k=!!P.res_4k||/4k|3840|4096/i.test(JSON.stringify(plan.args));
+    const asked4k=!!P.res_4k||/2k|2048|4k|3840|4096/i.test(JSON.stringify(plan.args));
     /* One image per Magnific call, all calls in parallel: models that ignore the count still give exactly N images,
        and each image has its own creation, preview and PNG link */
     c.outs=Array.from({length:count},()=>({id:null,url:null,img:null,blob:null,long:0,pending:true})); c.sel=0; c.webUrls=[]; up();
@@ -999,14 +999,14 @@ REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this o
       const r=await callMag("images_generate",plan.args);
       let rr=readResult(r); if(!rr.ids.length&&!rr.urls.length&&!rr.images.length) rr=await extractWithClaude(r,"the creation identifier of the image being generated");
       const genId=rr.ids[0]||null; const web=rr.webUrl||rr.links.find(u=>/magnific\.com\/app\//i.test(u))||null;
-      if(!rr.images.length&&!DONE.test(rr.status)){ if(!genId) throw {code:"tool_error",message:"Magnific didn't return a creation to wait for."}; rr=await waitFor([genId],"4K image generation"); }
+      if(!rr.images.length&&!DONE.test(rr.status)){ if(!genId) throw {code:"tool_error",message:"Magnific didn't return a creation to wait for."}; rr=await waitFor([genId],"2K image generation"); }
       const o=c.outs[slot]; o.id=rr.ids[0]||genId; o.url=rr.urls[0]||null; o.webUrl=rr.webUrl||web; o._rr=rr;
       let shot=rr.images[0]||null, pw=0;
       if(!shot&&o.id){ const pv=await preview(o.id); shot=pv.image; o.url=o.url||pv.urls[0]||null; pw=Math.max(pv.w,pv.h); }
       if(shot){ o.img=`data:${shot.mime};base64,${shot.data}`; o.blob=b64Blob(shot.data,shot.mime); }
       /* Size: trust Magnific's reported dimensions, then the requested 4K, then the preview's own pixels */
-      o.long=pw||Math.max(rr.w,rr.h)||(asked4k?(plan.expected_long_side_px||3840):0)||(o.img?await longSide(o.img):0)||plan.expected_long_side_px||0;
-      if(rr.res4k||asked4k&&/4k/i.test(JSON.stringify(plan.args))) o.long=Math.max(o.long,3840);
+      o.long=pw||Math.max(rr.w,rr.h)||(asked4k?(plan.expected_long_side_px||2048):0)||(o.img?await longSide(o.img):0)||plan.expected_long_side_px||0;
+      if(rr.res4k||asked4k&&/2k|4k/i.test(JSON.stringify(plan.args))) o.long=Math.max(o.long,2048);
       o.pending=false; done++; c.ph=`Rendering in Magnific… ${done} of ${count} ready`; up();
     };
     c.ph=`Rendering ${count} in Magnific…`; up();
@@ -1018,23 +1018,23 @@ REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this o
     const n=c.outs.length;
     if(failed.length) c.refWarn=(c.refWarn?c.refWarn+" ":"")+`${failed.length} of ${count} images failed in Magnific: ${mcpCopy(failed[0].reason)}`;
     c.steps[1]="ok"; c.stepNote[1]=`${n} image${n>1?"s":""}${mode?` · ${$(m.mode).selectedOptions[0]?.textContent.replace(" · best quality","")}`:""}`; c.steps[2]="run"; up();
-    /* 4K check: Magnific upscale only for an output that came back under 4K */
+    /* 2K check: Magnific upscale only for an output that came back under 2K */
     let ups=0;
     for(const o of c.outs){
-      if(o.long>=3800||isIconKey(key)) continue;
+      if(o.long>=2000||isIconKey(key)) continue;
       if(S.upModes===null){ try{ const mr=await callMag("images_upscale_modes_list",{}); S.upModes=mr.payload??mr.content; }catch{ S.upModes=""; } }
-      const factor=o.long?Math.max(2,Math.min(16,Math.pow(2,Math.ceil(Math.log2(3840/o.long))))):2;
-      const ua=await buildArgs("images_upscale",`Upscale this photograph ${factor}x so the long side is at least 3840 px (4K) for ${$("channel").value}. Photographic realism: preserve faces, skin texture and fabric faithfully, keep creativity/hallucination at the minimum, no stylisation.`,
+      const factor=o.long?Math.max(2,Math.min(16,Math.pow(2,Math.ceil(Math.log2(2048/o.long))))):2;
+      const ua=await buildArgs("images_upscale",`Upscale this photograph ${factor}x so the long side is at least 2048 px (2K) for ${$("channel").value}. Photographic realism: preserve faces, skin texture and fabric faithfully, keep creativity/hallucination at the minimum, no stylisation.`,
         {creation_identifier:o.id, source_url:o.url, current_long_side_px:o.long||null, scale_factor:factor, available_modes:S.upModes},"quick");
       const ur=await callMag("images_upscale",ua.args);
       let ux=readResult(ur); if(!ux.ids.length&&!ux.urls.length) ux=await extractWithClaude(ur,"the creation identifier of the upscale job");
-      if(!(ux.urls.length||ux.images.length)&&ux.ids[0]) ux=await waitFor([ux.ids[0]],"4K upscale");
+      if(!(ux.urls.length||ux.images.length)&&ux.ids[0]) ux=await waitFor([ux.ids[0]],"2K upscale");
       let shot=ux.images[0]||null; let uw=Math.max(ux.w,ux.h);
       if(!shot&&ux.ids[0]){ const pv=await preview(ux.ids[0]); shot=pv.image; ux.urls.push(...pv.urls); uw=uw||Math.max(pv.w,pv.h); }
       if(shot){ o.img=`data:${shot.mime};base64,${shot.data}`; o.blob=b64Blob(shot.data,shot.mime); }
       o.id=ux.ids[0]||o.id; o.url=ux.urls[0]||o.url; o.long=uw||(o.long?o.long*factor:3840); ups++; up();
     }
-    c.steps[2]="ok"; c.stepNote[2]=isIconKey(key)?"not needed for icons":ups?`${ups} upscaled with Magnific`:"native 4K";
+    c.steps[2]="ok"; c.stepNote[2]=isIconKey(key)?"not needed for icons":ups?`${ups} upscaled with Magnific`:"native 2K";
     /* Make sure every image has a PNG link, and bytes for the preview where Magnific provides them */
     c.steps[3]="run"; c.stepNote[3]="getting PNG links"; up();
     for(const o of c.outs){ await completeFiles(o,o._rr||{ids:[],urls:[],links:[],images:[]}); up(); }
@@ -1068,7 +1068,7 @@ function longSide(src){ return new Promise(r=>{ const im=new Image(); im.onload=
 async function save(key,o){
   if(!o?.blob) return;
   const ext=/png/.test(o.blob.type)?"png":/webp/.test(o.blob.type)?"webp":"jpg";
-  const filename=`BAE_${MODELS[key].label.replace(/\s+/g,"-")}_${aspectText().replace(/[:×]/g,"x")}_${o.long>=3800?"4K":"preview"}.${ext}`;
+  const filename=`BAE_${MODELS[key].label.replace(/\s+/g,"-")}_${aspectText().replace(/[:×]/g,"x")}_${o.long>=2000?"2K":"preview"}.${ext}`;
   if(S.web){ const a=document.createElement("a"); a.href=URL.createObjectURL(o.blob); a.download=filename; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1500); return; }
   if(!downloads){ flash($("s3state"),"Saving isn't available in this view. Use “Open file”.",true); return; }
   try{ await downloads.save({filename,data:o.blob}); }
@@ -1106,7 +1106,7 @@ function loadHist(){ try{ return JSON.parse(localStorage.getItem(HKEY)||"[]"); }
 function saveHist(h){ try{ localStorage.setItem(HKEY,JSON.stringify(h.slice(0,12))); }catch{ try{ localStorage.setItem(HKEY,JSON.stringify(h.slice(0,4).map(x=>({...x,thumb:null})))); }catch{} } }
 async function thumbOf(dataUrl){ try{ const bmp=await createImageBitmap(await (await fetch(dataUrl)).blob()); const k=240/Math.max(bmp.width,bmp.height); const c=document.createElement("canvas"); c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k); c.getContext("2d").drawImage(bmp,0,0,c.width,c.height); return c.toDataURL("image/jpeg",.78); }catch{ return null; } }
 async function addHistory(o){
-  const h=loadHist(); h.unshift({thumb:o.img?await thumbOf(o.img):null,url:o.url||null,res:o.long>=3800?"4K":(o.long?o.long+"px":""),aspect:aspectText(),look:S.look,setting:S.setting,brief:$("brief").value.slice(0,140),t:Date.now()});
+  const h=loadHist(); h.unshift({thumb:o.img?await thumbOf(o.img):null,url:o.url||null,res:o.long>=2000?"2K":(o.long?o.long+"px":""),aspect:aspectText(),look:S.look,setting:S.setting,brief:$("brief").value.slice(0,140),t:Date.now()});
   saveHist(h); renderHistory();
 }
 function renderHistory(){
@@ -1387,16 +1387,16 @@ function setMode(m,init){
   document.body.classList.toggle("mode-icon",m==="icon");
   document.querySelectorAll("#modeSeg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.mode===m?"true":"false"));
   const icon=m==="icon";
-  $("heroTitle").textContent=icon?"Turn an idea into a BAE icon.":"Turn a brief into an on-brand 4K photograph.";
-  $("heroLede").textContent=icon?"Describe the icon. Claude designs it in the BAE illustration system (glassmorphism over the orange-to-burgundy gradient, one focal point), and GPT 2.5 renders it in 16:9 on a Light Stone background.":"Write what the photo should show. Claude reads it against the BAE photography rules and your references, writes the prompt, and Nano Banana 2.1 renders it in 4K.";
-  if(!S.web) $("heroSub").textContent=icon?"GPT 2.5 · 16:9 · Light Stone background · via Magnific":"Nano Banana 2.1 · native 4K · via Magnific";
+  $("heroTitle").textContent=icon?"Turn an idea into a BAE icon.":"Turn a brief into an on-brand 2K photograph.";
+  $("heroLede").textContent=icon?"Describe the icon. Claude designs it in the BAE illustration system (glassmorphism over the orange-to-burgundy gradient, one focal point), and GPT 2.5 renders it in 16:9 on a Light Stone background.":"Write what the photo should show. Claude reads it against the BAE photography rules and your references, writes the prompt, and Seedream 5.5 renders it in 4K.";
+  if(!S.web) $("heroSub").textContent=icon?"GPT 2.5 · 16:9 · Light Stone background · via Magnific":"Seedream 5.5 · 2K · via Magnific";
   $("briefLbl").textContent=icon?"Icon idea":"Brief";
   $("btnCreate").textContent=icon?"Create icon":"Create image";
   $("presets").innerHTML=(icon?ICON_PRESETS:PHOTO_PRESETS).map(([l,b])=>`<button type="button" data-b="${esc(b)}">${esc(l)}</button>`).join("");
-  if(!S.web) $("mNanoName").textContent=icon?`${S.gptName||"GPT 2.5"} · via Magnific`:(S.nanoName||"Nano Banana 2.1")+" · via Magnific";
+  if(!S.web) $("mNanoName").textContent=icon?`${S.gptName||"GPT 2.5"} · via Magnific`:(S.nanoName||"Seedream 5.5")+" · via Magnific";
   $("results").classList.add("one"); $("rNano2").hidden=true;
   $("pNano").value=PROMPT_STASH[m]||""; $("pNano").placeholder=icon?"The icon prompt is written after the concept. You can edit it before generating.":"Written after the scene is described. You can edit it before generating.";
-  $("promptLbl").textContent=icon?"GPT 2.5 icon prompt":"Nano Banana 2.1 prompt";
+  $("promptLbl").textContent=icon?"GPT 2.5 icon prompt":"Seedream 5.5 prompt";
   /* keep each service's own picks: only stash the picks of the mode we are actually leaving */
   if(icon){ if(prev!=="icon") S._photoPicked=S.picked.filter(id=>!/^ic_/.test(id)); S.picked=(S._iconPicked&&S._iconPicked.some(id=>/^ic_/.test(id)))?S._iconPicked:PICK_ICON.slice(); S.refTab="ic"; }
   else { if(prev==="icon") S._iconPicked=S.picked.slice(); S.picked=(S._photoPicked&&S._photoPicked.length?S._photoPicked:S.picked).filter(id=>!/^ic_/.test(id)); if(!S.picked.length) S.picked=PICK_BOLD.slice(); if(S.refTab==="ic") S.refTab=S.look==="Bold"?"yt":"bae"; }
@@ -1425,12 +1425,12 @@ function setMode(m,init){
   const steps=[
     {t:"Welcome to Studio", p:()=>"On-brand images in a few simple steps. This quick tour takes about a minute.", hero:true},
     {el:()=>!$("setup").hidden?$("setup"):$("btnConnect"), t:"Connect once", p:()=>!$("setup").hidden?"Connect Magnific so the studio can render, then link your references. You only do this the first time.":"Magnific is connected. If it ever disconnects, press Reconnect here."},
-    {el:()=>$("modeSeg"), t:"Choose what to make", p:()=>"Photography makes 4K photos. Icons makes 3D BAE icons on Light Stone. You can switch any time."},
+    {el:()=>$("modeSeg"), t:"Choose what to make", p:()=>"Photography makes 2K photos. Icons makes 3D BAE icons on Light Stone. You can switch any time."},
     {el:()=>$("briefCard"), t:()=>icon()?"Describe the icon":"Describe the photo", p:()=>icon()?"Write the idea in a sentence, in Arabic or English, or tap an example like Cards stack.":"Write what the photo should show, in Arabic or English, or tap an example to start from."},
     {el:()=>$("optCard"), t:"Pick a few options", p:()=>icon()?"Icons are already locked to 16:9 on Light Stone with glassmorphism and the BAE gradient. Just choose how many.":"Choose the look, setting, shot and size. Wardrobe, light, iPhone 18 and the centred subject are already locked to the BAE rules."},
     {el:()=>$("refCard"), t:"References are ready", p:()=>"We pick BAE images that guide the camera and style, never the layout. Press Browse all to change them."},
-    {el:()=>$("btnCreate"), t:()=>icon()?"Create the icon":"Create the image", p:()=>icon()?"One press: Claude designs the icon and GPT 2.5 renders it. It takes a minute or two.":"One press: Claude reads the brief, writes the prompt, and Nano Banana 2.1 renders it in 4K. It takes a minute or two."},
-    {el:()=>$("s3"), t:"Download it", p:()=>icon()?"Your icon appears here. Download the 16:9 PNG or the square S, M, L and XL sizes.":"Your image appears here. Download the 4K PNG, open it in Magnific, or create another."},
+    {el:()=>$("btnCreate"), t:()=>icon()?"Create the icon":"Create the image", p:()=>icon()?"One press: Claude designs the icon and GPT 2.5 renders it. It takes a minute or two.":"One press: Claude reads the brief, writes the prompt, and Seedream 5.5 renders it in 4K. It takes a minute or two."},
+    {el:()=>$("s3"), t:"Download it", p:()=>icon()?"Your icon appears here. Download the 16:9 PNG or the square S, M, L and XL sizes.":"Your image appears here. Download the 2K PNG, open it in Magnific, or create another."},
     {el:()=>$("advWrap"), t:"Go deeper, if you like", p:()=>"Edit the prompt, rebuild from a photo, or read the locked rules. You never need this for a good result.", last:true},
   ];
   let i=0, raf=0;
@@ -1701,6 +1701,12 @@ const RL_SD25=`SEEDANCE 2.5 — WHAT IT TAKES (ByteDance, July 2026):
 - Clay/textureless 3D renders or a top-down plan as a reference can lock composition, blocking and light direction.
 - A long take needs something to travel toward (a walk, a push-in, an event); static subjects drift. Describe looks in plain visual terms — naming a film, studio or artist can be rejected by moderation.
 - Real cost/time: a 30 s 1080p clip with audio takes ~9–10 min; 15 s with 7 refs ~12 min. Judge by usable seconds per credit, draft at 480p first.`;
+const RL_SEEDREAM=`SEEDREAM 5.5 (ByteDance) — THE IMAGE MODEL FOR EVERY STILL (cast sheets, locations, props, storyboard frames, first frames). Always 2K.
+- Takes up to 10 reference images; output tiers 1K / 1.5K / 2K (2K ≈ 4.2 MP, e.g. 2736×1536 wide); aspect 1:1, 4:3, 3:4, 16:9, 9:16, 3:2, 2:3, 21:9. Transparent PNG backgrounds possible. Very strong at small, dense text (Arabic still needs checking letter by letter) and at preserving everything outside an edit across many rounds of edits.
+- Write the prompt as a brief, one clause per decision: open with the DELIVERABLE ("Cinematic storyboard frame, vertical 9:16, …" / "Character reference sheet …"), then subject, setting, light, lens & framing, style, and end with exclusions ("no text, no logos, no watermark").
+- Name the orientation in words (vertical 9:16 / wide 16:9). Describe products by materials and parts, not just colour. Say where the subject sits and where empty space stays.
+- Text in the image: put each line in double quotes, give it a position, type style and colour, and end with "no other text".
+- Keep it under ~600 words. Refer to attached references as @img1, @img2… and give each ONE job (identity / place / product).`;
 const RL_JO=`JORDAN, FROM THE INSIDE (you are the best creative director in Jordan; think like a Jordanian, not a tourist):
 - Values that move people here: النخوة (stepping in for someone without being asked), الشهامة (gallantry, quiet decency), الغيرة (protective care for family and neighbourhood), الكرم (generosity: the host who insists, the extra plate), الشرف والسمعة (honour and how the family is seen), الجيرة (the neighbour is family), العونة (everyone helps: harvest, wedding, moving house), برّ الوالدين (caring for parents). Show these through ACTIONS, never slogans: a young man pays a stranger's taxi without a word, the son quietly settles his father's bill, the neighbour lends the gas cylinder.
 - Daily texture: Amman hills and stairs (Jabal al-Weibdeh, Jabal Amman, Lweibdeh, Rainbow St, Abdali, Sweifieh, Taj, Downtown/Balad), traffic at the 7th circle, servees and yellow taxis, the khaltour coffee, kaak with zaatar, knafeh from Habibah, mansaf at Friday lunch, the jameed, the shrak bread, falafel at Hashem, the gas truck's tune, the morning "ya sabah al-khair", the evening walk, the hookah on the balcony, winter sobba heater and the family around it, snow day in Amman, the Dead Sea Friday, Aqaba holidays, Wadi Rum, Ajloun forests, Jerash, Salt's yellow houses, Irbid students, Zarqa workers.
@@ -2190,9 +2196,10 @@ function rlStudioTools(turn){
         else if(field==="stage"){ if(rlStageIx(v)<0) return "Unknown stage."; RL.stage=String(v); }
         else if(field==="picked_idea"){ const x=RL.ideas[+v]; if(!x) return "No such idea."; RL.picked=x; }
         rlEvent(`Director set ${field}.`); return `${field} saved.`; }},
-    {name:"studio_action",description:"Start a studio job. These spend Magnific credits and take minutes — use them only when the user asked for it (or clearly approved). generate_image (target = element handle), generate_frame (target = scene number), render_video (target = scene number), review_video (Gemini watches the rendered scene, target = scene number), check_scene (re-check a scene's prompt, target = scene number). Jobs start right after your reply.",
-      inputSchema:{type:"object",properties:{action:{type:"string",enum:["generate_image","generate_frame","render_video","review_video","check_scene"]},target:{type:"string"}},required:["action","target"]},
+    {name:"studio_action",description:"Start a studio job. These spend Magnific credits and take minutes — use them only when the user asked for it (or clearly approved). generate_image (target = element handle), generate_frame (target = scene number), render_video (target = scene number), review_video (Gemini watches the rendered scene, target = scene number), check_scene (re-check a scene's prompt, target = scene number), generate_storyboard (one Seedream 5.5 still at 2K per script scene; target = all, or script scene numbers like 2,3). Jobs start right after your reply.",
+      inputSchema:{type:"object",properties:{action:{type:"string",enum:["generate_image","generate_frame","render_video","review_video","check_scene","generate_storyboard"]},target:{type:"string"}},required:["action","target"]},
       execute:async({action,target})=>{ const t=String(target||"");
+        if(action==="generate_storyboard"){ if(!RL.script?.scenes?.length) return "No script yet."; turn.actions.push([action,t]); T("Queued: storyboard"); return `Queued the storyboard (${t==="all"||!t?"every script scene":"script scene "+t}); one Seedream 5.5 still at 2K per scene.`; }
         if(action==="generate_image"){ if(!rlElByTag(t)&&!turn.changes.some(c=>c.includes(t))) return `No element ${t}.`; }
         else if(!RL.scenes.find(s=>+s.n===+t)&&!turn.scenes.some(s=>+s.n===+t)) return `No scene ${t}.`;
         turn.actions.push([action,t]); T(`Queued: ${action.replace("_"," ")} ${t}`); return `Queued ${action} ${t}; it starts as soon as you reply.`; }}
@@ -2224,7 +2231,8 @@ async function rlWriteScenes(L){
 function rlRunActions(turn){
   if(turn.writes?.length) rlWriteScenes(turn.writes);
   for(const [a,t] of turn.actions){
-    if(a==="generate_image") rlGenElement(rlElByTag(t)?.tag||t);
+    if(a==="generate_storyboard") rlGenStoryboard(t&&t!=="all"?String(t).split(/[ ,]+/).map(x=>+x-1).filter(x=>x>=0):null);
+    else if(a==="generate_image") rlGenElement(rlElByTag(t)?.tag||t);
     else if(a==="generate_frame") rlGenFrame(t);
     else if(a==="render_video") rlRenderScene(t);
     else if(a==="review_video") rlReview(t);
@@ -2250,6 +2258,8 @@ function rlPromptFor(text,memText,canSearch,agent){
 ${RL_METHOD}
 
 ${RL_SD25}
+
+${RL_SEEDREAM}
 
 ${RL_BAE}
 
@@ -2296,7 +2306,7 @@ Reply with ONLY one JSON object. Always include "reply" (the chat message, no ma
   — prompt = the full THREE-PANEL character sheet prompt (CHARACTER SHEET template); set "library" only when the user wants that BAE character
 - "locations": [{"tag","handle","name","kind":"location"|"prop","description","prompt","from_attachment":null|N}]  — full image prompt (LOCATION template, empty of people / PROP SHEET template)
 - "film_look": the shared FILM LOOK paragraph (write it with the first scenes; change it only when asked)
-- "scenes": [{"n","title","logline","duration_s","refs":["@char_…","@loc_…"],"blueprint":{...},"frame_prompt","prompt"}]  — logline = one line "what it does"; blueprint = the top-down blocking plan written FIRST (format: ${RL_BP_SCHEMA}); frame_prompt = the still-image prompt (Nano Banana 2.1) for the scene's first frame, using the tags ("the man @img1 sits…"); prompt = the full Seedance 2.5 prompt that continues from that first frame, following the DIRECTING structure; duration 4–15 s, ${set.aspect}
+- "scenes": [{"n","title","logline","duration_s","refs":["@char_…","@loc_…"],"blueprint":{...},"frame_prompt","prompt"}]  — logline = one line "what it does"; blueprint = the top-down blocking plan written FIRST (format: ${RL_BP_SCHEMA}); frame_prompt = the still-image prompt (Seedream 5.5) for the scene's first frame, using the tags ("the man @img1 sits…"); prompt = the full Seedance 2.5 prompt that continues from that first frame, following the DIRECTING structure; duration 4–15 s, ${set.aspect}
 - "chips": 2–4 short suggested next replies for the user, in their language
 - "used_memories": ids of the memory cards (c_…) that actually shaped this answer, 0–8
 - "advisors": 0–3 short notes from the ASSISTANT DIRECTORS that matter for THIS reply: [{"id":"trend"|"story"|"dp"|"performance"|"tech","note":"one concrete suggestion in the user's language"}]. Only when genuinely useful; never repeat what you already did.`;
@@ -2606,12 +2616,14 @@ function rlBoard(){
     if(RL.ideasPrev.length) out.push(`<details class="rl-notes"><summary>Earlier ideas (${RL.ideasPrev.length})</summary>${RL.ideasPrev.map((x,i)=>`<div class="rl-prev" dir="auto"><b>${esc(x.title||"")}</b> — ${esc(x.hook||x.logline||"")} <button class="a-btn" type="button" data-rl="pickprev" data-i="${i}">Use this</button></div>`).join("")}</details>`);
   }
   if(v==="script"){
-    out.push(rlHead("Script",RL.script?`${esc(RL.script.title||"")} · ${RL.script.duration_s||rlSet().length} s · edit any line, or ask Claude for changes in the chat`:"Scene by scene, with timing, dialogue, on-screen text and sound."));
+    const nb=(RL.script?.scenes||[]).filter(s=>s.board?.id).length, busyB=(RL.script?.scenes||[]).some(s=>["queued","write","run"].includes(s.board?.status));
+    out.push(rlHead("Script",RL.script?`${esc(RL.script.title||"")} · ${RL.script.duration_s||rlSet().length} s · edit any line, or ask Claude for changes in the chat`:"Scene by scene, with timing, dialogue, on-screen text and sound.",
+      RL.script?.scenes?.length?`<button class="a-btn" type="button" data-rl="genboard"${busyB?" disabled":""}>${busyB?"Drawing the storyboard…":nb?"Redraw storyboard":"Generate storyboard"}</button>${nb?`<button class="a-btn" type="button" data-rl="dlboard">Download all (${nb})</button>`:""}`:""));
     if(!RL.script?.scenes?.length) out.push(rlEmpty(RL.picked?"Ask Claude to write the script for the chosen idea.":"Choose an idea first.",RL.picked?`<button class="btn primary" type="button" data-rl="sayraw" data-t="${esc(rlAr()?"اكتبلي السيناريو للفكرة المختارة.":"Write the script for the chosen idea.")}">Write the script</button>`:`<button class="btn" type="button" data-tab="idea">Go to Idea</button>`));
-    else{ out.push(`<div class="rl-card">${RL.script.scenes.map((s,i)=>`<div class="rl-beat" dir="auto"><span class="tc">${esc(s.time||"")}</span><div class="ln"><b>${esc(s.title||"")}</b>
+    else{ out.push(`<div class="rl-card">${RL.script.scenes.map((s,i)=>`<div class="rl-beat${s.board?" has-sb":""}" dir="auto"><span class="tc">${esc(s.time||"")}</span><div class="ln"><b>${esc(s.title||"")}</b>
       <textarea class="rl-field" rows="2" data-rl-edit="b:${i}:action" aria-label="Action">${esc(s.action||"")}</textarea>
       <textarea class="rl-field" rows="${Math.max(1,(s.dialogue||[]).length)}" data-rl-edit="b:${i}:dialogue" aria-label="Dialogue, one line per speaker as Name: line" placeholder="Name: line">${esc((s.dialogue||[]).map(d=>`${d.who||""}: ${d.line||""}`).join("\n"))}</textarea>
-      <div class="rl-two"><input class="rl-field" data-rl-edit="b:${i}:on_screen_text" value="${esc(s.on_screen_text||"")}" placeholder="On-screen text" aria-label="On-screen text"><input class="rl-field" data-rl-edit="b:${i}:sound" value="${esc(s.sound||"")}" placeholder="Sound" aria-label="Sound"></div></div></div>`).join("")}</div>`);
+      <div class="rl-two"><input class="rl-field" data-rl-edit="b:${i}:on_screen_text" value="${esc(s.on_screen_text||"")}" placeholder="On-screen text" aria-label="On-screen text"><input class="rl-field" data-rl-edit="b:${i}:sound" value="${esc(s.sound||"")}" placeholder="Sound" aria-label="Sound"></div></div>${s.board?rlBoardCell(s,i):""}</div>`).join("")}</div>`);
       out.push(`<div class="rl-btns rl-rateline"><span class="t12 muted">How is this script?</span>${rlRate("script","script:"+(RL.script.title||""),RL.script.scenes.map(s=>`${s.title}: ${s.action}`).join(" / "))}</div>`);
       if(rlStageIx(RL.stage)<=rlStageIx("script")) out.push(rlNext("approveScript","Approve script · build the cast"));
     }
@@ -2728,7 +2740,7 @@ function rlShotCard(sc){
         <div class="rl-scn-inner">
           ${rlShotBar(sc,false)}
           ${rlBlockingHTML(sc)}
-          <details class="rl-sec" data-open-key="${K}:f"${rlOpenAttr(K+":f")}><summary>First frame prompt <span class="t12 muted">Nano Banana 2.1 · ${set.aspect}</span></summary>
+          <details class="rl-sec" data-open-key="${K}:f"${rlOpenAttr(K+":f")}><summary>First frame prompt <span class="t12 muted">Seedream 5.5 · ${set.aspect}</span></summary>
             <textarea class="rl-prompt" id="rlF${sc.n}" data-rl-edit="f:${sc.n}" spellcheck="false" dir="ltr" placeholder="Written from the scene when you generate the first frame">${esc(sc.frame_prompt||"")}</textarea>
             <div class="rl-btns"><button class="btn small" type="button" data-rl="frame" data-n="${sc.n}" ${f.status==="run"||f.pending?"disabled":""}>${f.status==="run"||f.pending?"Generating…":f.id?"Regenerate first frame":"Generate first frame"}</button>${f.web?`<a class="btn small" href="${esc(f.web)}" target="_blank" rel="noopener">Magnific</a>`:""}</div>
             ${f.status==="paused"||(f.pending&&f.status!=="run")?`<p class="rl-status">Still generating in Magnific — it appears here when it's done.</p>`:""}${f.stale&&f.id?`<p class="rl-status warn">The supervisor corrected this prompt after the image was made. Regenerate it.</p>`:""}
@@ -2855,7 +2867,7 @@ async function rlCheckScenes(ns,{quiet}={}){
   await Promise.all(list.map(async sc=>{
     const local=rlQuickCheck(sc), beat=RL.script?.scenes?.[(+sc.n||1)-1]||null;
     try{
-      const out=await rlAsk(`You are a fast, precise script supervisor for an AI-video scene (${set.aspect}; Nano Banana first frame, then Seedance 2.5). Find what would make the AI misread the scene and fix it with SMALL text edits. Do not rewrite or restyle what is already correct.
+      const out=await rlAsk(`You are a fast, precise script supervisor for an AI-video scene (${set.aspect}; Seedream 5.5 first frame, then Seedance 2.5). Find what would make the AI misread the scene and fix it with SMALL text edits. Do not rewrite or restyle what is already correct.
 ${RL_CHECKLIST}
 Team lessons: ${lessons||"none"}
 Team memory (past mistakes, lessons and rules that match this scene): ${memSearch([sc.title,sc.logline,String(sc.prompt||"").slice(0,900)].filter(Boolean).join(" "),{stage:"directing",limit:10,kinds:["mistake","lesson","rule","technique"],expand:false}).map(x=>"\n- "+x.c.t).join("")||"none"}
@@ -2901,7 +2913,7 @@ async function rlImproveScene(n,instruction){
   const set=rlSet(), before={title:sc.title,duration_s:sc.duration_s,refs:sc.refs,blueprint:sc.blueprint,frame_prompt:sc.frame_prompt,prompt:sc.prompt};
   let ok=false;
   try{
-    const out=await rlAsk(`You are the Director of a Bank al Etihad reel (${set.aspect}, Seedance 2.5 reference-to-video: every element is attached as @img references, no start frame, so the prompt must build the opening composition itself; a Nano Banana 2.1 first-frame still is an optional preview; dialogue ${set.lang}).
+    const out=await rlAsk(`You are the Director of a Bank al Etihad reel (${set.aspect}, Seedance 2.5 reference-to-video: every element is attached as @img references, no start frame, so the prompt must build the opening composition itself; a Seedream 5.5 first-frame still is an optional preview; dialogue ${set.lang}).
 ${instruction?`THE USER ASKED FOR THIS CHANGE TO SCENE ${sc.n}: "${instruction}"
 Apply it precisely and completely. Keep everything the user didn't ask to change (story beat, cast, wardrobe, location, tags), unless the change requires it.`:`UPDATE SHOT PROMPT: rewrite scene ${sc.n} so it is clearly BETTER than the current version, using everything in the brain below, especially the team's latest lessons and this morning's research. Raise the craft: a stronger first-second hook, more precise and motivated camera work (shot sizes, FOV°, moves with speed), better light, a more specific and natural performance, cleaner physics, tighter timing, sharper sound design. Do not change the story beat, the cast or the location.`}
 Rules: keep every element handle (@char_…, @loc_…, @prop_…) exactly; write in the SCENE PROMPT FORMAT of the brain (opener, SECTION + location, first-frame blocking, SHOT n (a–b s) with mm + FOV°, one move with distance and speed, framing limits, camera height, ACTING micro-detail and what not to do, per-second action for continuous takes, HEAD PRIORITY framing, props, RULES, sound); do not add a REFERENCES block or the film look (the studio adds them); state the geography explicitly (zones, who is where, door direction, camera position and direction, head-count, light source); one action per shot; timestamps add up to duration_s (the length the user asked for). Update the blueprint if the blocking changes, and keep frame_prompt = the exact first moment of shot 1. Avoid every mistake in the AI-video rules.
@@ -3066,11 +3078,83 @@ Reply with only JSON: {"suggestions":[{"id":"trend","title":"3–6 words","why":
   finally{ delete sc._room; rlWake(false); rlSave(); rlBoard(); }
 }
 async function rlEnsureChecked(sc){ if(sc._checkP){ await sc._checkP; return; } if(!sc.check||sc.check.dirty||!sc.blueprint){ await rlCheckScenes([sc.n],{quiet:true}); } }
+/* ---------- Storyboard: one Seedream 5.5 still (2K) per script scene, each generated on its own ---------- */
+async function rlBoardFrame(i){
+  const sc=RL.script?.scenes?.[i]; if(!sc) return;
+  const b=sc.board=Object.assign(sc.board||{},{status:"write",err:null}); rlSave(); rlBoard();
+  try{
+    const set=rlSet(); const els=rlEls().filter(e=>e.id||e.description);
+    const txt=`${sc.title||""} ${sc.action||""} ${(sc.dialogue||[]).map(d=>d.who+" "+d.line).join(" ")} ${sc.on_screen_text||""}`;
+    const out=await rlAsk(`You draw the storyboard of a Bank al Etihad (Jordan) reel: ONE cinematic still per script scene, made with Seedream 5.5 at 2K. Write the image prompt for scene ${i+1} only.
+${RL_SEEDREAM}
+FILM LOOK: ${String(RL.look||"").slice(0,1500)||"natural, premium, cinematic; Jordanian setting"}
+FORMAT: ${set.aspect==="9:16"?"vertical 9:16":set.aspect==="16:9"?"wide 16:9":set.aspect}
+WHOLE SCRIPT (for continuity): ${trimJSON((RL.script.scenes||[]).map((x,k)=>`${k+1}. ${x.title}: ${x.action}`),3000)}
+THIS SCENE: ${trimJSON(sc,2500)}
+ELEMENTS (handle · name · has a reference image? · description): ${trimJSON(els.map(e=>`${e.handle} · ${e.name||""} · ${e.id?"IMAGE":"no image"} · ${String(e.description||"").slice(0,200)}`),5000)}
+Pick the ONE moment that tells this scene best (the key frame), and frame it like a director: shot size, lens, angle, blocking, light, emotion. Use the elements that appear in this scene; list in "refs" only the handles that have an IMAGE (max 8), in the order you cite them as @img1, @img2… in the prompt. Characters without an image are described in words.
+Reply with only JSON: {"moment":"one line","prompt":"the full Seedream 5.5 prompt","refs":["@char_…"]}`,{modelTier:"default",cache:false});
+    const refs=(Array.isArray(out?.refs)?out.refs:[]).map(h=>rlElByTag(h)).filter(e=>e&&e.id).slice(0,10).map(e=>({id:e.id,tag:e.handle}));
+    const prompt=String(out?.prompt||"").trim(); if(!prompt) throw {code:"invalid_json",message:"No prompt came back."};
+    Object.assign(b,{status:"run",prompt,moment:String(out?.moment||""),refs:refs.map(r=>r.tag)}); rlSave(); rlBoard();
+    const img=await rlJob(()=>rlImage({prompt,aspect:set.aspect,refs,label:`storyboard ${i+1}`,onQueued:(id,web)=>{ b.pending=id; b.web=web||b.web; rlSave(); }}));
+    Object.assign(b,{id:img.id,web:img.web,status:"ok",at:Date.now()}); delete b.pending;
+    rlEvent(`Storyboard frame ${i+1} was drawn (${b.moment}).`);
+  }catch(e){ b.status="err"; b.err=e?.code==="invalid_json"||e?.code==="refused"?sampleCopy(e):mcpCopy(e); delete b.pending; }
+  finally{ rlSave(); rlBoard(); }
+}
+async function rlGenStoryboard(only){
+  const L=(RL.script?.scenes||[]).map((_,i)=>i).filter(i=>only==null?true:only.includes(i));
+  L.forEach(i=>{ const sc=RL.script.scenes[i]; sc.board=Object.assign(sc.board||{},{status:"queued",err:null}); }); rlSave(); rlBoard();
+  const q=[...L]; const worker=async()=>{ while(q.length){ const i=q.shift(); await rlBoardFrame(i); } };
+  await Promise.all([worker(),worker()]);
+}
+/* every storyboard still in one ZIP (stored, no re-compression) */
+const CRC_T=(()=>{ const t=new Uint32Array(256); for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c=c&1?0xEDB88320^(c>>>1):c>>>1; t[n]=c>>>0; } return t; })();
+function crc32(u){ let c=0xFFFFFFFF; for(let i=0;i<u.length;i++) c=CRC_T[(c^u[i])&255]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+async function makeZip(files){
+  const enc=new TextEncoder(), parts=[], cen=[]; let off=0;
+  for(const f of files){ const data=new Uint8Array(await f.blob.arrayBuffer()), name=enc.encode(f.name), crc=crc32(data);
+    const h=new DataView(new ArrayBuffer(30)); h.setUint32(0,0x04034b50,true); h.setUint16(4,20,true); h.setUint16(8,0,true); h.setUint32(14,crc,true); h.setUint32(18,data.length,true); h.setUint32(22,data.length,true); h.setUint16(26,name.length,true);
+    parts.push(h.buffer,name,data);
+    const c=new DataView(new ArrayBuffer(46)); c.setUint32(0,0x02014b50,true); c.setUint16(4,20,true); c.setUint16(6,20,true); c.setUint32(16,crc,true); c.setUint32(20,data.length,true); c.setUint32(24,data.length,true); c.setUint16(28,name.length,true); c.setUint32(42,off,true);
+    cen.push(c.buffer,name); off+=30+name.length+data.length; }
+  const csize=cen.reduce((a,x)=>a+(x.byteLength??x.length),0);
+  const e=new DataView(new ArrayBuffer(22)); e.setUint32(0,0x06054b50,true); e.setUint16(8,files.length,true); e.setUint16(10,files.length,true); e.setUint32(12,csize,true); e.setUint32(16,off,true);
+  return new Blob([...parts,...cen,e.buffer],{type:"application/zip"});
+}
+async function rlFullImage(id){
+  /* the full-size file: what generation returned, else ask Magnific for the original */
+  let src=rlFull[id];
+  const big=src?await longSide(src):0;
+  if(!src||big<2000){ const o={id,url:null,img:null,long:0}; await completeFiles(o,null).catch(()=>{}); if(o.img&&(await longSide(o.img))>big) src=o.img; }
+  if(!src) return null; rlFull[id]=src; return await (await fetch(src)).blob();
+}
+async function rlDownloadBoard(btn){
+  const L=(RL.script?.scenes||[]).map((s,i)=>({s,i})).filter(x=>x.s.board?.id);
+  if(!L.length) return;
+  if(!downloads){ rlSys("Saving isn't available in this view."); return; }
+  const lbl=btn?.textContent; let done=0; const files=[];
+  for(const {s,i} of L){ if(btn) btn.textContent=`Preparing ${++done}/${L.length}…`;
+    const b=await rlFullImage(s.board.id).catch(()=>null); if(!b) continue;
+    const ext=/png/.test(b.type)?"png":/webp/.test(b.type)?"webp":"jpg";
+    files.push({name:`${String(i+1).padStart(2,"0")}_${String(s.title||"scene").replace(/[^\p{L}\p{N}]+/gu,"-").replace(/^-|-$/g,"").slice(0,40)||"scene"}.${ext}`,blob:b}); }
+  if(btn) btn.textContent=lbl;
+  if(!files.length){ rlSys("Couldn't read the storyboard images from Magnific."); return; }
+  try{ await downloads.save({filename:`BAE_${String(RL.title||"reel").replace(/[^\p{L}\p{N}]+/gu,"-").slice(0,40)}_storyboard.zip`,data:await makeZip(files)}); }
+  catch(e){ if(e?.code!=="declined") rlSys("Couldn't save the file ("+(e?.code||"error")+")."); }
+}
+function rlBoardCell(s,i){
+  const b=s.board||{}; const thumb=b.id?rlTGet(b.id):null;
+  const st=b.status==="queued"?"Waiting…":b.status==="write"?"Choosing the key moment…":b.status==="run"?"Drawing in Seedream 5.5 · 2K…":b.status==="err"?esc(b.err||"Failed"):"";
+  return `<div class="rl-sbcell${b.status==="run"||b.status==="write"||b.status==="queued"?" busy":""}">${thumb?`<img src="${thumb}" alt="Storyboard frame ${i+1}" data-rl-zoom="${esc(b.id)}">`:`<div class="ph">${st||"No frame yet"}</div>`}
+    <div class="cap"><span class="t12 muted">${thumb&&st?st:esc(b.moment||"")}</span><button type="button" class="btn small" data-rl="board1" data-i="${i}"${b.status==="run"||b.status==="write"?" disabled":""}>${b.id?"Redraw":"Draw"}</button></div></div>`;
+}
 /* ---------- Magnific: images for cast, locations and first frames ---------- */
 async function rlImage({prompt,aspect,refs=[],label,onQueued}){
   const model=$("selNano").value||null;
-  const plan=await buildArgs("images_generate",`Generate exactly 1 photorealistic image with model "${model||"Nano Banana 2.1"}" (Google Nano Banana 2.1). Use the prompt verbatim. Aspect ratio ${aspect}. Highest quality, 2K or 4K if offered. ${refs.length?"Attach EVERY item of Data.references as image references, in exactly this order (the first is @img1, the second @img2…), using each item's identifier.":"No references."}`,
-    {model, model_label:"Nano Banana 2.1", prompt, aspect_ratio:aspect, num_images:1, references:refs.length?refs.map(r=>({identifier:r.id,id:r.id,type:"image",name:r.tag})):undefined},"default");
+  const plan=await buildArgs("images_generate",`Generate exactly 1 photorealistic image with model "${model||"Seedream 5.5"}" (ByteDance Seedream 5.5). Use the prompt verbatim. Aspect ratio ${aspect}. Resolution 2K (the 2K tier, about 2048 px+ on the long side), highest quality. ${refs.length?"Attach EVERY item of Data.references as image references, in exactly this order (the first is @img1, the second @img2…), using each item's identifier.":"No references."}`,
+    {model, model_label:"Seedream 5.5", prompt, aspect_ratio:aspect, resolution:"2K", num_images:1, references:refs.length?refs.map(r=>({identifier:r.id,id:r.id,type:"image",name:r.tag})):undefined},"default");
   const r=await callMag("images_generate",oneImage(refs.length?fixRefs(plan.args,refs.map(r=>({id:r.id}))):plan.args));
   let rr=readResult(r); if(!rr.ids.length&&!rr.images.length) rr=await extractWithClaude(r,"the creation identifier of the image being generated");
   const id0=rr.ids[0]; const web=rr.webUrl||null;
@@ -3202,7 +3286,7 @@ async function rlGenFrame(n){
   try{
     await rlEnsureChecked(sc);
     if(!(sc.frame_prompt||"").trim()){
-      const o=await rlAsk(`Write ONE photorealistic still-image prompt (Google Nano Banana 2.1) for the exact FIRST FRAME of this Seedance 2.5 scene: shot size, lens, camera height, blocking and screen sides, wardrobe, props, light and grade, as in its first shot. Name people, places and props with their handles exactly as the scene does ("@char_sara stands…"); the studio adds the references block itself. State the geography explicitly from the blueprint: zones (INTERIOR/EXTERIOR…), who is in which zone, door direction, where the camera stands and looks, exact head-count, light source. No motion words. ${RL_BAE}\n\nBlueprint: ${trimJSON(sc.blueprint||null,4000)}\n\nScene prompt:\n${sc.prompt}\n\nReply with only JSON: {"frame_prompt":"..."}`,{modelTier:"default"});
+      const o=await rlAsk(`Write ONE photorealistic still-image prompt (ByteDance Seedream 5.5) for the exact FIRST FRAME of this Seedance 2.5 scene: shot size, lens, camera height, blocking and screen sides, wardrobe, props, light and grade, as in its first shot. Name people, places and props with their handles exactly as the scene does ("@char_sara stands…"); the studio adds the references block itself. State the geography explicitly from the blueprint: zones (INTERIOR/EXTERIOR…), who is in which zone, door direction, where the camera stands and looks, exact head-count, light source. No motion words. ${RL_BAE}\n\nBlueprint: ${trimJSON(sc.blueprint||null,4000)}\n\nScene prompt:\n${sc.prompt}\n\nReply with only JSON: {"frame_prompt":"..."}`,{modelTier:"default"});
       sc.frame_prompt=String(o?.frame_prompt||"").trim(); if(!sc.frame_prompt) throw {code:"invalid_json",message:"Claude didn't return a first-frame prompt."};
     }
     const {prompt,refs,missing}=rlSceneRefs(sc,"frame_prompt");
@@ -3342,7 +3426,7 @@ function rlNotes(){
   if(RL.locations.length) n.push({title:"04 · Locations & props",text:RL.locations.map(e=>`${e.tag} ${e.name} (${e.kind||"location"})\n${e.description||""}\nPROMPT: ${e.prompt||""}`).join("\n\n")});
   const bpText=bp=>{ if(!bp) return "—"; const z=id=>(bp.zones||[]).find(q=>q.id===id)?.name||id; return [...(bp.people||[]).map(p=>`${p.name} ${p.tag||""}: ${z(p.zone)}${p.action?` — ${p.action}`:""}`),...(bp.openings||[]).map(o=>`${o.name}: hinge ${o.hinge||"?"}, opens ${o.opens||"?"}`),...(bp.cameras||[]).map(c=>`Shot ${c.shot||1} camera: ${z(c.zone)}, facing ${c.facing}°, ${c.fov}° FOV, ${c.height||""} ${c.move||""}`),bp.light?`Light: ${bp.light.source||""} ${bp.light.temp||""}`:"",bp.axis?`Axis: ${bp.axis}`:"",(bp.rules||[]).length?`Locks: ${bp.rules.join(" · ")}`:""].filter(Boolean).join("\n"); };
   if(RL.look) n.push({title:"05 · Film look (shared by every shot)",text:RL.look});
-  RL.scenes.forEach(s=>{ const r=rlSceneRefs(s,"prompt",{compose:false}); n.push({title:`Shot ${s.n} · ${s.title||""} · ${s.duration_s||""} s`,text:`${s.logline?s.logline+"\n\n":""}References in order: ${r.refs.map(x=>`${x.tag} = ${x.map?"position map":`${x.name} (${rlElByTag(x.global)?.handle||x.global})`}`).join(", ")||"none"}\n\nBLOCKING (checked by the script supervisor${s.check?.passed?`: ${s.check.passed}/8 checks`:""}):\n${bpText(s.blueprint)}\n\nFIRST FRAME (Nano Banana 2.1):\n${s.frame_prompt||"—"}\n\nSEEDANCE 2.5:\n${s.prompt||""}`}); });
+  RL.scenes.forEach(s=>{ const r=rlSceneRefs(s,"prompt",{compose:false}); n.push({title:`Shot ${s.n} · ${s.title||""} · ${s.duration_s||""} s`,text:`${s.logline?s.logline+"\n\n":""}References in order: ${r.refs.map(x=>`${x.tag} = ${x.map?"position map":`${x.name} (${rlElByTag(x.global)?.handle||x.global})`}`).join(", ")||"none"}\n\nBLOCKING (checked by the script supervisor${s.check?.passed?`: ${s.check.passed}/8 checks`:""}):\n${bpText(s.blueprint)}\n\nFIRST FRAME (Seedream 5.5):\n${s.frame_prompt||"—"}\n\nSEEDANCE 2.5:\n${s.prompt||""}`}); });
   return n;
 }
 async function rlFind(r,what){
@@ -3512,6 +3596,7 @@ async function rlBible(){
     const z=e.target.closest("[data-zoom]"); if(z){ rlZoom(z.dataset.zoom); return; }
     const chip=e.target.closest(".rl-ask [data-chip]"); if(chip){ const ta=chip.closest("form").querySelector("textarea"); ta.value=(ta.value.trim()?ta.value.trim()+"، ":"")+chip.dataset.chip; ta.focus(); return; }
     const rv=e.target.closest(".rl-rate [data-v]"); if(rv){ const box=rv.closest(".rl-rate"); RL._rateOpen={key:box.dataset.key,v:+rv.dataset.v}; rlBoard(); setTimeout(()=>B.querySelector(".rl-rateform input")?.focus(),20); return; }
+    const zm=e.target.closest("[data-rl-zoom]"); if(zm&&typeof openLightbox==="function"){ openLightbox(rlFull[zm.dataset.rlZoom]||zm.src); return; }
     const b=e.target.closest("[data-rl]"); if(!b) return; const a=b.dataset.rl, ar=rlAr();
     if(a==="pick") rlSend(ar?`اخترت الفكرة ${+b.dataset.i+1}: ${RL.ideas[+b.dataset.i]?.title||""}. اكتبلي السيناريو.`:`I choose idea ${+b.dataset.i+1}: ${RL.ideas[+b.dataset.i]?.title||""}. Write the script.`);
     else if(a==="pickprev"){ const x=RL.ideasPrev[+b.dataset.i]; if(x){ RL.ideas=[x,...RL.ideas.filter(y=>y.title!==x.title)].slice(0,4); RL.ideasPrev.splice(+b.dataset.i,1); rlSend(ar?`اخترت الفكرة: ${x.title}. اكتبلي السيناريو.`:`I choose the idea "${x.title}". Write the script.`); } }
@@ -3523,6 +3608,9 @@ async function rlBible(){
       rlSend(t?t[ar?1:0]:k); }
     else if(a==="sayraw") rlSend(b.dataset.t);
     else if(a==="gen"){ const el=rlElByTag(b.dataset.tag); if(el?.id) brSignal(RL.characters.includes(el)?"character":el.kind||"location","regenerated",-1,{item:`${el.name}: ${String(el.prompt||"").slice(0,700)}`,note:"The user wasn't satisfied with the image and generated it again.",key:el.tag+el.id}); rlGenElement(b.dataset.tag); }
+    else if(a==="genboard"){ if(!S.connected) await connect(true); rlGenStoryboard(); }
+    else if(a==="board1"){ if(!S.connected) await connect(true); rlGenStoryboard([+b.dataset.i]); }
+    else if(a==="dlboard") rlDownloadBoard(b);
     else if(a==="genall") (b.dataset.list==="c"?RL.characters:RL.locations).filter(x=>!x.id&&!x.fromLib&&x.prompt).forEach(x=>rlGenElement(x.tag));
     else if(a==="edit"){ const el=rlElByTag(b.dataset.tag); if(el){ el._edit=true; rlBoard(); } }
     else if(a==="editdone"){ const el=rlElByTag(b.dataset.tag); if(el){ el._edit=false; el.err=null; if(el.status==="err") el.status=null; rlSave(); rlBoard(); } }
