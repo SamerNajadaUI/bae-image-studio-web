@@ -4633,5 +4633,144 @@ function uxInit(){
 })();
 function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span class="th vid" title="${esc(a.name||"")}"><video src="${a.url}" muted playsinline preload="metadata"></video><span class="vb" aria-hidden="true">▶</span><button type="button" data-i="${i}" aria-label="Remove">×</button></span>`:`<span class="th"><img src="${a.url}" alt="${esc(a.name||"")}"><button type="button" data-i="${i}" aria-label="Remove">×</button></span>`).join(""); }
 
+/* ================= Brand Identity: the BAE system on one page, with ready-to-download assets ================= */
+(function(){
+  const P=$("brand"); if(!P) return; const body=$("biBody");
+  const T=(name,hex,print)=>({name,hex,print:print||null});
+  const TIERS=[
+    {id:"primary",title:"Primary",note:"The main chromatic identifier",share:"40%",list:[T("Orange","#FA6428",{pantone:"1655 C",cmyk:[0,76,100,0]}),T("Light Orange","#FFFAF4"),T("Soft Orange","#FDCBB4"),T("Medium Orange","#FB9A75"),T("Dark Orange","#C13A23")]},
+    {id:"neutral",title:"Neutral",note:"Balance and legibility",share:"30% light · 20% dark",list:[T("White","#FFFFFF"),T("Light Stone","#ECE8DF"),T("Stone","#CCC3B4"),T("Ink","#19181E",{pantone:"276 C",cmyk:[17,20,0,88]}),T("Medium Ink","#4F4E62"),T("Light Ink","#75738D")]},
+    {id:"comp",title:"Complimentary",note:"Gradients, tints, UI, illustration, interiors",share:"5% + 5%",list:[T("Burgundy","#A33755",{pantone:"7420 C",cmyk:[0,66,48,36]}),T("Medium Burgundy","#B9516E"),T("Light Burgundy","#F1C0B6"),T("Teal","#32969B",{pantone:"7495 C",cmyk:[68,3,0,39]}),T("Dark Teal","#196E78")]}];
+  const ALL=TIERS.flatMap(t=>t.list.map(c=>({...c,tier:t.title})));
+  const rgb=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+  const cmykOf=c=>{ if(c.print?.cmyk) return {v:c.print.cmyk,official:true}; const [r,g,b]=rgb(c.hex).map(x=>x/255), k=1-Math.max(r,g,b); const f=x=>k>=1?0:Math.round((1-x-k)/(1-k)*100); return {v:[f(r),f(g),f(b),Math.round(k*100)],official:false}; };
+  const lum=h=>{ const [r,g,b]=rgb(h).map(v=>{ v/=255; return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4); }); return .2126*r+.7152*g+.0722*b; };
+  const on=h=>lum(h)>.45?"#19181E":"#FFFFFF";
+  const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,"-");
+  const copyBtn=(label,val)=>`<button type="button" class="bi-copy" data-copy="${esc(val)}"><span>${label}</span><b>${esc(val)}</b></button>`;
+  const save=async(b,name)=>{ if(S.web||!downloads){ const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1500); } else { try{ await downloads.save({filename:name,data:b}); }catch{} } };
+  const saveText=(text,name,type)=>save(new Blob([text],{type}),name);
+  /* Adobe Swatch Exchange (.ase): opens in Illustrator, Photoshop, InDesign */
+  function ase(mode){ const blocks=ALL.map(c=>{ const name=`BAE ${c.name}`; const vals=mode==="CMYK"?cmykOf(c).v.map(x=>x/100):rgb(c.hex).map(x=>x/255); const len=2+(name.length+1)*2+4+vals.length*4+2; const buf=new DataView(new ArrayBuffer(6+len)); let o=0; buf.setUint16(o,1); o+=2; buf.setUint32(o,len); o+=4; buf.setUint16(o,name.length+1); o+=2; for(const ch of name){ buf.setUint16(o,ch.charCodeAt(0)); o+=2; } buf.setUint16(o,0); o+=2; const m=mode==="CMYK"?"CMYK":"RGB "; for(const ch of m){ buf.setUint8(o++,ch.charCodeAt(0)); } for(const v of vals){ buf.setFloat32(o,v); o+=4; } buf.setUint16(o,0); return buf.buffer; });
+    const head=new DataView(new ArrayBuffer(12)); "ASEF".split("").forEach((ch,i)=>head.setUint8(i,ch.charCodeAt(0))); head.setUint16(4,1); head.setUint16(6,0); head.setUint32(8,blocks.length); return new Blob([head.buffer,...blocks],{type:"application/octet-stream"}); }
+  const cssVars=()=>`:root{\n${ALL.map(c=>`  --bae-${slug(c.name)}: ${c.hex};`).join("\n")}\n}\n`;
+  const tokens=()=>JSON.stringify({brand:"Bank al Etihad",source:"Guidelines V1.1, June 2026",colors:ALL.map(c=>({name:c.name,tier:c.tier,hex:c.hex,rgb:rgb(c.hex),cmyk:cmykOf(c).v,cmykOfficial:cmykOf(c).official,pantone:c.print?.pantone||null})),type:{latin:"GT Walsheim Regular",arabic:"Avenir Arabic Regular",scale:SCALE.map(([role,size,tr,lh])=>({role,size,tracking:tr,lineHeight:lh}))},grid:{margin:"7% of width",columns:12,rows:12}},null,2);
+  function sheetSVG(mode){ const W=1600, pad=80, cw=(W-pad*2-40*4)/5, ch=230; let y=150, out=[`<rect width="100%" height="100%" fill="#FFFAF4"/>`,`<text x="${pad}" y="96" font-family="GT Walsheim, Arial, sans-serif" font-size="44" fill="#19181E">Bank al Etihad — colour palette · ${mode==="CMYK"?"print (CMYK)":"screen (RGB)"}</text>`];
+    for(const t of TIERS){ out.push(`<text x="${pad}" y="${y}" font-family="GT Walsheim, Arial, sans-serif" font-size="24" fill="#4F4E62">${t.title} · ${t.share}</text>`); y+=24;
+      t.list.forEach((c,i)=>{ const x=pad+(i%5)*(cw+40), yy=y+Math.floor(i/5)*(ch+30); const k=cmykOf(c); const l1=mode==="CMYK"?`C${k.v[0]} M${k.v[1]} Y${k.v[2]} K${k.v[3]}${k.official?"":" *"}`:c.hex, l2=mode==="CMYK"?(c.print?.pantone?`PANTONE ${c.print.pantone}`:""):`R${rgb(c.hex)[0]} G${rgb(c.hex)[1]} B${rgb(c.hex)[2]}`;
+        out.push(`<rect x="${x}" y="${yy}" width="${cw}" height="${ch}" rx="22" fill="${c.hex}" stroke="#CCC3B4" stroke-width="${c.hex==="#FFFFFF"||c.hex==="#FFFAF4"?1:0}"/><text x="${x+18}" y="${yy+38}" font-family="GT Walsheim, Arial, sans-serif" font-size="22" fill="${on(c.hex)}">${c.name}</text><text x="${x+18}" y="${yy+ch-46}" font-family="GT Walsheim, Arial, sans-serif" font-size="18" fill="${on(c.hex)}">${l1}</text><text x="${x+18}" y="${yy+ch-20}" font-family="GT Walsheim, Arial, sans-serif" font-size="18" fill="${on(c.hex)}">${l2}</text>`); });
+      y+=Math.ceil(t.list.length/5)*(ch+30)+50; }
+    if(mode==="CMYK") out.push(`<text x="${pad}" y="${y}" font-family="GT Walsheim, Arial, sans-serif" font-size="18" fill="#4F4E62">* converted from the screen colour, not an official print value — confirm with the brand team before printing.</text>`);
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${y+60}" width="${W}" height="${y+60}">${out.join("")}</svg>`; }
+  const SCALE=[["Headline",200,"-4%","90%"],["Headline",160,"-4%","90%"],["Headline",120,"-4%","100%"],["Headline",80,"-4%","100%"],["Subhead",40,"-1%","110%"],["Subhead",32,"-1%","110%"],["Subhead",24,"0%","110%"],["Subhead",18,"-2%","110%"],["Body",20,"0%","120%"],["Body",16,"0%","120%"],["Body",12,"1%","120%"]];
+  const COMBOS=[["Primary","#FFFFFF","#FA6428","White on Orange"],["Primary","#FA6428","#FFFFFF","Orange on White"],["Secondary","#FFFAF4","#4F4E62","Light Orange on Medium Ink"],["Secondary","#C13A23","#FFFAF4","Dark Orange on Light Orange"],["Tertiary","#ECE8DF","#19181E","Light Stone on Ink"],["Tertiary","#4F4E62","#ECE8DF","Medium Ink on Light Stone"]];
+  /* the symbol already ships with the studio; it is offered as SVG in each approved colour */
+  const emblem=()=>document.querySelector(".l-emblem");
+  const symbolSVG=(fill,bg)=>{ const e=emblem(); if(!e) return ""; const vb=e.getAttribute("viewBox")||"0 0 84.53 82.12"; const [,,w,h]=vb.split(/\s+/).map(Number); const inner=e.innerHTML;
+    return bg?`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${-w*.5} ${-h*.5} ${w*2} ${h*2}"><rect x="${-w*.5}" y="${-h*.5}" width="${w*2}" height="${h*2}" fill="${bg}"/><g fill="${fill}">${inner}</g></svg>`:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}"><g fill="${fill}">${inner}</g></svg>`; };
+  /* ---------- team asset shelves: the owner uploads official files once, everyone downloads ---------- */
+  const BF={list:[],loaded:false,canEdit:false,busy:"",err:""};
+  const SHELVES=[["logos","Logos","Official lockups: Symbol, English, Arabic, Bilingual — SVG, PDF, PNG"],["gradients","Gradients","Orange, dark and frame gradients"],["illustrations","Illustrations","Light and dark mode sets"],["templates","Templates","Per ratio: 1x1, 3x4, 9x16, 16x9"],["guidelines","Guidelines","The guideline PDF and reference sheets"],["other","Other","Anything else the team needs"]];
+  async function bfLoad(){ await rlStoreInit(); if(!RLS.db){ BF.err="Asset shelves need the page's database — open the studio in claude.ai."; BF.loaded=true; return; }
+    try{ const sn=await RLS.db.collection("brandfiles").get(); BF.list=sn.docs.map(d=>({id:d.id,...JSON.parse(JSON.stringify(d.data()))})).sort((a,b)=>String(a.name).localeCompare(String(b.name))); }catch(e){ BF.err="Couldn't open the asset shelves."; }
+    try{ const u=await window.claude?.use?.("user"); BF.canEdit=!!u?.canEdit?.(); }catch{} BF.loaded=true; }
+  const b64=buf=>{ let s=""; const u=new Uint8Array(buf); for(let i=0;i<u.length;i+=0x8000) s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000)); return btoa(s); };
+  async function bfAdd(file,shelf){ const MAX=12*1048576; if(file.size>MAX) throw {message:`${file.name} is larger than 12 MB.`};
+    const id="f"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); const mime=file.type||(/\.svg$/i.test(file.name)?"image/svg+xml":"application/octet-stream");
+    let asset=null; if(file.size>1500000){ try{ const A=await window.claude?.use?.("assets"); if(A){ const r=await A.upload(file); asset=r?.id||null; } }catch{} }
+    let n=0; if(!asset){ const data=b64(await file.arrayBuffer()), SZ=90000; n=Math.ceil(data.length/SZ); if(n>70) throw {message:`${file.name} is too large for the shelf (max about 4.5 MB without the file store).`}; const col=RLS.db.collection("brandblob"); for(let i=0;i<n;i++){ BF.busy=`Saving ${file.name} · ${Math.round((i+1)/n*100)}%`; draw(); await col.doc(id+"_"+i).set({d:data.slice(i*SZ,(i+1)*SZ)}); } }
+    let prev=""; try{ if(/svg/.test(mime)&&file.size<60000) prev="data:image/svg+xml;base64,"+b64(await file.arrayBuffer()); else if(/^image\/(png|jpeg|webp)/.test(mime)){ const bmp=await createImageBitmap(file); const k=Math.min(1,360/Math.max(bmp.width,bmp.height)); const c=document.createElement("canvas"); c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k); c.getContext("2d").drawImage(bmp,0,0,c.width,c.height); prev=c.toDataURL("image/webp",.8); if(prev.length>60000) prev=c.toDataURL("image/jpeg",.6); } }catch{}
+    const doc={name:file.name.slice(0,120),shelf,mime,size:file.size,n,asset,prev:prev.length<=60000?prev:"",at:Date.now()}; await RLS.db.collection("brandfiles").doc(id).set(doc); BF.list.push({id,...doc}); BF.list.sort((a,b)=>String(a.name).localeCompare(String(b.name))); }
+  async function bfBlob(f){ if(f.asset){ const r=await fetch("/_blob/"+f.asset); if(r.ok){ const b=await r.blob(); return new Blob([b],{type:f.mime}); } }
+    const col=RLS.db.collection("brandblob"); const parts=await Promise.all([...Array(+f.n||0)].map((_,i)=>col.doc(f.id+"_"+i).get())); const bin=atob(parts.map(x=>x.exists?x.data()?.d||"":"").join("")); const u=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return new Blob([u],{type:f.mime}); }
+  async function bfDownload(f,btn){ const t=btn.textContent; btn.disabled=true; btn.textContent="Preparing…"; try{ const b=await bfBlob(f); await save(b,f.name); }catch(e){ BF.err="Couldn't download "+f.name+"."; draw(); } btn.disabled=false; btn.textContent=t; }
+  async function bfRemove(f){ BF.list=BF.list.filter(x=>x.id!==f.id); draw(); try{ await RLS.db.collection("brandfiles").doc(f.id).delete(); const col=RLS.db.collection("brandblob"); for(let i=0;i<(+f.n||0);i++) await col.doc(f.id+"_"+i).delete().catch(()=>{}); if(f.asset){ const A=await window.claude?.use?.("assets"); await A?.delete(f.asset).catch(()=>{}); } }catch{} }
+  const kb=n=>n>1048576?(n/1048576).toFixed(1)+" MB":Math.max(1,Math.round(n/1024))+" KB";
+  function shelvesHTML(){ if(!BF.loaded) return `<p class="muted">Loading the asset shelves…</p>`;
+    return (BF.busy?`<p class="t12" role="status">${esc(BF.busy)}</p>`:"")+(BF.err?`<p class="t12 bad" role="alert">${esc(BF.err)}</p>`:"")+SHELVES.map(([k,title,note])=>{ const L=BF.list.filter(f=>f.shelf===k); if(!L.length&&!BF.canEdit) return "";
+      return `<div class="bi-shelf"><div class="bi-shelfhead"><div><b>${title}</b><span class="t12 muted">${note}</span></div>${BF.canEdit?`<label class="btn small">Add files<input type="file" multiple class="sr" data-bfadd="${k}"></label>`:""}</div>
+        ${L.length?`<div class="bi-files">${L.map(f=>`<div class="bi-file"><div class="pv">${f.prev?`<img src="${f.prev}" alt="">`:`<span>${esc((f.name.split(".").pop()||"file").toUpperCase().slice(0,4))}</span>`}</div><div class="tx"><b dir="auto" data-noi18n>${esc(f.name)}</b><span class="t12 muted">${kb(f.size)}</span></div><div class="rl-btns"><button type="button" class="btn small primary" data-bfdl="${esc(f.id)}">Download</button>${BF.canEdit?`<button type="button" class="bi-x" data-bfrm="${esc(f.id)}">Remove</button>`:""}</div></div>`).join("")}</div>`:`<p class="t12 muted">Nothing here yet. Add the official files from the asset library.</p>`}</div>`; }).join("")||`<p class="muted">No files yet. The studio owner adds the official assets.</p>`; }
+  /* ---------- page ---------- */
+  const G={w:1080,h:1920,mode:"rgb"};
+  function gridHTML(){ const m=Math.round(G.w*.07), cw=(G.w-2*m)/12, rh=(G.h-2*m)/12; return `<div class="bi-gridres"><div><b>${m} px</b><span>Margin (7% of width)</span></div><div><b>${cw.toFixed(1)} px</b><span>Column width (12)</span></div><div><b>${rh.toFixed(1)} px</b><span>Row height (12)</span></div><div><b>${Math.round(G.w-2*m)} × ${Math.round(G.h-2*m)}</b><span>Safe area</span></div></div>`; }
+  function draw(){
+    const sc=P.scrollTop;
+    body.innerHTML=`
+    <nav class="bi-nav" aria-label="Sections">${[["biColour","Colour"],["biLogo","Logo"],["biType","Typography"],["biGrid","Grid"],["biRules","Gradient, illustration, photo"],["biMotion","Motion"],["biAssets","Assets"]].map(([id,l])=>`<a href="#${id}" data-jump="${id}">${l}</a>`).join("")}</nav>
+    <section class="bi-card bi-concept"><div><span class="t12 muted">Creative concept</span><h3>Deep Clarity</h3><p>Three layers of structured intelligence, moving from depth to surface, from indistinct to certain.</p></div><div class="bi-pillars"><div><b>Intelligence</b><span>Proactive · precise · adaptive · clear</span></div><div><b>Warmth</b><span>Present · generous · familiar · celebratory</span></div></div></section>
+
+    <section class="bi-sec" id="biColour"><div class="bi-h"><div><h3>Colour</h3><p>Click any value to copy it.</p></div>
+      <div class="a-seg" role="group" aria-label="Colour space"><button type="button" data-bimode="rgb" aria-pressed="${G.mode==="rgb"}">Screen · RGB</button><button type="button" data-bimode="cmyk" aria-pressed="${G.mode==="cmyk"}">Print · CMYK</button></div></div>
+      <div class="bi-weight" role="img" aria-label="Palette weighting: Primary 40%, Neutral light 30%, Neutral dark 20%, Complimentary 5% and 5%"><i style="flex:40;background:#FA6428;color:#fff">Primary 40%</i><i style="flex:30;background:#ECE8DF;color:#19181E">Neutral light 30%</i><i style="flex:20;background:#19181E;color:#fff">Neutral dark 20%</i><i style="flex:5;background:#A33755" title="Complimentary 5%"></i><i style="flex:5;background:#32969B" title="Complimentary 5%"></i></div>
+      ${TIERS.map(t=>`<div class="bi-tier"><div class="bi-tierhead"><b>${t.title}</b><span class="t12 muted">${t.note} · ${t.share}</span></div><div class="bi-swatches">${t.list.map(c=>{ const k=cmykOf(c), r=rgb(c.hex); return `<div class="bi-sw"><div class="bi-chip" style="background:${c.hex};color:${on(c.hex)}${/^#FFF/.test(c.hex)?";box-shadow:inset 0 0 0 1px #CCC3B4":""}"><b>${c.name}</b>${c.print?.pantone&&G.mode==="cmyk"?`<span>PANTONE ${c.print.pantone}</span>`:""}</div>
+        <div class="vals">${G.mode==="rgb"?copyBtn("HEX",c.hex)+copyBtn("RGB",r.join(", ")):copyBtn("CMYK",k.v.join(" / "))+(c.print?.pantone?copyBtn("Pantone",c.print.pantone):"")+`<span class="t12 ${k.official?"ok":"warn"}">${k.official?"Official print value":"Converted from screen — confirm before print"}</span>`}</div></div>`; }).join("")}</div></div>`).join("")}
+      <div class="bi-dl"><b>Download the palette</b><div class="rl-btns">
+        <button type="button" class="btn small primary" data-bidl="ase-rgb">Adobe swatches · RGB (.ase)</button><button type="button" class="btn small primary" data-bidl="ase-cmyk">Adobe swatches · CMYK (.ase)</button>
+        <button type="button" class="btn small" data-bidl="svg-rgb">Palette sheet · RGB (.svg)</button><button type="button" class="btn small" data-bidl="svg-cmyk">Palette sheet · CMYK (.svg)</button>
+        <button type="button" class="btn small" data-bidl="css">CSS variables</button><button type="button" class="btn small" data-bidl="json">Design tokens (.json)</button></div>
+        <p class="t12 muted">The guidelines give official print values (Pantone + CMYK) for Orange, Ink, Burgundy and Teal only. Every other CMYK value here is a plain conversion and is marked so.</p></div>
+    </section>
+
+    <section class="bi-sec" id="biLogo"><div class="bi-h"><div><h3>Logo</h3><p>Four lockups: Symbol · English · Arabic · Bilingual. Match the lockup to the language of the message.</p></div></div>
+      <div class="bi-combos">${COMBOS.map(([rank,fg,bg,label],i)=>`<div class="bi-combo"><div class="tile" style="background:${bg}${/^#FFF/.test(bg)?";box-shadow:inset 0 0 0 1px #CCC3B4":""}">${symbolSVG(fg)}</div><div class="tx"><span class="t12 muted">${rank}</span><b>${label}</b></div><div class="rl-btns"><button type="button" class="btn small" data-bisym="${i}" data-bg="0">Symbol SVG</button><button type="button" class="btn small" data-bisym="${i}" data-bg="1">With background</button></div></div>`).join("")}</div>
+      <p class="t12 muted">Only these six pairs are approved, plus monochrome light-on-dark and dark-on-light. The full lockups (English, Arabic, Bilingual) are in Assets → Logos below.</p>
+      <div class="bi-rules"><div><b>Safe space</b><p>1X = the logo's x-height. Keep at least 1X clear on every side; 2X for hero moments.</p></div><div><b>Position</b><p>English: left. Arabic: right. Top = brand-led. Bottom = signature. Logo-led pieces: optically centred.</p></div><div><b>Partner lockups</b><p>1X of logo height around, 1.5X between the two marks, both in one matching monotone.</p></div><div><b>Never</b><p>Redraw, recolour, stretch or modify. Never on a busy or low-contrast background.</p></div></div>
+    </section>
+
+    <section class="bi-sec" id="biType"><div class="bi-h"><div><h3>Typography</h3><p>One weight only: Regular.</p></div><button type="button" class="btn small" data-bidl="typecss">Copy the scale as CSS</button></div>
+      <div class="bi-fonts"><div><span class="t12 muted">English / Latin</span><b style="font-family:'GT Walsheim',var(--font)">GT Walsheim Regular</b><p style="font-family:'GT Walsheim',var(--font)">Banking that moves at the pace of your life.</p></div><div dir="rtl"><span class="t12 muted">العربية</span><b style="font-family:'Avenir Arabic',var(--font)">Avenir Arabic Regular</b><p style="font-family:'Avenir Arabic',var(--font)">بنك يمشي على إيقاع يومك.</p></div></div>
+      <div class="bi-tablewrap"><table class="bi-table"><thead><tr><th>Role</th><th>Size</th><th>Tracking</th><th>Line height</th><th>Sample</th></tr></thead><tbody>${SCALE.map(([role,size,tr,lh])=>`<tr><td>${role}</td><td>${size} pt</td><td>${tr}</td><td>${lh}</td><td><span style="font-size:${Math.max(12,Math.min(40,size/4+8))}px;letter-spacing:${parseFloat(tr)/100}em;line-height:${parseFloat(lh)/100}">Deep Clarity</span></td></tr>`).join("")}</tbody></table></div>
+      <p class="t12 muted">Sizes scale with the canvas; the tracking and line height paired with each step never change. Bold, Medium, Light, Italic and trial font files are outside the system. The font files are licensed — get them from the brand team (B_Fonts), they are not shared here.</p>
+    </section>
+
+    <section class="bi-sec" id="biGrid"><div class="bi-h"><div><h3>Grid</h3><p>Margins are 7% of the width. 12 columns × 12 rows on every format.</p></div></div>
+      <div class="bi-gridtool"><div class="rl-btns">${[["9:16",1080,1920],["3:4",1080,1440],["1:1",1080,1080],["16:9",1920,1080]].map(([l,w,h])=>`<button type="button" class="btn small${G.w===w&&G.h===h?" primary":""}" data-bisize="${w}x${h}">${l}</button>`).join("")}<label class="t12">Width <input class="rl-field" type="number" min="100" max="20000" id="biW" value="${G.w}"></label><label class="t12">Height <input class="rl-field" type="number" min="100" max="20000" id="biH" value="${G.h}"></label></div>
+        <div id="biGridRes">${gridHTML()}</div>
+        <div class="bi-blocks"><table class="bi-table"><thead><tr><th>Block</th><th>Rows</th><th>Columns · 9:16, 3:4, 1:1</th><th>Columns · 16:9</th></tr></thead><tbody><tr><td>Headline</td><td>2–5</td><td>8–12</td><td>8–12</td></tr><tr><td>Subhead</td><td>1</td><td>3–6</td><td>2–4</td></tr><tr><td>Logo</td><td>1</td><td>4–6</td><td>2–4</td></tr></tbody></table></div></div>
+    </section>
+
+    <section class="bi-sec" id="biRules"><div class="bi-h"><div><h3>Gradient, illustration, photography</h3></div><button type="button" class="btn small" data-bigo="gallery">Open gradient elements</button></div>
+      <div class="bi-rules"><div><b>Gradient</b><p>Soft, blurred organic shapes, layered and diffused. Never a linear blend. Three roles: background, frame, shape. Shapes sit between the cut-out subject and the background.</p></div><div><b>Dark gradient</b><p>Internal and corporate audiences only. Keep it minimal in external work.</p></div><div><b>Illustration</b><p>One focal point. No text inside. Light version on light, dark version on dark; never invert. Sizes 96, 144, 192, 256 px.</p></div><div><b>Photography</b><p>Depth over flatness. Clarity through focus. Colour with warmth. A Jordanian lens: real faces and places.</p></div><div><b>AI imagery</b><p>Fine for tactical campaigns, rapid content and concepts. Not for evergreen hero images, core portraits or trust-critical use.</p></div><div><b>Social treatment</b><p>Primary: gradient shape between subject and background. Secondary: black-and-white subject with gradient overlay, on flat orange only.</p></div></div>
+    </section>
+
+    <section class="bi-sec" id="biMotion"><div class="bi-h"><div><h3>Motion</h3><p>Fluidity, depth, focus.</p></div></div>
+      <div class="bi-tablewrap"><table class="bi-table"><thead><tr><th>Element</th><th>Duration</th><th>Animate by</th><th>Values</th></tr></thead><tbody>
+        <tr><td>Main sentence in</td><td>1500 ms</td><td>Words</td><td>Opacity 0→100, blur 20→0, position 10→0</td></tr><tr><td>Main sentence out</td><td>900 ms</td><td>Lines</td><td>Opacity 100→0, blur 0→20</td></tr>
+        <tr><td>Secondary text in</td><td>1200 ms · 600 ms after main</td><td>Lines</td><td>Opacity 0→100, blur 20→0, position 6→0</td></tr><tr><td>Secondary text out</td><td>900 ms · 300 ms after main</td><td>Lines</td><td>Opacity 100→0, blur 0→20</td></tr>
+        <tr><td>Frame gradient reveal</td><td>1200 ms</td><td>—</td><td>Opacity or position</td></tr><tr><td>Gradient loop</td><td>30 s (or 15, 8, 6 s)</td><td>—</td><td>Linear, no easing, each shape 360° clockwise</td></tr></tbody></table></div>
+    </section>
+
+    <section class="bi-sec" id="biAssets"><div class="bi-h"><div><h3>Assets</h3><p>${BF.canEdit?"Add the official files once. Everyone on the team downloads them from here.":"Official files, ready to download."}</p></div></div>
+      <div id="biShelves">${shelvesHTML()}</div>
+      <p class="t12 muted">Questions, asset requests and approvals go to the brand team.</p>
+    </section>`;
+    P.scrollTop=sc; if(typeof uxT==="function") uxT(P);
+  }
+  P.addEventListener("click",async e=>{
+    const c=e.target.closest("[data-copy]"); if(c){ try{ await navigator.clipboard.writeText(c.dataset.copy); c.classList.add("done"); setTimeout(()=>c.classList.remove("done"),1200); }catch{} return; }
+    const j=e.target.closest("[data-jump]"); if(j){ e.preventDefault(); $(j.dataset.jump)?.scrollIntoView({behavior:"smooth",block:"start"}); return; }
+    const m=e.target.closest("[data-bimode]"); if(m){ G.mode=m.dataset.bimode; draw(); return; }
+    const z=e.target.closest("[data-bisize]"); if(z){ const [w,h]=z.dataset.bisize.split("x").map(Number); G.w=w; G.h=h; draw(); return; }
+    const go=e.target.closest("[data-bigo]"); if(go){ P.hidden=true; $("openGallery")?.click(); return; }
+    const sy=e.target.closest("[data-bisym]"); if(sy){ const [rank,fg,bg,label]=COMBOS[+sy.dataset.bisym]; saveText(symbolSVG(fg,sy.dataset.bg==="1"?bg:null),`BAE_symbol_${slug(label)}${sy.dataset.bg==="1"?"_bg":""}.svg`,"image/svg+xml"); return; }
+    const d=e.target.closest("[data-bidl]"); if(d){ const k=d.dataset.bidl;
+      if(k==="ase-rgb") save(ase("RGB"),"BAE_palette_RGB.ase"); else if(k==="ase-cmyk") save(ase("CMYK"),"BAE_palette_CMYK.ase");
+      else if(k==="svg-rgb") saveText(sheetSVG("RGB"),"BAE_palette_RGB.svg","image/svg+xml"); else if(k==="svg-cmyk") saveText(sheetSVG("CMYK"),"BAE_palette_CMYK.svg","image/svg+xml");
+      else if(k==="css") saveText(cssVars(),"bae-colors.css","text/css"); else if(k==="json") saveText(tokens(),"bae-tokens.json","application/json");
+      else if(k==="typecss"){ const css=SCALE.map(([role,size,tr,lh])=>`.bae-${role.toLowerCase()}-${size}{font-family:"GT Walsheim","Avenir Arabic",sans-serif;font-weight:400;font-size:${size}pt;letter-spacing:${parseFloat(tr)/100}em;line-height:${parseFloat(lh)/100}}`).join("\n"); try{ await navigator.clipboard.writeText(css); d.textContent="Copied ✓"; setTimeout(()=>d.textContent="Copy the scale as CSS",1500); }catch{} }
+      return; }
+    const dl=e.target.closest("[data-bfdl]"); if(dl){ const f=BF.list.find(x=>x.id===dl.dataset.bfdl); if(f) bfDownload(f,dl); return; }
+    const rm=e.target.closest("[data-bfrm]"); if(rm){ if(rm.dataset.sure){ const f=BF.list.find(x=>x.id===rm.dataset.bfrm); if(f) bfRemove(f); } else { rm.dataset.sure="1"; rm.textContent="Remove for everyone?"; setTimeout(()=>{ if(rm.isConnected){ delete rm.dataset.sure; rm.textContent="Remove"; } },4000); } return; }
+  });
+  P.addEventListener("change",async e=>{
+    if(e.target.id==="biW"||e.target.id==="biH"){ G.w=Math.max(100,+$("biW").value||1080); G.h=Math.max(100,+$("biH").value||1920); $("biGridRes").innerHTML=gridHTML(); return; }
+    const a=e.target.matches?.("[data-bfadd]")?e.target:null; if(a&&a.files?.length){ const shelf=a.dataset.bfadd, files=[...a.files].slice(0,20); a.value=""; BF.err="";
+      for(const f of files){ BF.busy=`Saving ${f.name}…`; draw(); try{ await bfAdd(f,shelf); }catch(err){ BF.err=String(err?.message||err?.code||err).slice(0,200); } }
+      BF.busy=""; draw(); } });
+  const open=()=>{ P.hidden=false; P.scrollTop=0; draw(); if(!BF.loaded) bfLoad().then(draw); };
+  const close=()=>{ P.hidden=true; $("openBrand")?.focus(); };
+  $("openBrand")?.addEventListener("click",open); $("closeBrand")?.addEventListener("click",close);
+})();
+
 boot();
 })();

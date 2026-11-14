@@ -1118,6 +1118,79 @@ details.rl-changes>summary::-webkit-details-marker{display:none}
   .rl-tools .a-seg{padding:3px} .rl-tools .a-seg button{padding:7px 14px;font-size:14px;min-height:0}
   .rl-tools #rlSettingsBtn{margin-inline-start:auto;padding:8px 14px;font-size:14px}
   .rl-stages.ux4 .ux-sub button{min-height:34px;font-size:13px;padding:0 12px} }
+
+/* ---------- Brand identity page ---------- */
+.bi{display:flex;flex-direction:column;gap:28px;min-width:0;max-width:100%}
+#brand .g-in>*{min-width:0}
+.bi>*{min-width:0;max-width:100%;box-sizing:border-box}
+.bi .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.bi-nav{position:sticky;top:0;z-index:3;display:flex;gap:6px;overflow-x:auto;padding:10px 0;background:var(--orange-light);scrollbar-width:none}
+.bi-nav a{flex:none;padding:8px 14px;border-radius:999px;background:var(--white);color:var(--ink);text-decoration:none;font-size:14px;box-shadow:var(--shadow)}
+.bi-nav a:hover{background:var(--ink);color:var(--white)}
+.bi-nav a:focus-visible,.bi-copy:focus-visible,.bi-x:focus-visible{outline:2px solid var(--orange-dark);outline-offset:2px}
+.bi-card,.bi-sec{background:var(--white);border-radius:24px;padding:clamp(18px,3vw,32px);box-shadow:var(--shadow);display:flex;flex-direction:column;gap:20px;scroll-margin-top:64px}
+.bi-concept{background:#FA6428;color:#fff;flex-direction:row;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:24px}
+.bi-concept .muted{color:#fff;opacity:.85}
+.bi-concept h3{margin:6px 0 8px;font-weight:400;font-size:clamp(40px,7vw,80px);letter-spacing:-.04em;line-height:1}
+.bi-concept p{margin:0;max-width:44ch;font-size:16px;line-height:1.4}
+.bi-pillars{display:flex;gap:12px;flex-wrap:wrap}
+.bi-pillars div{background:#FFFAF4;color:#19181E;border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;min-width:180px}
+.bi-pillars span{font-size:12px;color:#4F4E62}
+.bi-h{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.bi-h h3{margin:0;font-weight:400;font-size:clamp(24px,3vw,32px);letter-spacing:-.01em}
+.bi-h p{margin:6px 0 0;color:var(--ink-med);font-size:14px;line-height:1.4}
+.bi-weight{display:flex;height:44px;border-radius:12px;overflow:hidden}
+.bi-weight i{font-style:normal;font-size:12px;display:flex;align-items:center;padding:0 10px;white-space:nowrap;overflow:hidden}
+.bi-tier{display:flex;flex-direction:column;gap:10px}
+.bi-tierhead{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.bi-swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+.bi-sw{border:1px solid var(--stone-light);border-radius:16px;overflow:hidden;display:flex;flex-direction:column}
+.bi-chip{height:110px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;font-size:14px}
+.bi-chip b{font-weight:400}.bi-chip span{font-size:12px}
+.bi-sw .vals{padding:8px;display:flex;flex-direction:column;gap:4px}
+.bi-sw .vals>span{padding:2px 8px}
+.bi-sw .ok{color:#196E78}.bi-sw .warn{color:#C13A23}
+.bi-copy{all:unset;cursor:pointer;display:flex;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:8px;font-size:13px}
+.bi-copy span{color:var(--ink-med)}.bi-copy b{font-weight:400;font-variant-numeric:tabular-nums}
+.bi-copy:hover{background:var(--orange-light)}
+.bi-copy.done{background:#196E78}.bi-copy.done span,.bi-copy.done b{color:#fff}
+.bi-dl{background:var(--orange-light);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.bi-dl b,.bi-rules b,.bi-shelfhead b,.bi-tierhead b,.bi-combo b,.bi-fonts b,.bi-pillars b,.bi-gridres b,.bi-file b{font-weight:400}
+.bi-dl p{margin:0}
+.bi-combos{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.bi-combo{display:flex;flex-direction:column;gap:10px}
+.bi-combo .tile{aspect-ratio:4/3;border-radius:16px;display:grid;place-items:center}
+.bi-combo .tile svg{width:34%;height:auto}
+.bi-combo .tx{display:flex;flex-direction:column;gap:2px;font-size:14px}
+.bi-rules{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.bi-rules>div{background:var(--orange-light);border-radius:16px;padding:14px 16px}
+.bi-rules p{margin:6px 0 0;font-size:14px;line-height:1.45;color:var(--ink-med)}
+.bi-fonts{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.bi-fonts>div{background:var(--orange-light);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:8px}
+.bi-fonts b{font-size:28px;letter-spacing:-.02em}.bi-fonts p{margin:0;font-size:16px;line-height:1.4;color:var(--ink-med)}
+.bi-tablewrap,.bi-blocks{overflow-x:auto}
+.bi-table{width:100%;border-collapse:collapse;font-size:14px}
+.bi-table th{font-weight:400;text-align:start;color:var(--ink-med);font-size:12px;padding:8px 10px;border-bottom:1px solid var(--stone-light);white-space:nowrap}
+.bi-table td{padding:10px;border-bottom:1px solid var(--stone-light);vertical-align:middle}
+.bi-gridtool{display:flex;flex-direction:column;gap:14px}
+.bi-gridtool label{display:inline-flex;align-items:center;gap:6px}
+.bi-gridtool .rl-field{width:96px}
+.bi-gridres{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.bi-gridres>div{background:var(--ink);color:var(--white);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:4px}
+.bi-gridres b{font-size:24px;font-variant-numeric:tabular-nums}.bi-gridres span{font-size:12px;opacity:.8}
+.bi-shelf{border:1px solid var(--stone-light);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:12px;margin-bottom:12px}
+.bi-shelfhead{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.bi-shelfhead>div{display:flex;flex-direction:column;gap:2px}
+.bi-shelfhead label{cursor:pointer;position:relative}
+.bi-files{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.bi-file{display:flex;flex-direction:column;gap:8px}
+.bi-file .pv{aspect-ratio:4/3;border-radius:12px;background:var(--stone-light);display:grid;place-items:center;overflow:hidden;color:var(--ink-med);font-size:14px}
+.bi-file .pv img{max-width:80%;max-height:80%;object-fit:contain}
+.bi-file .tx{display:flex;flex-direction:column;gap:2px;font-size:14px;min-width:0}
+.bi-file .tx b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bi-x{all:unset;cursor:pointer;font-size:12px;color:#C13A23;padding:8px 6px}
+.bi .bad{color:#C13A23}
+@media (max-width:600px){ .bi-swatches{grid-template-columns:repeat(2,minmax(0,1fr))} .bi-chip{height:84px} .bi-copy{flex-direction:column;gap:0} .bi-weight i{font-size:0;padding:0} .bi-concept{flex-direction:column;align-items:flex-start} }
 </style>
 
 <div class="intro" id="intro" aria-hidden="true"><div class="i-glow"></div><div class="i-mark"><svg class="i-emblem" viewBox="0 0 84.53 82.12" aria-hidden="true"><path style="--i:0" fill-rule="nonzero" d="M38.66 27.30C40.80 28.18 42.45 28.19 43.68 27.49C44.94 26.78 45.89 25.48 46.48 24.01C41.22 25.01 40.02 20.74 36.37 21.08C35.25 21.19 33.42 21.99 32.89 24.04C32.45 25.69 32.76 27.54 33.30 28.84C34.53 27.04 36.67 26.47 38.66 27.29"/><path style="--i:1" fill-rule="nonzero" d="M37.97 11.05C35.57 10.99 33.41 12.69 32.43 15.23C31.59 17.39 31.48 19.70 31.46 20.54C33.57 17.07 37.75 17.05 40.73 19.40C42.29 20.63 44.36 21.67 46.58 21.31C48.83 20.94 50.39 19.39 51.64 18.02C47.71 17.88 45.34 16.32 43.09 13.84C41.69 12.31 40.22 11.09 37.97 11.04"/><path style="--i:2" fill-rule="nonzero" d="M45.28 11.59C47.73 14.57 50.36 15.65 53.52 15.26C55.76 14.98 57.59 14.18 58.85 13.36C56.03 12.54 53.52 10.83 51.74 8.40L48.73 4.31C45.56 0.00 39.60 0.16 36.07 3.94C34.23 5.93 33.39 7.89 32.96 9.97C36.81 6.56 41.99 7.59 45.28 11.59"/><path style="--i:3" fill-rule="nonzero" d="M28.12 35.91C30.15 34.80 31.19 33.52 31.40 32.13C31.63 30.70 31.19 29.16 30.41 27.79C27.92 32.50 23.81 30.77 21.81 33.81C21.19 34.75 20.68 36.67 21.96 38.36C22.99 39.73 24.64 40.65 26.00 41.04C25.34 38.96 26.24 36.94 28.12 35.91"/><path style="--i:4" fill-rule="nonzero" d="M14.90 26.32C13.37 28.15 13.36 30.88 14.74 33.23C15.92 35.22 17.66 36.75 18.31 37.29C16.90 33.49 19.49 30.23 23.20 29.38C25.14 28.94 27.25 27.98 28.34 26.03C29.46 24.05 29.22 21.87 28.92 20.05C26.35 23.01 23.65 23.88 20.29 24.09C18.22 24.21 16.34 24.59 14.90 26.32"/><path style="--i:5" fill-rule="nonzero" d="M19.89 20.97C23.76 20.93 26.25 19.56 27.91 16.86C29.09 14.95 29.60 13.03 29.74 11.53C27.34 13.21 24.42 14.10 21.41 13.97L16.31 13.76C10.94 13.53 7.35 18.26 8.13 23.36C8.54 26.03 9.56 27.90 10.92 29.53C10.64 24.41 14.69 21.03 19.89 20.97"/><path style="--i:6" fill-rule="nonzero" d="M28.33 49.47C28.72 47.20 28.36 45.60 27.40 44.56C26.42 43.50 24.93 42.87 23.36 42.62C25.51 47.50 21.59 49.61 22.74 53.07C23.09 54.13 24.28 55.72 26.42 55.79C28.13 55.84 29.88 55.13 31.04 54.32C29.00 53.53 27.96 51.57 28.33 49.47"/><path style="--i:7" fill-rule="nonzero" d="M12.53 53.76C13.02 56.09 15.16 57.81 17.87 58.19C20.18 58.52 22.47 58.12 23.30 57.95C19.43 56.68 18.48 52.63 20.12 49.22C20.98 47.44 21.54 45.20 20.69 43.13C19.83 41.03 17.96 39.87 16.34 38.96C17.07 42.80 16.08 45.44 14.15 48.18C12.96 49.87 12.08 51.57 12.54 53.76"/><path style="--i:8" fill-rule="nonzero" d="M11.44 46.55C13.81 43.52 14.29 40.73 13.20 37.75C12.44 35.64 11.24 34.05 10.16 33.01C9.98 35.92 8.85 38.74 6.87 41.00L3.52 44.83C0.00 48.85 1.48 54.59 5.98 57.17C8.34 58.52 10.44 58.89 12.58 58.85C8.38 55.87 8.24 50.62 11.43 46.55"/><path style="--i:9" fill-rule="nonzero" d="M39.12 57.76C37.58 56.04 36.09 55.33 34.68 55.42C33.23 55.52 31.82 56.29 30.64 57.35C35.82 58.72 35.04 63.08 38.47 64.35C39.52 64.74 41.53 64.81 42.90 63.19C44.01 61.89 44.55 60.09 44.63 58.68C42.73 59.78 40.55 59.36 39.12 57.76"/><path style="--i:10" fill-rule="nonzero" d="M32.65 72.71C34.79 73.78 37.47 73.19 39.46 71.33C41.16 69.74 42.28 67.71 42.66 66.96C39.24 69.17 35.47 67.39 33.81 63.98C32.94 62.20 31.53 60.37 29.37 59.74C27.19 59.11 25.10 59.82 23.38 60.52C26.86 62.34 28.31 64.77 29.26 67.97C29.85 69.95 30.64 71.69 32.65 72.70"/><path style="--i:11" fill-rule="nonzero" d="M26.29 69.06C25.39 65.33 23.49 63.22 20.47 62.20C18.34 61.49 16.34 61.43 14.84 61.61C17.02 63.57 18.54 66.20 19.09 69.15L20.01 74.14C20.99 79.38 26.42 81.81 31.26 79.92C33.79 78.93 35.39 77.53 36.69 75.84C31.73 77.25 27.51 74.09 26.30 69.06"/><path style="--i:12" fill-rule="nonzero" d="M52.38 54.55C50.06 54.67 48.57 55.38 47.77 56.53C46.94 57.72 46.66 59.30 46.76 60.88C51.07 57.71 54.01 61.04 57.15 59.16C58.11 58.58 59.42 57.07 59.00 54.99C58.67 53.32 57.59 51.78 56.53 50.84C56.21 52.99 54.52 54.43 52.38 54.54"/><path style="--i:13" fill-rule="nonzero" d="M60.10 68.89C62.28 67.90 63.49 65.44 63.26 62.74C63.07 60.43 62.17 58.30 61.82 57.53C61.43 61.57 57.67 63.39 53.96 62.55C52.02 62.12 49.70 62.07 47.86 63.36C45.99 64.66 45.26 66.73 44.73 68.50C48.34 66.94 51.15 67.31 54.26 68.58C56.18 69.36 58.05 69.83 60.10 68.89"/><path style="--i:14" fill-rule="nonzero" d="M53.27 71.56C49.77 69.93 46.92 70.09 44.25 71.80C42.35 73.02 41.05 74.53 40.27 75.81C43.17 75.33 46.19 75.80 48.85 77.21L53.35 79.60C58.08 82.12 63.38 79.41 64.90 74.47C65.71 71.89 65.60 69.76 65.09 67.70C63.10 72.44 57.98 73.74 53.27 71.55"/><path style="--i:15" fill-rule="nonzero" d="M58.11 42.24C56.77 44.12 56.39 45.72 56.80 47.07C57.22 48.45 58.29 49.65 59.59 50.55C59.79 45.23 64.24 45.02 64.72 41.41C64.86 40.30 64.49 38.35 62.60 37.37C61.07 36.59 59.19 36.47 57.79 36.70C59.29 38.29 59.36 40.50 58.12 42.24"/><path style="--i:16" fill-rule="nonzero" d="M74.21 45.19C74.80 42.88 73.61 40.41 71.34 38.89C69.40 37.60 67.17 36.97 66.34 36.77C69.27 39.59 68.37 43.64 65.39 46.01C63.84 47.24 62.36 49.02 62.22 51.24C62.08 53.51 63.25 55.37 64.32 56.88C65.34 53.10 67.39 51.15 70.32 49.52C72.13 48.51 73.66 47.36 74.21 45.19"/><path style="--i:17" fill-rule="nonzero" d="M72.05 52.15C68.59 53.86 66.94 56.17 66.62 59.32C66.39 61.55 66.77 63.50 67.29 64.91C68.72 62.36 70.97 60.30 73.74 59.12L78.43 57.11C83.36 55.01 84.53 49.20 81.60 44.94C80.07 42.71 78.33 41.46 76.39 40.58C78.88 45.07 76.71 49.87 72.05 52.16"/><path style="--i:18" fill-rule="nonzero" d="M52.01 30.12C52.65 32.34 53.67 33.62 54.98 34.14C56.33 34.67 57.95 34.59 59.47 34.15C55.40 30.68 58.01 27.09 55.47 24.47C54.69 23.67 52.91 22.74 50.97 23.60C49.40 24.30 48.13 25.69 47.44 26.92C49.63 26.74 51.42 28.06 52.01 30.12"/><path style="--i:19" fill-rule="nonzero" d="M64.36 19.44C62.91 17.55 60.22 16.93 57.62 17.75C55.39 18.45 53.51 19.80 52.84 20.31C56.88 19.79 59.50 23.02 59.51 26.81C59.51 28.78 59.99 31.04 61.66 32.54C63.35 34.06 65.54 34.31 67.40 34.42C65.06 31.28 64.81 28.47 65.36 25.17C65.69 23.13 65.74 21.23 64.37 19.45"/><path style="--i:20" fill-rule="nonzero" d="M68.49 25.46C67.68 29.22 68.47 31.94 70.75 34.15C72.36 35.72 74.13 36.64 75.56 37.11C74.45 34.41 74.23 31.39 75.02 28.49L76.37 23.60C77.79 18.45 73.95 13.92 68.77 13.54C66.06 13.34 63.99 13.92 62.09 14.88C67.17 15.75 69.59 20.42 68.49 25.46"/></svg><div class="i-word"><span>Studio</span></div></div></div>
@@ -1133,6 +1206,7 @@ details.rl-changes>summary::-webkit-details-marker{display:none}
         <button class="l-choice" type="button" id="openReels"><span class="row"><b>Reels production</b><span class="l-arrow" aria-hidden="true">→</span></span><small>Idea to film · Seedance 2.5</small></button>
         <button class="l-choice" type="button" id="openGallery"><span class="row"><b>Gradient elements</b><span class="l-arrow" aria-hidden="true">→</span></span><small>6 shapes · high-res PNG</small></button>
         <button class="l-choice" type="button" id="openAnim"><span class="row"><b>Animation direction</b><span class="l-arrow" aria-hidden="true">→</span></span><small>After Effects templates · EN + AR</small></button>
+        <button class="l-choice" type="button" id="openBrand"><span class="row"><b>Brand identity</b><span class="l-arrow" aria-hidden="true">→</span></span><small>Colours · logo · type · assets to download</small></button>
       </div>
     </div>
     <div class="l-foot">Bank al Etihad · Creative Studio</div>
@@ -1216,6 +1290,13 @@ details.rl-changes>summary::-webkit-details-marker{display:none}
         <div class="a-wrap" id="aWrap"><div class="a-stage" id="aStage"><canvas class="a-canvas" id="aCanvas" width="1920" height="1080" aria-hidden="true"></canvas><div class="a-shape" id="aShape"><img alt="" id="aShapeImg"></div><div class="a-text" id="aText"></div></div></div>
       </div>
     </details>
+  </div>
+</section>
+<section class="gallery" id="brand" hidden aria-label="Brand identity">
+  <div class="g-in">
+    <div class="g-top"><button class="g-back" type="button" id="closeBrand"><i aria-hidden="true">←</i>Home</button></div>
+    <div class="g-head"><h2>Brand identity</h2><p>Bank al Etihad · Guidelines V1.1 · everything on one page.</p></div>
+    <div id="biBody" class="bi"></div>
   </div>
 </section>
 <section class="gallery" id="gallery" hidden aria-label="Gradient elements">
