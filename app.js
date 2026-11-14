@@ -2219,6 +2219,69 @@ function brMemOpen(id){
    ${nb.map(x=>`<div class="br-mlink"><span class="r" style="color:${MEM_REL[x.r]||"inherit"}">${esc(x.r)}${x.back?" (to this)":""}</span>${brMemCard(x.c)}</div>`).join("")}</div>`;
   box.scrollIntoView?.({block:"nearest"});
 }
+/* ---------- Talk to the Director: a private chat that answers from the brain itself ---------- */
+const BRC={msgs:[],busy:false,live:"",abort:null,loaded:false};
+const BRC_ASK=["What did you learn lately?","What are you still weak at?","How would you direct a Ramadan reel?","Where are you heading next?"];
+const brcKey=()=>"bae_brain_chat_"+(RLS.uid||"me");
+function brcLoad(){ if(BRC.loaded) return; BRC.loaded=true; try{ const m=JSON.parse(localStorage.getItem(brcKey())||"[]"); if(Array.isArray(m)) BRC.msgs=m.slice(-40); }catch{} }
+function brcSave(){ try{ localStorage.setItem(brcKey(),JSON.stringify(BRC.msgs.slice(-40))); }catch{} }
+function brcSelf(){
+  const fb=BR.feedback||[], cat=MEM.catalog||{}, kinds={}; for(const c of MEM.cards) kinds[c.k]=(kinds[c.k]||0)+1;
+  const newest=[...MEM.cards].filter(c=>c.at).sort((x,y)=>y.at-x.at).slice(0,14);
+  const topics=Object.entries(cat.topics||{}).sort((x,y)=>y[1]-x[1]).slice(0,24).map(([t,n])=>`${t} (${n})`).join(", ");
+  return `YOUR STATE TODAY
+- Long-term memories: ${MEM.cards.length} (${Object.entries(kinds).map(([k,n])=>`${k} ${n}`).join(", ")||"none yet"})
+- Topics you know most about: ${topics||"none yet"}
+- Days of morning research: ${Math.max(+cat.researchDays||0,BR.research.length)}
+- Team notes: ${fb.length} recent · thumbs up ${fb.filter(x=>!x.implicit&&x.verdict===1).length} · thumbs down ${fb.filter(x=>!x.implicit&&x.verdict===-1).length} · lessons taught ${fb.filter(x=>x.kind==="lesson").length}
+- Knowledge shelves: ${BR.sections.map(s=>`${s.id} = ${s.title}${s.updatedAt?` (updated ${rlAgo(s.updatedAt)})`:""}`).join(" · ")}
+- How you grow: every morning five assistant directors research and write you notes; every night new memories are saved and linked to older ones; the team teaches you rules and rates your work.
+NEWEST THINGS YOU LEARNED
+${newest.map(c=>`- [${c.k} · ${new Date(c.at).toLocaleDateString("en-CA")}] ${String(c.t).slice(0,260)}`).join("\n")||"- nothing dated yet"}
+RECENT TEAM NOTES
+${fb.slice(0,12).map(x=>`- ${x.kind==="lesson"?"lesson":x.verdict===1?"liked":x.verdict===-1?"disliked":"signal"} ${x.kind||""}${x.note?`: ${String(x.note).slice(0,200)}`:""}`).join("\n")||"- none yet"}`; }
+function brcPrompt(mem){
+  const lessons=BR.sections.find(s=>s.id==="lessons"), R=BR.research[0];
+  return `You are the Director of BAE Studio: the film director who makes Bank al Etihad's reels in Jordan. A teammate is talking to you privately, outside any project. They want to know how you think, what you have learned, where you are weak, and what you would do next. Talk as yourself, in the first person.
+RULES
+- Answer from YOUR BRAIN below. When you say you learned something, it must be in there. If the brain has nothing on a point, say so plainly, then give your own professional view and mark it as your view.
+- Be honest about gaps and weak spots; never flatter yourself.
+- Reply in the language the teammate writes in (Jordanian Arabic if they write Arabic). Short and clear: a few short paragraphs or a short list. Plain text, no markdown symbols.
+- You have two tools: search_memory (find memories on a topic) and read_shelf (open one knowledge shelf in full). Use them when the question needs detail you do not see below.
+- Nothing is generated here and nothing costs credits. This is only a conversation.
+${brcSelf()}
+YOUR KNOWLEDGE SHELVES (opening lines; open a shelf with read_shelf for the rest)
+${BR.sections.filter(s=>s.id!=="lessons").map(s=>`### ${s.id} — ${s.title}\n${String(s.text||"").slice(0,1400)}`).join("\n\n")}
+${lessons?`### LESSONS FROM THE TEAM\n${String(lessons.text||"").slice(0,9000)}`:""}
+${BR.advisors.length?`### YOUR ASSISTANT DIRECTORS' LATEST NOTES\n${BR.advisors.map(x=>`[${x.name||x.id}] ${String(x.notes||"").slice(0,1200)}`).join("\n\n")}`:""}
+${R?`### THIS MORNING'S RESEARCH (${R.date})\n${String(R.text||"").slice(0,5000)}`:""}
+${mem||""}`; }
+const brcTools=()=>[
+  {name:"search_memory",description:"Search your long-term memory. Returns up to 15 memories.",inputSchema:{type:"object",properties:{query:{type:"string"}},required:["query"]},execute:async i=>({memories:memSearch(String(i?.query||""),{limit:15}).map(x=>({kind:x.c.k,date:x.c.at?new Date(x.c.at).toLocaleDateString("en-CA"):"",confirmed:+x.c.ev||1,text:String(x.c.t).slice(0,500)}))})},
+  {name:"read_shelf",description:"Open one knowledge shelf in full by its id.",inputSchema:{type:"object",properties:{id:{type:"string"}},required:["id"]},execute:async i=>{ const s=BR.sections.find(x=>x.id===String(i?.id||"")); if(!s) throw new Error("No shelf with that id. Ids: "+BR.sections.map(x=>x.id).join(", ")); return {title:s.title,text:String(s.text||"").slice(0,24000)}; }}];
+function brcHTML(){
+  return `<section class="rl-card br-chat" id="brChat"><div class="rl-ihead"><b>Talk to the Director</b>${BRC.msgs.length?`<button type="button" class="a-btn" data-brcclear>Clear</button>`:""}</div>
+  <div class="br-chatlog" id="brcLog" aria-live="polite">${brcLogHTML()}</div>
+  <form class="br-chatform" id="brcForm"><textarea class="rl-field" name="q" rows="1" dir="auto" placeholder="Ask the Director…" aria-label="Message the Director"></textarea><button class="btn primary small" type="submit">${BRC.busy?"Stop":"Send"}</button></form></section>`; }
+function brcLogHTML(){
+  if(!BRC.msgs.length&&!BRC.busy) return `<p class="t12 muted">He answers from his own memory, research and the team's lessons. Free — nothing is generated.</p><div class="br-topics">${BRC_ASK.map(q=>`<button type="button" class="br-topic" data-brcq="${esc(q)}">${esc(q)}</button>`).join("")}</div>`;
+  return BRC.msgs.map(m=>`<div class="br-msg ${m.role==="user"?"me":"dir"}" dir="auto">${m.role==="user"?"":`<span class="t12 muted">Director</span>`}<p>${esc(m.content)}</p></div>`).join("")+(BRC.busy?`<div class="br-msg dir" dir="auto"><span class="t12 muted">Director</span><p id="brcLive">${BRC.live?esc(BRC.live):"Thinking…"}</p></div>`:""); }
+function brcDraw(){ const s=$("brChat"); if(!s) return; const q=s.querySelector("textarea")?.value||""; s.outerHTML=brcHTML(); const t=$("brChat")?.querySelector("textarea"); if(t) t.value=q; const l=$("brcLog"); if(l) l.scrollTop=l.scrollHeight; if(typeof uxT==="function") uxT($("brChat")); }
+async function brcSend(q){
+  q=String(q||"").trim(); if(!q||BRC.busy) return;
+  if(!sample){ BRC.msgs.push({role:"user",content:q},{role:"assistant",content:"The chat needs Claude, which isn't connected in this view."}); brcDraw(); return; }
+  BRC.msgs.push({role:"user",content:q}); BRC.busy=true; BRC.live=""; BRC.abort=new AbortController(); brcDraw(); const ta=$("brChat")?.querySelector("textarea"); if(ta) ta.value="";
+  let text="";
+  try{ const mem=(await rlMemFor(BRC.msgs.filter(m=>m.role==="user").slice(-2).map(m=>m.content).join(" "),null,40)).text;
+    const hist=BRC.msgs.slice(-12).map(m=>({role:m.role,content:m.content})); hist[0].role==="assistant"&&hist.shift();
+    hist[0]={role:"user",content:brcPrompt(mem)+"\n\n--- THE CONVERSATION STARTS ---\n"+hist[0].content};
+    try{ const r=await sample(hist,{cache:false,signal:BRC.abort.signal,tools:brcTools(),onText:({text:t})=>{ BRC.live=t; const el=$("brcLive"); if(el){ el.textContent=t; const l=$("brcLog"); if(l) l.scrollTop=l.scrollHeight; } }}); text=String(r?.text||BRC.live||"").trim(); }
+    catch(e){ if(e?.code==="cancelled"||e?.name==="AbortError"||BRC.abort.signal.aborted){ text=String(e?.text||BRC.live||"").trim(); }
+      else if(typeof e?.text==="string"&&e.text.trim()) text=e.text.trim();
+      else { const r=await rlAsk(hist.map(m=>(m.role==="user"?"TEAMMATE: ":"DIRECTOR: ")+m.content).join("\n\n")+'\n\nReply as the Director. Return JSON {"reply":"..."}',{cache:false}); text=String(r?.reply||"").trim(); } }
+  }catch(e){ log("✕","brain chat",{code:e?.code}); text=e?.code==="rate_limited"?"Too many questions in a row. Give me a minute and ask again.":e?.code==="not_granted"?"The chat needs permission to use Claude on this page.":"I couldn't answer just now. Ask me again."; }
+  if(text) BRC.msgs.push({role:"assistant",content:text}); BRC.busy=false; BRC.live=""; brcSave(); brcDraw();
+}
 function rlShowBrain(){
   $("rlLib").hidden=true; $("rlProjView").hidden=true; $("rlBrain").hidden=false; $("reels").dataset.mode="brain"; $("reels").scrollTop=0;
   const box=$("rlBrainBody"); box.innerHTML=`<p class="muted">Loading the Director's memory…</p>`;
@@ -2227,6 +2290,7 @@ function rlShowBrain(){
     const fb=BR.feedback, up=fb.filter(x=>!x.implicit&&x.verdict===1).length, down=fb.filter(x=>!x.implicit&&x.verdict===-1).length, taught=fb.filter(x=>x.kind==="lesson").length, sig=fb.filter(x=>x.implicit).length;
     box.innerHTML=`
     <div class="br-stats"><div><b>${MEM.cards.length.toLocaleString()}</b><span>Memories</span></div><div><b>${Math.max(+MEM.catalog?.researchDays||0,BR.research.length)}</b><span>Days of research</span></div><div><b>${fb.length}</b><span>Team notes</span></div></div>
+    ${(brcLoad(),brcHTML())}
     <form class="rl-card br-teach" id="brTeach"><div class="rl-ihead"><b>Teach the Director</b></div><textarea class="rl-field" name="t" rows="2" dir="auto" placeholder="A rule, an insight, a line people really say…"></textarea><div class="rl-btns"><button class="btn primary small" type="submit">Teach</button><span class="t12 muted" id="brTeachMsg"></span></div></form>
     ${brMemHTML()}
     ${BR.research.length?`<details class="rl-card br-sec"><summary><b>Today's research</b><span class="t12 muted">${esc(BR.research[0].date||"")}</span></summary><div class="br-text" dir="auto">${esc(BR.research[0].text||"")}</div>${(BR.research[0].sources||[]).length?`<p class="t12 muted">Sources: ${(BR.research[0].sources||[]).slice(0,8).map(u=>`<a href="${esc(u.url||u)}" target="_blank" rel="noopener">${esc(u.title||u.url||u)}</a>`).join(" · ")}</p>`:""}</details>`:""}
@@ -4506,6 +4570,9 @@ function uxInit(){
   });
   $("rlOpenBrain").onclick=()=>rlShowBrain();
   $("rlBrainBack").onclick=()=>{ $("rlBrain").hidden=true; rlShowLib(); };
+  $("rlBrainBody").addEventListener("submit",e=>{ const f=e.target.closest("#brcForm"); if(!f) return; e.preventDefault(); if(BRC.busy){ BRC.abort?.abort(); return; } brcSend(f.q.value); });
+  $("rlBrainBody").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&e.target.closest?.("#brcForm textarea")){ e.preventDefault(); if(!BRC.busy) brcSend(e.target.value); } });
+  $("rlBrainBody").addEventListener("click",e=>{ const q=e.target.closest("[data-brcq]"); if(q){ brcSend(q.dataset.brcq); return; } if(e.target.closest("[data-brcclear]")){ BRC.abort?.abort(); BRC.msgs=[]; brcSave(); brcDraw(); } });
   $("rlBrainBody").addEventListener("submit",e=>{ const f=e.target.closest("#brMemSearch"); if(!f) return; e.preventDefault(); const d=new FormData(f); brMemSearchShow(String(d.get("q")||""),String(d.get("k")||"")); });
   $("rlBrainBody").addEventListener("click",e=>{ const o=e.target.closest("[data-memopen]"); if(o){ brMemOpen(o.dataset.memopen); return; }
     const t=e.target.closest("[data-memq]"); if(t){ const f=$("brMemSearch"); if(f){ f.q.value=t.dataset.memq; f.k.value=""; } brMemSearchShow(t.dataset.memq,""); return; }
