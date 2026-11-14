@@ -1058,6 +1058,18 @@ details.rl-changes>summary::-webkit-details-marker{display:none}
 .rl-stages.ux4 .lb{display:block!important}
 .ux-nextbar .go .cost:empty{display:none}
 .ux-cost:empty{display:none}
+/* Director's brain, simplified */
+.br-body{max-width:860px;gap:14px}
+.br-stats>div{align-items:center;text-align:center;padding:18px 10px}
+.br-stats b{font-size:36px;line-height:1.1}
+.br-sec>summary{min-height:44px;align-items:center}
+.br-sec .br-advs{margin-top:12px}
+.br-sub{border-top:1px solid var(--stone-light);padding:4px 0}
+.br-sub>summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:10px;align-items:center;min-height:44px}
+.br-sub>summary::-webkit-details-marker{display:none}
+.br-sub>summary b{font-weight:400}
+.br-sub[open]>summary b{color:var(--orange-dark)}
+.br-sub .br-text{margin:4px 0 10px}
 /* Prompt Generator */
 .ux-pgcard .plus{background:var(--ink)!important;font-size:24px!important}
 .ux-pg{position:fixed;inset:0;z-index:99990;background:rgba(25,24,30,.55);display:flex;align-items:flex-start;justify-content:center;padding:24px 14px;overflow:auto}
@@ -1112,7 +1124,7 @@ details.rl-changes>summary::-webkit-details-marker{display:none}
   </div>
   <div class="rl-lib rl-brain" id="rlBrain" hidden>
     <div class="rl-libtop"><button class="g-back" type="button" id="rlBrainBack"><i aria-hidden="true">←</i>Reels</button></div>
-    <header class="rl-libhead"><div><h1>Director's brain</h1><p>The team's shared memory. The Director reads it before every answer: how the best creative directors think, the Jordanian audience, Jordanian and Egyptian advertising, this morning's research and the lessons from your 👍 and 👎.</p></div></header>
+    <header class="rl-libhead"><div><h1>Director's brain</h1><p>What the Director knows. It learns every day.</p></div></header>
     <div id="rlBrainBody" class="br-body"></div>
   </div>
   <div class="rl-proj" id="rlProjView" hidden>
