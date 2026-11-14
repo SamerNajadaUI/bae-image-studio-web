@@ -1323,23 +1323,27 @@ async function clLoad(force){
   clSync(); return CL; }
 const CL_BLOB=new Map();
 async function clBlob(docId){ if(CL_BLOB.has(docId)) return CL_BLOB.get(docId);
-  const sn=await RLS.db.collection("charimg").doc(docId).get(); const d=sn.exists?sn.data()?.d:null; if(!d) throw {code:"not_found",message:"This character's image is missing from the library."};
+  const col=RLS.db.collection("charimg"); const sn=await col.doc(docId).get(); const m=sn.exists?sn.data():null; let d=m?.d||null;
+  if(!d&&m?.n){ const parts=await Promise.all([...Array(+m.n)].map((_,i)=>col.doc(docId+"_"+i).get())); d=parts.map(x=>x.exists?x.data()?.d||"":"").join(""); }
+  if(!d) throw {code:"not_found",message:"This character's image is missing from the library."};
   const b=await (await fetch(d)).blob(); CL_BLOB.set(docId,b); return b; }
-async function clJpegUnder(blob,maxBytes){ let out=null; for(const [px,q] of [[1600,.88],[1400,.85],[1200,.82],[1000,.8],[800,.78]]){ const bmp=await createImageBitmap(blob); const k=Math.min(1,px/Math.max(bmp.width,bmp.height)); const c=document.createElement("canvas"); c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k); c.getContext("2d").drawImage(bmp,0,0,c.width,c.height); out=await new Promise(r=>c.toBlob(r,"image/jpeg",q)); if(out.size<=maxBytes) break; } return out; }
+async function clJpegUnder(blob,maxBytes){ let out=null; for(const [px,q] of [[2000,.9],[1800,.88],[1600,.86],[1400,.84],[1200,.82],[1000,.8]]){ const bmp=await createImageBitmap(blob); const k=Math.min(1,px/Math.max(bmp.width,bmp.height)); const c=document.createElement("canvas"); c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k); c.getContext("2d").drawImage(bmp,0,0,c.width,c.height); out=await new Promise(r=>c.toBlob(r,"image/jpeg",q)); if(out.size<=maxBytes) break; } return out; }
 const clDataUrl=blob=>new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result)); fr.onerror=rej; fr.readAsDataURL(blob); });
 /* add one character: Claude looks once to write the casting line and choose the shelf */
 async function clAdd(blob,name,cat){
   if(!CL.canEdit||!RLS.db) throw {message:"Only the studio owner adds characters to the library."};
-  const full=await clJpegUnder(blob,520000), thumb=await clDataUrl(await toJpeg(full,640));
+  const full=await clJpegUnder(blob,900000); let thumb=""; for(const [px,q] of [[560,.8],[480,.76],[400,.72],[320,.7]]){ const bmp=await createImageBitmap(full); const k=Math.min(1,px/Math.max(bmp.width,bmp.height)); const c=document.createElement("canvas"); c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k); c.getContext("2d").drawImage(bmp,0,0,c.width,c.height); thumb=c.toDataURL("image/jpeg",q); if(thumb.length<=60000) break; }
   let look="", guess=cat||"";
   try{ if(sample){ const o=await sample.json(`Describe the person in this image in ONE short casting phrase: man or woman (or boy / girl), approximate age, hair, facial hair if any, eye colour, build. No name, no clothes, no background. Also choose the shelf: "men" (adult man under 60), "women" (adult woman under 60), "kids" (under 18), "elderly" (60 or older, any gender). Reply with only JSON: {"look":"…","cat":"men|women|kids|elderly"}`,{images:[full],modelTier:"quick"}); look=String(o?.look||"").trim().slice(0,220); if(!guess&&CL_CATS.some(([k])=>k===o?.cat)) guess=o.cat; } }catch{}
   const id="c"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-  await RLS.db.collection("charimg").doc(id).set({d:await clDataUrl(full),at:Date.now()});
+  { const data=await clDataUrl(full), SZ=90000, n=Math.ceil(data.length/SZ), col=RLS.db.collection("charimg");
+    for(let i=0;i<n;i++) await col.doc(id+"_"+i).set({d:data.slice(i*SZ,(i+1)*SZ)});
+    await col.doc(id).set({n,at:Date.now()}); }
   const doc={name:String(name||"New character").slice(0,60),cat:guess||"men",look,thumb,at:Date.now(),by:RLS.uid||null};
   await RLS.db.collection("chars").doc(id).set(doc);
   CL_BLOB.set(id,full); CL.list.unshift({id,...doc}); clSync(); return id; }
 async function clUpdate(id,patch){ const c=CL.list.find(x=>x.id===id); if(!c||!CL.canEdit) return; Object.assign(c,patch); clSync(); try{ await RLS.db.collection("chars").doc(id).update(patch); }catch(e){ log("✕","character update",{code:e?.code}); } }
-async function clRemove(id){ if(!CL.canEdit) return; CL.list=CL.list.filter(x=>x.id!==id); clSync(); try{ await RLS.db.collection("chars").doc(id).delete(); await RLS.db.collection("charimg").doc(id).delete(); }catch(e){ log("✕","character remove",{code:e?.code}); } }
+async function clRemove(id){ if(!CL.canEdit) return; CL.list=CL.list.filter(x=>x.id!==id); clSync(); try{ const col=RLS.db.collection("charimg"); const sn=await col.doc(id).get().catch(()=>null); const n=+(sn?.exists?sn.data()?.n:0)||0; await RLS.db.collection("chars").doc(id).delete(); for(let i=0;i<n;i++) await col.doc(id+"_"+i).delete().catch(()=>{}); await col.doc(id).delete(); }catch(e){ log("✕","character remove",{code:e?.code}); } }
 async function clUpload(files){ const L=[...files].filter(f=>/^image\//.test(f.type)).slice(0,8); if(!L.length) return; let n=0, last=null;
   for(const f of L){ CL.busy=`Adding ${++n} of ${L.length}…`; renderRefs(); try{ last=await clAdd(f,"",""); CL.err=""; }catch(e){ CL.err="Couldn't add the image: "+String(e?.message||e?.code||e).slice(0,160); } }
   CL.busy=""; if(last){ S._newChar=clRefId(last); CL.cat="all"; } renderRefs(); }
@@ -1939,8 +1943,10 @@ const rlTmem={}, rlFull={}, rlTQ=new Set(), rlTTried=new Set(); let rlTBusy=0;
 const rlTCol=()=>RLS.mode==="account"&&RLS.db&&RLS.uid?RLS.db.collection("data/users/"+RLS.uid+"/thumbs/t"):null;
 const rlTDoc=cid=>String(cid).replace(/[^A-Za-z0-9_-]/g,"_").slice(0,150);
 const rlTUp=new Set();
-function rlTCloud(cid,data){ const c=rlTCol(); if(!c||rlTUp.has(cid)||!data||data.length>700000) return; rlTUp.add(cid); try{ if(localStorage.getItem("rlTC:"+cid)) return; }catch{}
-  try{ c.doc(rlTDoc(cid)).set({d:data,at:Date.now()}).then(()=>{ try{ localStorage.setItem("rlTC:"+cid,"1"); }catch{} },()=>{ rlTUp.delete(cid); }); }catch{} }
+async function rlTFit(data){ if(data.length<=95000) return data; try{ const bmp=await createImageBitmap(await (await fetch(data)).blob()); for(const [px,q] of [[900,.7],[760,.66],[640,.62],[520,.6],[400,.58]]){ const k=Math.min(1,px/Math.max(bmp.width,bmp.height)); const cv=document.createElement("canvas"); cv.width=Math.round(bmp.width*k); cv.height=Math.round(bmp.height*k); cv.getContext("2d").drawImage(bmp,0,0,cv.width,cv.height); const d=cv.toDataURL("image/jpeg",q); if(d.length<=95000) return d; } }catch{} return null; }
+function rlTCloud(cid,data0){ const c=rlTCol(); if(!c||rlTUp.has(cid)||!data0) return; rlTUp.add(cid); try{ if(localStorage.getItem("rlTC:"+cid)) return; }catch{}
+  rlTFit(data0).then(data=>{ if(!data) return;
+  try{ c.doc(rlTDoc(cid)).set({d:data,at:Date.now()}).then(()=>{ try{ localStorage.setItem("rlTC:"+cid,"1"); }catch{} },()=>{ rlTUp.delete(cid); }); }catch{} }); }
 function rlTGet(cid){ if(!cid) return null; if(String(cid).startsWith("lib:")) return refById(String(cid).slice(4))?.src||null; if(rlTmem[cid]){ rlTCloud(cid,rlTmem[cid]); return rlTmem[cid]; } try{ const v=localStorage.getItem(RL_T+cid); if(v){ rlTCloud(cid,v); return rlTmem[cid]=v; } }catch{} return null; }
 function rlTSet(cid,data){ if(!cid||!data) return; rlTmem[cid]=data; rlTCloud(cid,data); try{ localStorage.setItem(RL_T+cid,data); }catch{ try{ const ks=Object.keys(localStorage).filter(k=>k.startsWith(RL_T)); ks.slice(0,Math.ceil(ks.length/3)).forEach(k=>localStorage.removeItem(k)); localStorage.setItem(RL_T+cid,data); }catch{} } }
 function rlNeed(cid){ if(!cid||String(cid).startsWith("lib:")||rlTGet(cid)||rlTTried.has(cid)||(!rlTCol()&&(!mcp||!S.connected))) return; rlTQ.add(cid); rlPump(); }
