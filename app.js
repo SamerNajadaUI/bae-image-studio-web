@@ -1827,7 +1827,28 @@ async function brLoad(force){
     BR.research=r.docs.map(d=>({id:d.id,...JSON.parse(JSON.stringify(d.data()))})); BR.loaded=Date.now(); }
   catch(e){ log("✕","brain load",{code:e?.code}); }
   try{ const u=await window.claude?.use?.("user"); BR.canEdit=!!u?.canEdit?.(); BR.uid=RLS.uid; }catch{}
+  if(BR.canEdit&&!BR_ADS_RUN) setTimeout(()=>brWatchAds(),25000);
   return BR;
+}
+/* ---------- The studio watches queued ads with Gemini while it is open; the daily research turns them into memory cards ---------- */
+let BR_ADS_RUN=false;
+async function brWatchAds(){
+  if(BR_ADS_RUN||!mcp||!RLS.db||!BR.canEdit) return; BR_ADS_RUN=true;
+  try{ const db=RLS.db, day=new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Amman"});
+    const q=await db.doc("memmeta/adqueue").get(); const queue=(q.exists?q.data().items:null)||[]; if(!queue.length) return;
+    const w=await db.doc("memmeta/adwatch").get(); let items=(w.exists?w.data().items:null)||[];
+    const seen=new Set(items.map(x=>x.url)); let today=items.filter(x=>x.day===day&&x.analysis).length;
+    for(const a of queue){ if(today>=4) break; if(!a?.url||seen.has(a.url)) continue;
+      if(document.hidden||rlBusy){ await new Promise(r=>setTimeout(r,15000)); if(document.hidden) break; }
+      let rec={url:a.url,title:a.title||"",brand:a.brand||"",country:a.country||"",day,at:Date.now()};
+      try{ const r=await mcp.callTool(GEYE,"watch_video",{video_url:a.url,fps:1,end_s:75,detail:"low",question:"Give a shot-by-shot breakdown with MM:SS: hook in the first 2 s, story beats, the human insight, how the product appears, camera/lens/light/grade, pacing and cut rhythm, music/sound, the ending/packshot, on-screen text. Then: why it works, what a Jordanian bank could steal from it, and what would NOT fit Jordan."},{cache:false});
+        rec.analysis=String(typeof r?.payload==="string"?r.payload:r?.payload?.answer||(r?.content||[]).map(c=>c.text||"").join("")||"").slice(0,9000); if(rec.analysis) today++; else rec.err="empty"; }
+      catch(e){ const m=String(e?.message||e?.code||""); if(/quota|exhaust|429|not_granted|not.?connected|manifest/i.test(m)) break; rec.err=m.slice(0,200); }
+      seen.add(a.url); items=[...items,rec].slice(-60);
+      await db.doc("memmeta/adwatch").set({items,updatedAt:Date.now()}).catch(()=>{});
+      log(rec.analysis?"✓":"✕","ad watched for the brain",{title:rec.title,url:rec.url,err:rec.err});
+      await new Promise(r=>setTimeout(r,4000)); }
+  }catch(e){ log("✕","ad watch",{code:e?.code}); }
 }
 async function brLoadFeedback(){ if(!RLS.db) return []; try{ const f=await RLS.db.collection("feedback").orderBy("at","desc").limit(30).get(); BR.feedback=f.docs.map(d=>({id:d.id,...JSON.parse(JSON.stringify(d.data()))})); }catch{} return BR.feedback; }
 
@@ -1939,16 +1960,24 @@ try{ Object.defineProperty(window,"baeMemory",{value:Object.freeze({search:(q,o)
 async function rlMemFor(query,stage,limit=36){ try{ return await memContext(query,stage,{limit}); }catch(e){ log("✕","memory recall",{code:e?.code}); return {text:"",ids:[],count:0}; } }
 /* what the Director reads before every answer — nothing is cut: the core knowledge in full, the assistant directors' full notes,
    the team's lessons in full, the memories recalled for THIS moment, today's short-term memory and this morning's research */
-function brText(memText){
+/* The brain is big, so each moment loads only the shelves it needs; the rest stay one tool call away (studio_read brain). */
+const BR_WHEN={masters:["idea","script"],jordan_ads:["idea","script"],egypt_ads:["idea","script"],
+  templates:["characters","locations","directing"],seedream55:[],seedance25:[],
+  hf_seedance_writer:["directing"],hf_acting_director:["directing","script"],cinematography:["directing"],ai_video_rules:["directing","characters","locations"],adil_workflow:["directing"],directing_workflow:["directing"]};
+function brPick(mode){ if(!mode) return {use:BR.sections,skip:[]};
+  const use=[],skip=[]; for(const s of BR.sections){ const w=Array.isArray(s.stages)&&s.stages.length?s.stages:BR_WHEN[s.id]; (!w||w.includes(mode)||s.id==="lessons"?use:skip).push(s); } return {use,skip}; }
+function brText(memText,mode){
   if(!BR.sections.length&&!BR.research.length&&!memText) return "";
-  const lessons=BR.sections.find(s=>s.id==="lessons"), rest=BR.sections.filter(s=>s.id!=="lessons");
+  const {use,skip}=brPick(mode);
+  const lessons=use.find(s=>s.id==="lessons"), rest=use.filter(s=>s.id!=="lessons");
   const R=BR.research[0];
   return `DIRECTOR'S BRAIN — the team's shared memory. Read ALL of it before you decide: the core knowledge, the team's lessons, the long-term memories recalled for this moment, today's short-term memory and this morning's research. Where the team's lessons or memories disagree with general knowledge, the team wins; a newer memory that supersedes an older one wins.
 ${rest.map(s=>`### ${s.title}\n${s.text||""}`).join("\n\n")}
 ${BR.advisors.length?`### ASSISTANT DIRECTORS — five specialists who research every morning and advise you. Consult them; pass on their best note when it matters.\n${BR.advisors.map(x=>`[${x.id}] ${x.name} — ${x.role}\n${x.notes||""}`).join("\n\n")}`:""}
 ${lessons?`### ${lessons.title}\n${lessons.text||""}`:""}
 ${memText||""}
-${R?`### This morning's research (${R.date})\n${R.text||""}`:""}`;
+${R?`### This morning's research (${R.date})\n${R.text||""}`:""}
+${skip.length?`### MORE SHELVES IN THE BRAIN (not loaded now — open one with studio_read section "brain", arg = its id, when the task needs it): ${skip.map(s=>`${s.id} = ${s.title}`).join(" · ")}`:""}`;
 }
 async function brFeedback(kind,key,verdict,note,item){
   if(!RL) return;
@@ -2199,6 +2228,7 @@ function rlSection(section,arg){
     case "film_look": return RL.look||"Not written yet.";
     case "notes": return RL.notes||"(empty)";
     case "settings": return rlSet();
+    case "brain": { const b=BR.sections.find(x=>x.id===String(arg||"").trim())||BR.sections.find(x=>String(x.title||"").toLowerCase().includes(String(arg||"").toLowerCase())); return b?`### ${b.title}\n${b.text||""}`:`Brain shelves: ${BR.sections.map(x=>`${x.id} = ${x.title}`).join(" · ")}`; }
     case "activity": return (RL.events||[]).slice(-40).map(x=>`${new Date(x.t).toLocaleString()} — ${x.x}`).join("\n")||"Nothing yet.";
     default: return "Unknown section.";
   }
@@ -2219,8 +2249,8 @@ function rlStudioTools(turn){
   const S1=v=>typeof v==="string"?v:JSON.stringify(v);
   const els={type:"string",description:"handle like @char_sara / @loc_hall / @prop_ticket (or tag @img3 or the name)"};
   return [
-    {name:"studio_read",description:"Read any part of the production IN FULL (nothing is cut): overview, ideas, script, characters, locations, props, element (arg = handle), scenes, scene (arg = number), film_look, notes, settings, activity (what the user and the studio did recently: edits, uploads, generations, renders, reviews). Read before you change something you can't see completely above.",
-      inputSchema:{type:"object",properties:{section:{type:"string",enum:["overview","ideas","script","characters","locations","props","element","scenes","scene","film_look","notes","settings","activity"]},arg:{type:"string"}},required:["section"]},
+    {name:"studio_read",description:"Read any part of the production IN FULL (nothing is cut): overview, ideas, script, characters, locations, props, element (arg = handle), scenes, scene (arg = number), film_look, notes, settings, brain (arg = shelf id: the Director's craft knowledge that isn't loaded right now), activity (what the user and the studio did recently: edits, uploads, generations, renders, reviews). Read before you change something you can't see completely above.",
+      inputSchema:{type:"object",properties:{section:{type:"string",enum:["overview","ideas","script","characters","locations","props","element","scenes","scene","film_look","notes","settings","activity","brain"]},arg:{type:"string"}},required:["section"]},
       execute:async({section,arg})=>{ T(`Reading ${section}${arg?` ${arg}`:""}`); const r=S1(rlSection(section,arg)); return r.length>24000?r.slice(0,24000)+"… (cut — read a single element or scene instead)":r; }},
     {name:"studio_upsert_element",description:"Add ONE character, location or prop, or change fields of an existing one. Only the fields you pass change; everything else (its image, tag, edits) stays. Pass the full new text for a field you change (e.g. the whole prompt). A new element needs kind, handle, name, description and a complete prompt (CHARACTER SHEET / LOCATION / PROP SHEET template). If an element uses the user's own image, its image is the truth: only align description/prompt with it.",
       inputSchema:{type:"object",properties:{kind:{type:"string",enum:["character","location","prop"]},handle:els,new_handle:{type:"string",description:"rename the handle (rarely)"},name:{type:"string"},role:{type:"string"},description:{type:"string"},wardrobe:{type:"string"},details:{type:"string"},prompt:{type:"string"},library:{type:"string",enum:["","Wissam","Lina","Sara","Omar"]}},required:["handle"]},
@@ -2360,7 +2390,7 @@ ${RL_BAE}
 
 ${RL_JO}
 
-${brText(memText)}
+${brText(memText,/scene|shot|prompt|seedance|مشهد|مشاهد|برومبت|لقط/i.test(text||"")||["directing","render"].includes(RL.view)||["directing","render"].includes(RL.stage)?"directing":RL.stage==="render"?"directing":RL.stage)}
 ${canSearch?`
 MEMORY SEARCH: your long-term memory holds ${MEM.cards.length} memories. The most relevant ones are above. If this request touches something they don't cover (a new topic, place, occasion, product, technique), call search_memory (English or Arabic keywords) before deciding, and open_memory to follow links. At most 3 searches; never search for what is already above.`:""}
 
@@ -3051,7 +3081,7 @@ ${RL_SD25}
 
 ${RL_BAE}
 
-${brText(mem.text)}
+${brText(mem.text,"directing")}
 
 PROJECT: script ${trimJSON(RL.script,4000)}
 CAST: ${trimJSON(RL.characters.map(({tag,name,description,wardrobe})=>({tag,name,description,wardrobe})),2500)}
