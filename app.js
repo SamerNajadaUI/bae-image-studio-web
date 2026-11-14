@@ -1707,6 +1707,11 @@ const RL_SEEDREAM=`SEEDREAM 5.5 (ByteDance) — THE IMAGE MODEL FOR EVERY STILL 
 - Name the orientation in words (vertical 9:16 / wide 16:9). Describe products by materials and parts, not just colour. Say where the subject sits and where empty space stays.
 - Text in the image: put each line in double quotes, give it a position, type style and colour, and end with "no other text".
 - Keep it under ~600 words. Refer to attached references as @img1, @img2… and give each ONE job (identity / place / product).`;
+const RL_DIALOGUE=`DIALOGUE — SPOKEN ARABIC THAT SOUNDS RIGHT (every spoken line, no exceptions):
+- All speech is in the reel's language (Jordanian Arabic unless the settings say otherwise). Never write a spoken line in English or in Latin letters, and state once in AUDIO: "All speech is Jordanian Arabic (Amman dialect); no English speech."
+- Write each line in Arabic script WITH FULL TASHKEEL (حَرَكات) the way a Jordanian actually says it — dialect vowels, sukun on silent endings — so the model pronounces it correctly: «مَرْحَبا، كيفْ حالْكُمْ؟», «هَسّا بَدْفَعْها بْكَبْسِة», «وَلا يْهِمَّكْ». Keep lines short (what fits the seconds: about 2–3 words per second).
+- In the prompt, each line sits inside its timed stage, bound to its speaker and its voice: 0–4s … @char_wissam says to camera in Jordanian Arabic, calm and warm (voice reference @voice1): «مَرْحَبا، كيفْ حالْكُمْ؟» — everyone else keeps their mouth closed. Number the lines @voice1, @voice2… in the order they are spoken; the studio swaps each for the user's audio reference (@audio1…) when one is attached.
+- Return the same lines in "dialogue": [{"n":1,"who":"@char_wissam","at":"0–4s","line":"مَرْحَبا، كيفْ حالْكُمْ؟","delivery":"calm, warm"}] — "line" exactly as in the prompt, with tashkeel. No dialogue → "dialogue": [].`;
 const RL_JO=`JORDAN, FROM THE INSIDE (you are the best creative director in Jordan; think like a Jordanian, not a tourist):
 - Values that move people here: النخوة (stepping in for someone without being asked), الشهامة (gallantry, quiet decency), الغيرة (protective care for family and neighbourhood), الكرم (generosity: the host who insists, the extra plate), الشرف والسمعة (honour and how the family is seen), الجيرة (the neighbour is family), العونة (everyone helps: harvest, wedding, moving house), برّ الوالدين (caring for parents). Show these through ACTIONS, never slogans: a young man pays a stranger's taxi without a word, the son quietly settles his father's bill, the neighbour lends the gas cylinder.
 - Daily texture: Amman hills and stairs (Jabal al-Weibdeh, Jabal Amman, Lweibdeh, Rainbow St, Abdali, Sweifieh, Taj, Downtown/Balad), traffic at the 7th circle, servees and yellow taxis, the khaltour coffee, kaak with zaatar, knafeh from Habibah, mansaf at Friday lunch, the jameed, the shrak bread, falafel at Hashem, the gas truck's tune, the morning "ya sabah al-khair", the evening walk, the hookah on the balcony, winter sobba heater and the family around it, snow day in Amman, the Dead Sea Friday, Aqaba holidays, Wadi Rum, Ajloun forests, Jerash, Salt's yellow houses, Irbid students, Zarqa workers.
@@ -2198,7 +2203,7 @@ function rlEvent(x){ if(!RL) return; (RL.events=RL.events||[]).push({t:Date.now(
 const rlKind=e=>RL.characters.includes(e)?"character":e.kind==="prop"?"prop":"location";
 const rlImgState=e=>e.fromUser?"user's own image":e.fromLib?"BAE library image":e.status==="run"?"generating now":e.id?(e.stale?"generated (prompt changed since — regenerate)":"generated"):"no image yet";
 function rlElFull(e){ return {kind:rlKind(e),tag:e.tag,handle:e.handle,name:e.name,role:e.role,description:e.description,wardrobe:e.wardrobe,details:e.details,prompt:e.prompt,library:e.lib||null,image:rlImgState(e),what_the_image_shows:e.seen||null,error:e.err||null}; }
-function rlSceneFull(sc){ return {n:sc.n,title:sc.title,logline:sc.logline,duration_s:sc.duration_s,refs:sc.refs,blueprint:sc.blueprint||null,frame_prompt:sc.frame_prompt,prompt:sc.prompt,
+function rlSceneFull(sc){ return {n:sc.n,title:sc.title,logline:sc.logline,duration_s:sc.duration_s,refs:sc.refs,blueprint:sc.blueprint||null,frame_prompt:sc.frame_prompt,prompt:sc.prompt,dialogue:(sc.dialogue||[]).map(d=>({n:d.n,who:d.who,at:d.at,line:d.line,delivery:d.delivery,voice_reference_attached:!!d.audio?.id})),
   first_frame:sc.frame?.status==="run"?"generating now":sc.frame?.id?(sc.frame.stale?"generated (frame prompt changed since)":"generated"):"none",what_the_first_frame_shows:sc.frame?.seen||null,
   video:sc.status==="run"?"rendering now":sc.status==="done"?"rendered":sc.status==="err"?"failed: "+(sc.note||""):"not rendered",
   check:sc.check?{dirty:!!sc.check.dirty,passed:sc.check.passed,total:sc.check.total}:null,
@@ -2287,8 +2292,8 @@ function rlStudioTools(turn){
         rlEvent(`Director deleted ${e.handle}.`); turn.dirty=true;
         return `Deleted ${e.handle}.${used.length?` Scenes ${used.join(", ")} still mention it — update them.`:""}`; }},
     {name:"studio_upsert_scene",description:"Create or change ONE directing scene (shot). Only the fields you pass change. For a new scene give everything (blueprint first, then frame_prompt and prompt). Changing prompt resets its rendered video; the studio re-checks the scene automatically.",
-      inputSchema:{type:"object",properties:{n:{type:"number"},title:{type:"string"},logline:{type:"string"},duration_s:{type:"number"},refs:{type:"array",items:{type:"string"}},blueprint:{type:"object"},frame_prompt:{type:"string"},prompt:{type:"string"},new_n:{type:"number",description:"move the scene to this number (others shift)"}},required:["n"]},
-      execute:async(a)=>{ const n=+a.n; const fields=["title","logline","duration_s","refs","blueprint","frame_prompt","prompt"]; const sc0={n}; for(const f of fields) if(a[f]!=null) sc0[f]=a[f];
+      inputSchema:{type:"object",properties:{n:{type:"number"},title:{type:"string"},logline:{type:"string"},duration_s:{type:"number"},refs:{type:"array",items:{type:"string"}},blueprint:{type:"object"},frame_prompt:{type:"string"},prompt:{type:"string"},dialogue:{type:"array",items:{type:"object"},description:"spoken lines [{n,who,at,line (Arabic with full tashkeel),delivery}], matching @voice1… in the prompt"},new_n:{type:"number",description:"move the scene to this number (others shift)"}},required:["n"]},
+      execute:async(a)=>{ const n=+a.n; const fields=["title","logline","duration_s","refs","blueprint","frame_prompt","prompt","dialogue"]; const sc0={n}; for(const f of fields) if(a[f]!=null) sc0[f]=a[f];
         const old=RL.scenes.find(x=>+x.n===n);
         if(!old&&!a.prompt) return "A new scene needs a prompt (and a blueprint and frame_prompt).";
         changed(old?`✎ scene ${n}: ${fields.filter(f=>a[f]!=null).join(", ")}`:`＋ scene ${n}`); T(old?`Rewriting scene ${n}`:`Writing scene ${n}`);
@@ -2335,7 +2340,7 @@ function rlApplyTurn(turn){
   if(turn.scenes.length){ const toCheck=[];
     for(const sc of turn.scenes){ const i=RL.scenes.findIndex(x=>+x.n===+sc.n);
       if(i<0){ RL.scenes.push({...sc}); toCheck.push(sc.n); continue; }
-      const old=RL.scenes[i]; const m={...old,...sc};
+      const old=RL.scenes[i]; const m={...old,...sc}; if(sc.dialogue){ m.dialogue=old.dialogue; rlSetDialogue(m,sc.dialogue); }
       if(sc.prompt&&sc.prompt!==old.prompt) Object.assign(m,{status:null,clip:null,url:null,note:null,_src:null,web:null});
       if((sc.prompt&&sc.prompt!==old.prompt)||(sc.frame_prompt&&sc.frame_prompt!==old.frame_prompt)||(sc.blueprint&&JSON.stringify(sc.blueprint)!==JSON.stringify(old.blueprint))||(sc.refs&&JSON.stringify(sc.refs)!==JSON.stringify(old.refs))){ toCheck.push(sc.n); if(m.frame?.id&&sc.frame_prompt&&sc.frame_prompt!==old.frame_prompt) m.frame={...m.frame,stale:true}; }
       RL.scenes[i]=m; }
@@ -2381,6 +2386,8 @@ function rlPromptFor(text,memText,canSearch,agent,filed){
   return `You are the creative director and AI film director of Bank al Etihad (Jordan) in a reels production studio. You talk with a BAE designer in a chat and build the production with them, one stage at a time. Answer in the user's language (Arabic or English, Jordanian tone is fine), warm and direct, short paragraphs.
 
 ${RL_METHOD}
+
+${RL_DIALOGUE}
 
 ${RL_SD25}
 
@@ -2435,7 +2442,7 @@ Reply with ONLY one JSON object whose FIRST key is "reply" (the user watches it 
   — prompt = the full THREE-PANEL character sheet prompt (CHARACTER SHEET template); set "library" only when the user wants that BAE character
 - "locations": [{"tag","handle","name","kind":"location"|"prop","description","prompt","from_attachment":null|N}]  — full image prompt (LOCATION template, empty of people / PROP SHEET template)
 - "film_look": the shared FILM LOOK paragraph (write it with the first scenes; change it only when asked)
-- "scenes": [{"n","title","logline","duration_s","refs":["@char_…","@loc_…"],"blueprint":{...},"frame_prompt","prompt"}]  — logline = one line "what it does"; blueprint = the top-down blocking plan written FIRST (format: ${RL_BP_SCHEMA}); frame_prompt = the still-image prompt (Seedream 5.5) for the scene's first frame, using the tags ("the man @img1 sits…"); prompt = the full Seedance 2.5 prompt that continues from that first frame, following the DIRECTING structure; duration 4–15 s, ${set.aspect}
+- "scenes": [{"n","title","logline","duration_s","refs":["@char_…","@loc_…"],"blueprint":{...},"frame_prompt","prompt","dialogue":[{"n","who","at","line","delivery"}]}]  — logline = one line "what it does"; blueprint = the top-down blocking plan written FIRST (format: ${RL_BP_SCHEMA}); frame_prompt = the still-image prompt (Seedream 5.5) for the scene's first frame, using the tags ("the man @img1 sits…"); prompt = the full Seedance 2.5 prompt that continues from that first frame, following the DIRECTING structure; duration 4–15 s, ${set.aspect}
 - "chips": 2–4 short suggested next replies for the user, in their language
 - "used_memories": ids of the memory cards (c_…) that actually shaped this answer, 0–8
 - "advisors": 0–3 short notes from the ASSISTANT DIRECTORS that matter for THIS reply: [{"id":"trend"|"story"|"dp"|"performance"|"tech","note":"one concrete suggestion in the user's language"}]. Only when genuinely useful; never repeat what you already did.`;
@@ -2544,7 +2551,7 @@ function rlApply(o){
   let toCheck=[];
   if(Array.isArray(o.scenes)) o.scenes=o.scenes.filter(sc=>sc&&typeof sc==="object"&&(sc.prompt||RL.scenes.some(x=>+x.n===+sc.n)));
   if(Array.isArray(o.scenes)){ const kept=RL.scenes.filter(x=>!o.scenes.some(sc=>+sc.n===+x.n)); RL.scenes=[...kept,...o.scenes.map(sc=>{ const old=RL.scenes.find(x=>+x.n===+sc.n); if(!old){ toCheck.push(sc.n); return {...sc}; }
-    const m={...old,...sc}; if(sc.prompt&&sc.prompt!==old.prompt) Object.assign(m,{status:null,clip:null,url:null,note:null,_src:null,web:null});
+    const m={...old,...sc}; if(sc.dialogue){ m.dialogue=old.dialogue; rlSetDialogue(m,sc.dialogue); } if(sc.prompt&&sc.prompt!==old.prompt) Object.assign(m,{status:null,clip:null,url:null,note:null,_src:null,web:null});
     if((sc.prompt&&sc.prompt!==old.prompt)||(sc.frame_prompt&&sc.frame_prompt!==old.frame_prompt)||(sc.blueprint&&JSON.stringify(sc.blueprint)!==JSON.stringify(old.blueprint))){ toCheck.push(sc.n); if(m.frame?.id&&sc.frame_prompt&&sc.frame_prompt!==old.frame_prompt) m.frame={...m.frame,stale:true}; }
     return m; })].sort((x,y)=>+x.n-+y.n); }
   if(toCheck.length) setTimeout(()=>rlCheckScenes(toCheck,{quiet:true}),60);
@@ -2899,6 +2906,7 @@ function rlShotCard(sc){
             <div class="rl-btns"><button class="btn small" type="button" data-rl="frame" data-n="${sc.n}" ${f.status==="run"||f.pending?"disabled":""}>${f.status==="run"||f.pending?"Generating…":f.id?"Regenerate first frame":"Generate first frame"}</button>${f.web?`<a class="btn small" href="${esc(f.web)}" target="_blank" rel="noopener">Magnific</a>`:""}</div>
             ${f.status==="paused"||(f.pending&&f.status!=="run")?`<p class="rl-status">Still generating in Magnific — it appears here when it's done.</p>`:""}${f.stale&&f.id?`<p class="rl-status warn">The supervisor corrected this prompt after the image was made. Regenerate it.</p>`:""}
           </details>
+          ${rlDialogueHTML(sc)}
           <details class="rl-sec" data-open-key="${K}:v"${rlOpenAttr(K+":v")}><summary>Video prompt <span class="t12 muted">Seedance 2.5 · ${Math.max(4,Math.min(120,+sc.duration_s||8))} s</span></summary>
             <textarea class="rl-prompt tall" data-rl-edit="s:${sc.n}" spellcheck="false" dir="ltr">${esc(sc.prompt||"")}</textarea>
             <label class="rl-chk"><input type="checkbox" data-rl-start="${sc.n}" ${useStart?"checked":""} ${startOK?"":"disabled"}> Start the video from the first frame (off = Seedance builds the shot from the references only)${startOK?"":" — generate a first frame first"}</label>
@@ -3088,12 +3096,14 @@ CAST: ${trimJSON(RL.characters.map(({tag,name,description,wardrobe})=>({tag,name
 LOCATIONS & PROPS: ${trimJSON(RL.locations.map(({tag,name,kind,description})=>({tag,name,kind,description})),2000)}
 CURRENT SCENE: ${trimJSON({n:sc.n,...before},16000)}
 
+${RL_DIALOGUE}
+
 Blueprint format: ${RL_BP_SCHEMA}
 
 Before answering, run this check on your own result and fix anything that fails:
 ${RL_CHECKLIST}
 
-Reply with only JSON: {"title":"","duration_s":0,"refs":["@img1"],"blueprint":{...},"frame_prompt":"full text","prompt":"full text","passed":8,"changes":["3–6 short bullets saying what you changed and why, in the user's language"]}`,{modelTier:"default",effort:"medium",cache:false});
+Reply with only JSON: {"title":"","duration_s":0,"refs":["@img1"],"blueprint":{...},"frame_prompt":"full text","prompt":"full text","dialogue":[{"n":1,"who":"@char_x","at":"0–4s","line":"…","delivery":""}],"passed":8,"changes":["3–6 short bullets saying what you changed and why, in the user's language"]}`,{modelTier:"default",effort:"medium",cache:false});
     if(!out||!out.prompt) throw {code:"invalid_json",message:"Claude didn't return a new prompt."};
     sc.history=[{...before,at:Date.now(),why:instruction||"Update shot prompt"},...(sc.history||[])].slice(0,6);
     if(out.title) sc.title=String(out.title);
@@ -3102,6 +3112,7 @@ Reply with only JSON: {"title":"","duration_s":0,"refs":["@img1"],"blueprint":{.
     if(out.blueprint&&typeof out.blueprint==="object") sc.blueprint=out.blueprint;
     if(out.frame_prompt&&out.frame_prompt!==sc.frame_prompt){ sc.frame_prompt=String(out.frame_prompt); if(sc.frame?.id) sc.frame.stale=true; }
     if(out.prompt!==sc.prompt){ sc.prompt=String(out.prompt); if(sc.clip) sc.stale=true; }
+    if(Array.isArray(out.dialogue)) rlSetDialogue(sc,out.dialogue);
     sc.lastChange={at:Date.now(),kind:instruction?"edit":"upgrade",ask:instruction||"",changes:Array.isArray(out.changes)?out.changes.slice(0,8).map(String):[]};
     sc.check={at:Date.now(),passed:Math.min(8,+out.passed||8),issues:[],dirty:false,by:"rewrite"}; ok=true; delete sc.improvePending;
   }catch(e){ if(rlTransient(e)) sc.improveErr="Paused: the connection dropped. It continues when you're back."; else { sc.improveErr=sampleCopy(e); delete sc.improvePending; } }
@@ -3237,10 +3248,52 @@ Reply with only JSON: {"suggestions":[{"id":"trend","title":"3–6 words","why":
   finally{ delete sc._room; rlWake(false); rlSave(); rlBoard(); }
 }
 async function rlEnsureChecked(sc){ if(sc._checkP){ await sc._checkP; return; } if(!sc.check||sc.check.dirty||!sc.blueprint){ await rlCheckScenes([sc.n],{quiet:true}); } }
+/* ---------- Dialogue lines and voice references (@audio1…) ---------- */
+function rlSetDialogue(sc,L){ const old=sc.dialogue||[];
+  sc.dialogue=(Array.isArray(L)?L:[]).filter(x=>x&&x.line).map((x,i)=>{ const n=+x.n||i+1; const o=old.find(y=>+y.n===n&&String(y.who||"")===String(x.who||""));
+    return {n,who:String(x.who||""),at:String(x.at||""),line:String(x.line),delivery:String(x.delivery||""),audio:o?.audio||null}; }); }
+function rlVoices(sc){ const L=(sc.dialogue||[]).filter(d=>d.audio?.id); return L.map((d,i)=>({tag:"@audio"+(i+1),id:d.audio.id,n:d.n,d})); }
+/* swap @voiceN for the attached @audioK, or for plain words when no voice is attached; list the voices under ACTIVE REFERENCES */
+function rlVoiceCompose(sc,prompt){
+  const V=rlVoices(sc); let p=String(prompt||"");
+  p=p.replace(/\(?\s*voice reference @voice(\d+)\s*\)?/gi,(m,n)=>{ const v=V.find(x=>+x.n===+n); return v?`(voice reference ${v.tag}: same voice, tone and pronunciation)`:""; }).replace(/@voice(\d+)/gi,(m,n)=>{ const v=V.find(x=>+x.n===+n); return v?v.tag:"the character's own voice"; });
+  if(V.length){ const lines=V.map(v=>{ const e=rlElByTag(v.d.who); return `${v.tag} = the recorded voice of ${e?.name||v.d.who||"the speaker"} saying «${v.d.line}»${v.d.at?` at ${v.d.at}`:""} — defines the voice, accent, pronunciation and rhythm of that line ONLY; lip-sync the speaker to it.`; });
+    p=/^\s*ACTIVE REFERENCES\b/im.test(p)?p.replace(/(^|\n)(\s*ACTIVE REFERENCES[^\n]*\n(?:[^\n]+\n)*)/i,(m,a,b)=>`${a}${b}${lines.join("\n")}\n`):`ACTIVE REFERENCES\n${lines.join("\n")}\n\n${p}`; }
+  return {prompt:p,voices:V};
+}
+let RL_AUDIO_LIST=null;
+async function rlAudioPick(n,di){
+  const sc=RL.scenes.find(x=>+x.n===+n), d=sc?.dialogue?.[di]; if(!d) return;
+  d._pick="load"; rlBoard();
+  try{ if(!S.connected) await connect(true);
+    const plan=await buildArgs("creations_list","List the user's most recent AUDIO creations (voice-overs / speech / voice generator results), newest first, up to 15. Filter by type audio if the tool allows it.",{type:"audio",limit:15},"quick");
+    const r=await callMag("creations_list",plan.args);
+    const o=await sample.json(`From this Magnific MCP tool result, list the AUDIO creations only (not images or videos). Result:\n${trimJSON(r?.payload??r?.content,14000)}\n\nReply with only JSON: {"items":[{"id":"creation identifier","name":"its name or the first words of its text/prompt","when":"created time if shown","seconds":0}]}`,{modelTier:"quick"});
+    RL_AUDIO_LIST=(o?.items||[]).filter(x=>x&&x.id).slice(0,15); d._pick="open";
+  }catch(e){ d._pick=null; d._err=mcpCopy(e); }
+  rlBoard();
+}
+function rlAudioSet(n,di,id,name){ const sc=RL.scenes.find(x=>+x.n===+n), d=sc?.dialogue?.[di]; if(!d) return;
+  id=String(id||"").trim(); const m=id.match(/([A-Za-z0-9_-]{8,})\/?(?:\?.*)?$/); if(/^https?:/.test(id)&&m) id=m[1];
+  d.audio=id?{id,name:String(name||"voice")}:null; delete d._pick; delete d._err; if(sc.clip) sc.stale=true;
+  rlEvent(id?`The user attached a voice reference to scene ${n}, line ${d.n} (${d.who}).`:`The user removed the voice reference of scene ${n}, line ${d.n}.`); rlSave(); rlBoard(); }
+function rlDialogueHTML(sc){
+  const L=sc.dialogue||[]; if(!L.length) return "";
+  const V=rlVoices(sc);
+  return `<details class="rl-sec rl-dlg" data-open-key="dlg:${sc.n}"${rlOpenAttr("dlg:"+sc.n,true)}><summary><span class="rl-sec-t">Dialogue &amp; voices</span><span class="t12 muted">${L.length} line${L.length>1?"s":""} · ${V.length} voice${V.length===1?"":"s"} attached</span></summary>
+  <p class="t12 muted">For Arabic that sounds right: copy a line (it has full tashkeel) into Magnific → Audio → Voice Generator, generate the voice, then attach it here. It goes to Seedance as ${V.length?V.map(v=>v.tag).join(", "):"@audio1…"} with the line written in the prompt.</p>
+  <ul>${L.map((d,i)=>{ const e=rlElByTag(d.who); const v=V.find(x=>x.d===d);
+    return `<li><div class="top"><b>${esc(e?.name||d.who||"Speaker")}</b><span class="t12 muted">${esc(d.at||"")}${d.delivery?` · ${esc(d.delivery)}`:""}</span>${v?`<span class="rl-chip ok">${v.tag} · ${esc(d.audio.name||"voice")}</span>`:""}</div>
+      <div class="ln" dir="rtl" lang="ar">${esc(d.line)}</div>
+      <div class="acts"><button type="button" class="btn small" data-rl="dlgcopy" data-n="${sc.n}" data-i="${i}">Copy line</button><button type="button" class="btn small${v?"":" primary"}" data-rl="dlgpick" data-n="${sc.n}" data-i="${i}"${d._pick==="load"?" disabled":""}>${d._pick==="load"?"Loading your audio…":v?"Change voice":"Attach voice"}</button>${v?`<button type="button" class="btn small" data-rl="dlgclear" data-n="${sc.n}" data-i="${i}">Remove</button>`:""}</div>
+      ${d._err?`<p class="t12" style="color:#a23a2a">${esc(d._err)}</p>`:""}
+      ${d._pick==="open"?`<div class="pick">${(RL_AUDIO_LIST||[]).length?(RL_AUDIO_LIST||[]).map(a=>`<button type="button" class="btn small" data-rl="dlgset" data-n="${sc.n}" data-i="${i}" data-id="${esc(a.id)}" data-name="${esc(String(a.name||"voice").slice(0,40))}" dir="auto">${esc(String(a.name||a.id).slice(0,46))}${a.seconds?` · ${Math.round(a.seconds)}s`:""}</button>`).join(""):`<span class="t12 muted">No audio found in your Magnific yet.</span>`}
+        <form class="paste" data-rl-dlgpaste="${sc.n}:${i}"><input type="text" placeholder="…or paste the Magnific audio link / ID" aria-label="Magnific audio link or ID"><button class="btn small" type="submit">Attach</button></form></div>`:""}</li>`; }).join("")}</ul></details>`;
+}
 /* ---------- Storyboard: one Seedream 5.5 still (2K) per script scene, each generated on its own ---------- */
 /* Put the scene's references into video_generate's own reference field, in the exact shape its schema asks for */
 let RL_LASTREFSCHEMA=null;
-async function rlPutRefs(args,refs,start,tool="video_generate"){
+async function rlPutRefs(args,refs,start,tool="video_generate",audios=[]){
   const sch=(await schemaOf(tool))?.inputSchema||{}; const P=sch.properties||{};
   const idOf=it=>it?.properties||{};
   const ID_PREF=["identifier","creationIdentifier","creation_identifier","creationId","url","uri","image","source","id"];
@@ -3249,17 +3302,21 @@ async function rlPutRefs(args,refs,start,tool="video_generate"){
   const score=([k,v])=>(/^references?$/i.test(k)?6:/reference/i.test(k)?5:/^(images?|media|medias|inputs?|assets?)$/i.test(k)?4:/image|media/i.test(k)?3:0)+(/reference|@img|image/i.test(String(v.description||""))?1:0)-(/end|last|start|first|frame|audio|video/i.test(k)?3:0);
   cands.sort((a,b)=>score(b)-score(a));
   const pick=cands[0];
-  let key, item=(id)=>({identifier:id,type:"image"});
+  let key, item=(id,kind="image")=>({identifier:id,type:kind});
   if(pick&&score(pick)>0){ key=pick[0]; const it=pick[1].items;
     if(it.type==="string") item=id=>id;
     else { const ip=idOf(it); const idK=ID_PREF.find(k=>k in ip)||Object.keys(ip).find(k=>/identifier|url|id$/i.test(k));
-      const tK=Object.keys(ip).find(k=>/^(type|kind|media_?type|role)$/i.test(k)); const tV=tK?((ip[tK].enum||[]).find(x=>/image|reference/i.test(x))||"image"):null;
-      item=id=>({[idK||"identifier"]:id,...(tK?{[tK]:tV}:{})}); } }
+      const tK=Object.keys(ip).find(k=>/^(type|kind|media_?type|role)$/i.test(k)); const tV=tK?((ip[tK].enum||[]).find(x=>/image|reference/i.test(x))||"image"):null; const aV=tK?((ip[tK].enum||[]).find(x=>/audio|voice|sound/i.test(x))||"audio"):null;
+      item=(id,kind="image")=>({[idK||"identifier"]:id,...(tK?{[tK]:kind==="audio"?aV:tV}:{})}); } }
   else key=Object.keys(args).find(k=>Array.isArray(args[k])&&/reference|image|media/i.test(k))||"references";
   const out={...args};
   /* drop any other reference-like arrays Claude may have filled, so nothing is duplicated or mislabelled */
   for(const k of Object.keys(out)) if(k!==key&&Array.isArray(out[k])&&/reference|image|media/i.test(k)&&!/start|end|first|last/i.test(k)) delete out[k];
-  out[key]=refs.map(r=>item(r.id));
+  out[key]=[...refs.map(r=>item(r.id)),...audios.map(a=>item(a.id,"audio"))];
+  /* a separate audio-reference field, if the tool has one, takes the voices instead */
+  if(audios.length){ const ak=Object.entries(P).find(([k,v])=>k!==key&&(v.type==="array"||v.items)&&/audio|voice/i.test(k)&&/reference|input|audio/i.test(k+" "+String(v.description||"")));
+    if(ak){ const it=ak[1].items||{}; const ip=it.properties||{}; const idK=ID_PREF.find(k=>k in ip)||"identifier";
+      out[ak[0]]=audios.map(a=>it.type==="string"?a.id:{[idK]:a.id}); out[key]=refs.map(r=>item(r.id)); } }
   /* a start image field, only when the user chose one */
   if(!start) for(const k of Object.keys(out)) if(k!==key&&/^(start|first|init)_?(image|frame)|image_?url$|^image$/i.test(k)&&!refs.some(r=>JSON.stringify(out[k]).includes(r.id))) delete out[k];
   log("✓",tool+" references",{key,sample:out[key][0],count:out[key].length});
@@ -3557,7 +3614,8 @@ async function rlRenderScene(n){
       rlEvent(`Render of scene ${sc.n} stopped: missing creations ${els.map(e=>e.handle).join(", ")}.`); rlSave(); rlBoard(); return; } }
   if(!refs.length){ sc.status="err"; sc.note="This scene names no characters, locations or props, so no images would be attached. Add their handles (@char_…, @loc_…) to the prompt or ask the Director to fix the scene."; rlBoard(); return; }
   const start=sc.useFrame===true&&sc.frame?.id?sc.frame.id:null;
-  const prompt=start?`START FRAME: the video begins exactly on the provided start image and animates from it; keep its composition, faces, wardrobe, place and light.\n\n${p0}`:p0;
+  const vc=rlVoiceCompose(sc,p0); const voices=vc.voices;
+  const prompt=start?`START FRAME: the video begins exactly on the provided start image and animates from it; keep its composition, faces, wardrobe, place and light.\n\n${vc.prompt}`:vc.prompt;
   sc.status="run"; sc.note="Finding Seedance 2.5…"; sc._blocked=false; sc._live=true; rlBoard(); rlWake(true);
   const t0=Date.now();
   try{
@@ -3573,8 +3631,8 @@ async function rlRenderScene(n){
       if(lost().length) throw {code:"refs_missing",message:`Couldn't attach ${lost().map(r=>r.tag+" ("+r.name+")").join(", ")} to Seedance, so I stopped before spending credits. Try again; if it repeats, tell Claude.`}; }
     /* ROOT FIX: the reference list is written by the page from the tool's real schema — never left to a guess.
        Each item carries the real creation identifier; labels like "@img1" never go in an id field. */
-    args=await rlPutRefs(args,refs,start);
-    { const sent=JSON.stringify(args); const missing=refs.filter(r=>!sent.includes(r.id));
+    args=await rlPutRefs(args,refs,start,"video_generate",voices);
+    { const sent=JSON.stringify(args); const missing=[...refs,...voices].filter(r=>!sent.includes(r.id));
       sc.lastCall={at:Date.now(),schema:RL_LASTREFSCHEMA,args:JSON.parse(JSON.stringify(args,(k,v)=>k==="prompt"&&typeof v==="string"?v.slice(0,300)+"…":v))};
       if(missing.length){ rlSave(); throw {code:"refs_missing",message:`${missing.length} reference image${missing.length>1?"s":""} (${missing.map(r=>r.tag).join(", ")}) couldn't be attached, so I stopped before spending credits. Send me a screenshot.`}; } }
     const r=await callMag("video_generate",args).catch(e=>{ if(sc.lastCall) sc.lastCall.error=String(e?.message||e?.code||e).slice(0,600); rlSave(); throw e; });
@@ -3807,6 +3865,7 @@ async function rlBible(){
   const rlGrow=()=>{ const t=$("rlInput"); t.style.height="auto"; t.style.height=Math.min(180,t.scrollHeight)+"px"; };
   $("rlInput").addEventListener("input",rlGrow); new MutationObserver(()=>{}).observe($("rlInput"),{attributes:true});
   $("rlForm").addEventListener("submit",()=>setTimeout(rlGrow,0));
+  $("reels").addEventListener("submit",e=>{ const f=e.target.closest("[data-rl-dlgpaste]"); if(!f) return; e.preventDefault(); const [n,i]=f.dataset.rlDlgpaste.split(":"); const v=f.querySelector("input").value.trim(); if(v) rlAudioSet(n,+i,v,"pasted voice"); });
   $("rlFile").onchange=e=>{ for(const f of [...e.target.files].slice(0,10-rlPending.length)) rlPending.push({blob:f,url:URL.createObjectURL(f),name:f.name,video:/^video\//.test(f.type)}); e.target.value=""; rlRenderAtt(); };
   $("rlInput").addEventListener("paste",e=>{ const fs=[...(e.clipboardData?.files||[])].filter(f=>/^image\//.test(f.type)); if(fs.length){ fs.forEach(f=>rlPending.push({blob:f,url:URL.createObjectURL(f),name:f.name})); rlRenderAtt(); } });
   $("rlChatPane").addEventListener("dragover",e=>e.preventDefault());
@@ -3837,6 +3896,10 @@ async function rlBible(){
     else if(a==="genboard"){ if(!S.connected) await connect(true); rlGenStoryboard(); }
     else if(a==="board1"){ if(!S.connected) await connect(true); rlGenStoryboard([+b.dataset.i]); }
     else if(a==="dlboard") rlDownloadBoard(b);
+    else if(a==="dlgcopy"){ const d=RL.scenes.find(x=>+x.n===+b.dataset.n)?.dialogue?.[+b.dataset.i]; if(d){ try{ await navigator.clipboard.writeText(d.line); b.textContent="Copied ✓"; }catch{ b.textContent="Select the text to copy"; } setTimeout(()=>{ b.textContent="Copy line"; },1600); } }
+    else if(a==="dlgpick") rlAudioPick(b.dataset.n,+b.dataset.i);
+    else if(a==="dlgset") rlAudioSet(b.dataset.n,+b.dataset.i,b.dataset.id,b.dataset.name);
+    else if(a==="dlgclear") rlAudioSet(b.dataset.n,+b.dataset.i,"");
     else if(a==="genall") (b.dataset.list==="c"?RL.characters:RL.locations).filter(x=>!x.id&&!x.fromLib&&x.prompt).forEach(x=>rlGenElement(x.tag));
     else if(a==="edit"){ const el=rlElByTag(b.dataset.tag); if(el){ el._edit=true; rlBoard(); } }
     else if(a==="editdone"){ const el=rlElByTag(b.dataset.tag); if(el){ el._edit=false; el.err=null; if(el.status==="err") el.status=null; rlSave(); rlBoard(); } }
