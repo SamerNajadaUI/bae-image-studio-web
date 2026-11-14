@@ -1711,7 +1711,8 @@ const RL_DIALOGUE=`DIALOGUE — SPOKEN ARABIC THAT SOUNDS RIGHT (every spoken li
 - All speech is in the reel's language (Jordanian Arabic unless the settings say otherwise). Never write a spoken line in English or in Latin letters, and state once in AUDIO: "All speech is Jordanian Arabic (Amman dialect); no English speech."
 - Write each line in Arabic script WITH FULL TASHKEEL (حَرَكات) the way a Jordanian actually says it — dialect vowels, sukun on silent endings — so the model pronounces it correctly: «مَرْحَبا، كيفْ حالْكُمْ؟», «هَسّا بَدْفَعْها بْكَبْسِة», «وَلا يْهِمَّكْ». Keep lines short (what fits the seconds: about 2–3 words per second).
 - In the prompt, each line sits inside its timed stage, bound to its speaker and its voice: 0–4s … @char_wissam says to camera in Jordanian Arabic, calm and warm (voice reference @voice1): «مَرْحَبا، كيفْ حالْكُمْ؟» — everyone else keeps their mouth closed. Number the lines @voice1, @voice2… in the order they are spoken; the studio swaps each for the user's audio reference (@audio1…) when one is attached.
-- Return the same lines in "dialogue": [{"n":1,"who":"@char_wissam","at":"0–4s","line":"مَرْحَبا، كيفْ حالْكُمْ؟","delivery":"calm, warm"}] — "line" exactly as in the prompt, with tashkeel. No dialogue → "dialogue": [].`;
+- Return the same lines in "dialogue": [{"n":1,"who":"@char_wissam","at":"0–4s","line":"مَرْحَبا، كيفْ حالْكُمْ؟","delivery":"calm, warm","tts":"[warm] مَرْحَبا… كيفْ حالْكُمْ؟"}] — "line" exactly as in the prompt, with tashkeel. No dialogue → "dialogue": [].
+- "tts" is the same line prepared for the voice generator (ElevenLabs v4 in Magnific): the Arabic words with full tashkeel, unchanged, plus AUDIO TAGS in square brackets, in English, placed right before the words they colour. Emotions: [excited] [curious] [confident] [warm] [calm] [energetic] [serious] [sarcastic] [mischievous] [happy] [sad] [angry] [whispers]. Reactions: [laughs] [starts laughing] [sighs] [exhales] [snorts]. Pauses: an ellipsis … for a beat, or [pause 0.5s]. Use one emotion tag per line (two at most), a reaction only where the script has one, punctuation for rhythm (، ؟ ! …). Never put stage directions or English words to be spoken in it — everything outside brackets is said aloud.`;
 const RL_JO=`JORDAN, FROM THE INSIDE (you are the best creative director in Jordan; think like a Jordanian, not a tourist):
 - Values that move people here: النخوة (stepping in for someone without being asked), الشهامة (gallantry, quiet decency), الغيرة (protective care for family and neighbourhood), الكرم (generosity: the host who insists, the extra plate), الشرف والسمعة (honour and how the family is seen), الجيرة (the neighbour is family), العونة (everyone helps: harvest, wedding, moving house), برّ الوالدين (caring for parents). Show these through ACTIONS, never slogans: a young man pays a stranger's taxi without a word, the son quietly settles his father's bill, the neighbour lends the gas cylinder.
 - Daily texture: Amman hills and stairs (Jabal al-Weibdeh, Jabal Amman, Lweibdeh, Rainbow St, Abdali, Sweifieh, Taj, Downtown/Balad), traffic at the 7th circle, servees and yellow taxis, the khaltour coffee, kaak with zaatar, knafeh from Habibah, mansaf at Friday lunch, the jameed, the shrak bread, falafel at Hashem, the gas truck's tune, the morning "ya sabah al-khair", the evening walk, the hookah on the balcony, winter sobba heater and the family around it, snow day in Amman, the Dead Sea Friday, Aqaba holidays, Wadi Rum, Ajloun forests, Jerash, Salt's yellow houses, Irbid students, Zarqa workers.
@@ -2326,8 +2327,8 @@ function rlStudioTools(turn){
         else if(field==="stage"){ if(rlStageIx(v)<0) return "Unknown stage."; RL.stage=String(v); }
         else if(field==="picked_idea"){ const x=RL.ideas[+v]; if(!x) return "No such idea."; RL.picked=x; }
         rlEvent(`Director set ${field}.`); return `${field} saved.`; }},
-    {name:"studio_action",description:"Start a studio job. These spend Magnific credits and take minutes — use them only when the user asked for it (or clearly approved). generate_image (target = element handle), generate_frame (target = scene number), render_video (target = scene number), review_video (Gemini watches the rendered scene, target = scene number), check_scene (re-check a scene's prompt, target = scene number), generate_storyboard (one Seedream 5.5 still at 2K per script scene; target = all, or script scene numbers like 2,3). Jobs start right after your reply.",
-      inputSchema:{type:"object",properties:{action:{type:"string",enum:["generate_image","generate_frame","render_video","review_video","check_scene","generate_storyboard"]},target:{type:"string"}},required:["action","target"]},
+    {name:"studio_action",description:"Start a studio job. These spend Magnific credits and take minutes — use them only when the user asked for it (or clearly approved). generate_image (target = element handle), generate_frame (target = scene number), render_video (target = scene number), review_video (Gemini watches the rendered scene, target = scene number), check_scene (re-check a scene's prompt, target = scene number), generate_storyboard (one Seedream 5.5 still at 2K per script scene; target = all, or script scene numbers like 2,3), generate_voices (ElevenLabs voice clip for every dialogue line of a scene whose character already has a voice chosen; target = scene number). Jobs start right after your reply.",
+      inputSchema:{type:"object",properties:{action:{type:"string",enum:["generate_image","generate_frame","render_video","review_video","check_scene","generate_storyboard","generate_voices"]},target:{type:"string"}},required:["action","target"]},
       execute:async({action,target})=>{ const t=String(target||"");
         if(action==="generate_storyboard"){ if(!RL.script?.scenes?.length) return "No script yet."; turn.actions.push([action,t]); T("Queued: storyboard"); return `Queued the storyboard (${t==="all"||!t?"every script scene":"script scene "+t}); one Seedream 5.5 still at 2K per scene.`; }
         if(action==="generate_image"){ if(!rlElByTag(t)&&!turn.changes.some(c=>c.includes(t))) return `No element ${t}.`; }
@@ -2361,7 +2362,8 @@ async function rlWriteScenes(L){
 function rlRunActions(turn){
   if(turn.writes?.length) rlWriteScenes(turn.writes);
   for(const [a,t] of turn.actions){
-    if(a==="generate_storyboard") rlGenStoryboard(t&&t!=="all"?String(t).split(/[ ,]+/).map(x=>+x-1).filter(x=>x>=0):null);
+    if(a==="generate_voices") rlVoiceGenAll(t);
+    else if(a==="generate_storyboard") rlGenStoryboard(t&&t!=="all"?String(t).split(/[ ,]+/).map(x=>+x-1).filter(x=>x>=0):null);
     else if(a==="generate_image") rlGenElement(rlElByTag(t)?.tag||t);
     else if(a==="generate_frame") rlGenFrame(t);
     else if(a==="render_video") rlRenderScene(t);
@@ -3251,7 +3253,7 @@ async function rlEnsureChecked(sc){ if(sc._checkP){ await sc._checkP; return; } 
 /* ---------- Dialogue lines and voice references (@audio1…) ---------- */
 function rlSetDialogue(sc,L){ const old=sc.dialogue||[];
   sc.dialogue=(Array.isArray(L)?L:[]).filter(x=>x&&x.line).map((x,i)=>{ const n=+x.n||i+1; const o=old.find(y=>+y.n===n&&String(y.who||"")===String(x.who||""));
-    return {n,who:String(x.who||""),at:String(x.at||""),line:String(x.line),delivery:String(x.delivery||""),audio:o?.audio||null}; }); }
+    return {n,who:String(x.who||""),at:String(x.at||""),line:String(x.line),delivery:String(x.delivery||""),tts:String(x.tts||""),audio:o&&o.line===String(x.line)?o.audio||null:null}; }); }
 function rlVoices(sc){ const L=(sc.dialogue||[]).filter(d=>d.audio?.id); return L.map((d,i)=>({tag:"@audio"+(i+1),id:d.audio.id,n:d.n,d})); }
 /* swap @voiceN for the attached @audioK, or for plain words when no voice is attached; list the voices under ACTIVE REFERENCES */
 function rlVoiceCompose(sc,prompt){
@@ -3261,6 +3263,41 @@ function rlVoiceCompose(sc,prompt){
     p=/^\s*ACTIVE REFERENCES\b/im.test(p)?p.replace(/(^|\n)(\s*ACTIVE REFERENCES[^\n]*\n(?:[^\n]+\n)*)/i,(m,a,b)=>`${a}${b}${lines.join("\n")}\n`):`ACTIVE REFERENCES\n${lines.join("\n")}\n\n${p}`; }
   return {prompt:p,voices:V};
 }
+/* ---------- Voices: one Magnific voice per character, one generated clip per line (ElevenLabs via audio_tts) ---------- */
+let RL_VOICES=null;
+async function rlVoiceList(){
+  if(RL_VOICES) return RL_VOICES;
+  if(!S.connected) await connect(true);
+  const plan=await buildArgs("audio_voices_list","List the voices available for text-to-speech. Prefer Arabic or multilingual voices if the tool can filter by language; otherwise list them all (up to 60).",{language:"ar",limit:60},"quick");
+  const r=await callMag("audio_voices_list",plan.args);
+  const o=await sample.json(`From this Magnific MCP tool result, list the text-to-speech voices. Result:\n${trimJSON(r?.payload??r?.content,20000)}\n\nReply with only JSON: {"voices":[{"id":"the voice identifier the TTS tool takes","name":"","gender":"male|female|","age":"young|middle|old|","language":"languages or accent it lists","style":"3–6 words on how it sounds"}]}`,{modelTier:"quick"});
+  RL_VOICES=(o?.voices||[]).filter(v=>v&&v.id).slice(0,60); return RL_VOICES;
+}
+async function rlVoiceChoose(n,di){ const sc=RL.scenes.find(x=>+x.n===+n), d=sc?.dialogue?.[di]; if(!d) return;
+  d._vpick="load"; delete d._err; rlBoard();
+  try{ await rlVoiceList(); d._vpick="open"; }catch(e){ d._vpick=null; d._err=/not in the manifest|tool_not_found|unknown tool|not available/i.test(String(e?.message||e?.code||""))?"Magnific's voice tools aren't reachable from the studio. Generate the voice in Magnific → Audio → Voice Generator, then use Attach voice.":mcpCopy(e); }
+  rlBoard(); }
+function rlVoiceSet(n,di,id,name){ const sc=RL.scenes.find(x=>+x.n===+n), d=sc?.dialogue?.[di]; if(!d) return; const e=rlElByTag(d.who);
+  if(e){ e.voice={id,name}; rlEvent(`The user chose the voice "${name}" for ${e.handle}.`); } else d.voice={id,name};
+  delete d._vpick; rlSave(); rlBoard(); }
+const rlVoiceOf=d=>rlElByTag(d.who)?.voice||d.voice||null;
+async function rlVoiceGen(n,di){ const sc=RL.scenes.find(x=>+x.n===+n), d=sc?.dialogue?.[di]; if(!d||d._gen) return;
+  const v=rlVoiceOf(d); if(!v){ rlVoiceChoose(n,di); return; }
+  d._gen=true; delete d._err; rlBoard(); rlWake(true);
+  try{ if(!S.connected) await connect(true);
+    const text=(d.tts&&d.tts.replace(/\[[^\]]*\]/g,"").replace(/[\s…،؟!.]/g,"").length>1?d.tts:d.line).trim();
+    const plan=await buildArgs("audio_tts",`Generate ONE speech clip. Speak the text EXACTLY as written (Arabic with diacritics; the square-bracket audio tags are delivery cues for the model and must stay in the text). Voice: the given voice id. Language: Arabic. Use the most expressive, newest ElevenLabs model the tool offers (v4, else v3). Neutral style, default speed, stability around the middle if those settings exist. Output MP3.`,{text,voice_id:v.id,voice_name:v.name,language:"ar",model_hint:"ElevenLabs v4"},"quick");
+    let args=plan.args||{}; if(!JSON.stringify(args).includes(text.slice(0,12))){ const k=Object.keys(args).find(k=>/text|script|prompt|input/i.test(k))||"text"; args={...args,[k]:text}; }
+    const r=await callMag("audio_tts",args);
+    let rr=readResult(r); if(!rr.ids.length) rr=await extractWithClaude(r,"the creation identifier of the audio being generated");
+    const id=rr.ids[0]; if(!id) throw {code:"tool_error",message:"Magnific returned no audio."};
+    if(!DONE.test(rr.status)) await waitFor([id],"voice").catch(()=>{});
+    const e=rlElByTag(d.who); d.audio={id,name:v.name,by:"tts",web:rr.webUrl||null}; if(sc.clip) sc.stale=true;
+    rlEvent(`A voice clip was generated for scene ${n}, line ${d.n} (${e?.name||d.who}, voice ${v.name}).`);
+  }catch(e){ d._err=/not in the manifest|tool_not_found|unknown tool|not available/i.test(String(e?.message||e?.code||""))?"Magnific's voice tools aren't reachable from the studio. Generate the voice in Magnific → Audio → Voice Generator, then use Attach voice.":mcpCopy(e); }
+  finally{ delete d._gen; rlWake(false); rlSave(); rlBoard(); }
+}
+async function rlVoiceGenAll(n){ const sc=RL.scenes.find(x=>+x.n===+n); if(!sc) return; for(let i=0;i<(sc.dialogue||[]).length;i++){ const d=sc.dialogue[i]; if(!d.audio?.id&&rlVoiceOf(d)) await rlVoiceGen(n,i); } }
 let RL_AUDIO_LIST=null;
 async function rlAudioPick(n,di){
   const sc=RL.scenes.find(x=>+x.n===+n), d=sc?.dialogue?.[di]; if(!d) return;
@@ -3281,12 +3318,15 @@ function rlDialogueHTML(sc){
   const L=sc.dialogue||[]; if(!L.length) return "";
   const V=rlVoices(sc);
   return `<details class="rl-sec rl-dlg" data-open-key="dlg:${sc.n}"${rlOpenAttr("dlg:"+sc.n,true)}><summary><span class="rl-sec-t">Dialogue &amp; voices</span><span class="t12 muted">${L.length} line${L.length>1?"s":""} · ${V.length} voice${V.length===1?"":"s"} attached</span></summary>
-  <p class="t12 muted">For Arabic that sounds right: copy a line (it has full tashkeel) into Magnific → Audio → Voice Generator, generate the voice, then attach it here. It goes to Seedance as ${V.length?V.map(v=>v.tag).join(", "):"@audio1…"} with the line written in the prompt.</p>
+  <p class="t12 muted">Pick a voice for each character once, then generate each line (ElevenLabs, Arabic with tashkeel and audio tags). Each clip goes to Seedance as ${V.length?V.map(v=>v.tag).join(", "):"@audio1…"} with the line written in the prompt. Voice clips cost Magnific credits.</p>
+  ${L.some(d=>!d.audio?.id&&rlVoiceOf(d))&&L.length>1?`<div class="acts" style="margin-bottom:8px"><button type="button" class="btn small" data-rl="dlggenall" data-n="${sc.n}">Generate all missing voices</button></div>`:""}
   <ul>${L.map((d,i)=>{ const e=rlElByTag(d.who); const v=V.find(x=>x.d===d);
     return `<li><div class="top"><b>${esc(e?.name||d.who||"Speaker")}</b><span class="t12 muted">${esc(d.at||"")}${d.delivery?` · ${esc(d.delivery)}`:""}</span>${v?`<span class="rl-chip ok">${v.tag} · ${esc(d.audio.name||"voice")}</span>`:""}</div>
       <div class="ln" dir="rtl" lang="ar">${esc(d.line)}</div>
-      <div class="acts"><button type="button" class="btn small" data-rl="dlgcopy" data-n="${sc.n}" data-i="${i}">Copy line</button><button type="button" class="btn small${v?"":" primary"}" data-rl="dlgpick" data-n="${sc.n}" data-i="${i}"${d._pick==="load"?" disabled":""}>${d._pick==="load"?"Loading your audio…":v?"Change voice":"Attach voice"}</button>${v?`<button type="button" class="btn small" data-rl="dlgclear" data-n="${sc.n}" data-i="${i}">Remove</button>`:""}</div>
+      ${d.tts?`<div class="tts" dir="rtl" lang="ar"><span class="t12 muted" dir="ltr">Voice script</span> ${esc(d.tts)}</div>`:""}
+      <div class="acts"><button type="button" class="btn small primary" data-rl="dlggen" data-n="${sc.n}" data-i="${i}"${d._gen||d._vpick==="load"?" disabled":""}>${d._gen?"Generating the voice…":d._vpick==="load"?"Loading voices…":!rlVoiceOf(d)?"Choose a voice":v?"Regenerate voice":"Generate voice"}</button>${rlVoiceOf(d)?`<button type="button" class="btn small" data-rl="dlgvoice" data-n="${sc.n}" data-i="${i}" title="Change this character's voice">🎙 ${esc(String(rlVoiceOf(d).name).slice(0,22))}</button>`:""}<button type="button" class="btn small" data-rl="dlgcopy" data-n="${sc.n}" data-i="${i}">Copy line</button><button type="button" class="btn small" data-rl="dlgpick" data-n="${sc.n}" data-i="${i}"${d._pick==="load"?" disabled":""}>${d._pick==="load"?"Loading your audio…":v?"Change voice":"Attach voice"}</button>${v?`<button type="button" class="btn small" data-rl="dlgclear" data-n="${sc.n}" data-i="${i}">Remove</button>`:""}</div>
       ${d._err?`<p class="t12" style="color:#a23a2a">${esc(d._err)}</p>`:""}
+      ${d._vpick==="open"?`<div class="pick">${(RL_VOICES||[]).length?(RL_VOICES||[]).map(x=>`<button type="button" class="btn small" data-rl="dlgvset" data-n="${sc.n}" data-i="${i}" data-id="${esc(x.id)}" data-name="${esc(String(x.name||"voice").slice(0,40))}" title="${esc([x.gender,x.age,x.language,x.style].filter(Boolean).join(" · "))}">${esc(String(x.name||x.id).slice(0,26))}<span class="t12 muted"> ${esc([x.gender,x.language].filter(Boolean).join(" · ").slice(0,30))}</span></button>`).join(""):`<span class="t12 muted">No voices came back from Magnific.</span>`}</div>`:""}
       ${d._pick==="open"?`<div class="pick">${(RL_AUDIO_LIST||[]).length?(RL_AUDIO_LIST||[]).map(a=>`<button type="button" class="btn small" data-rl="dlgset" data-n="${sc.n}" data-i="${i}" data-id="${esc(a.id)}" data-name="${esc(String(a.name||"voice").slice(0,40))}" dir="auto">${esc(String(a.name||a.id).slice(0,46))}${a.seconds?` · ${Math.round(a.seconds)}s`:""}</button>`).join(""):`<span class="t12 muted">No audio found in your Magnific yet.</span>`}
         <form class="paste" data-rl-dlgpaste="${sc.n}:${i}"><input type="text" placeholder="…or paste the Magnific audio link / ID" aria-label="Magnific audio link or ID"><button class="btn small" type="submit">Attach</button></form></div>`:""}</li>`; }).join("")}</ul></details>`;
 }
@@ -3897,6 +3937,10 @@ async function rlBible(){
     else if(a==="board1"){ if(!S.connected) await connect(true); rlGenStoryboard([+b.dataset.i]); }
     else if(a==="dlboard") rlDownloadBoard(b);
     else if(a==="dlgcopy"){ const d=RL.scenes.find(x=>+x.n===+b.dataset.n)?.dialogue?.[+b.dataset.i]; if(d){ try{ await navigator.clipboard.writeText(d.line); b.textContent="Copied ✓"; }catch{ b.textContent="Select the text to copy"; } setTimeout(()=>{ b.textContent="Copy line"; },1600); } }
+    else if(a==="dlggen") rlVoiceGen(b.dataset.n,+b.dataset.i);
+    else if(a==="dlggenall") rlVoiceGenAll(b.dataset.n);
+    else if(a==="dlgvoice") rlVoiceChoose(b.dataset.n,+b.dataset.i);
+    else if(a==="dlgvset"){ rlVoiceSet(b.dataset.n,+b.dataset.i,b.dataset.id,b.dataset.name); }
     else if(a==="dlgpick") rlAudioPick(b.dataset.n,+b.dataset.i);
     else if(a==="dlgset") rlAudioSet(b.dataset.n,+b.dataset.i,b.dataset.id,b.dataset.name);
     else if(a==="dlgclear") rlAudioSet(b.dataset.n,+b.dataset.i,"");
