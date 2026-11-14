@@ -937,12 +937,22 @@ async function uploadRefs(){
   const items=[]; if(S.upload&&$("useUpAsRef").checked) items.push({id:"user-image",blob:S.upload});
   (await refBlobs()).forEach(r=>items.push(r));
   const list=[], errors=[], missing=[];
-  const unlinked=items.filter(it=>it.id!=="user-image"&&!S.magIds?.[String(it.id).toLowerCase()]).map(it=>String(it.id).toLowerCase());
+  /* your own images (uploaded characters, your references, the brief image) are sent to your Magnific once and remembered */
+  let UMAG={}; try{ UMAG=JSON.parse(localStorage.getItem("bae_user_magids")||"{}"); }catch{}
+  const mine=it=>it.id==="user-image"||refById(it.id)?.user||refById(it.id)?.set==="user";
+  const unlinked=items.filter(it=>!mine(it)&&!S.magIds?.[String(it.id).toLowerCase()]).map(it=>String(it.id).toLowerCase());
   if(unlinked.length&&!S.allowDirectUpload) await findRefsByName(unlinked);
   for(const it of items){
     /* Preferred: the image already lives in the user's Magnific library (BAE References folder) */
-    const magId=S.magIds?.[String(it.id).toLowerCase()];
+    const magId=S.magIds?.[String(it.id).toLowerCase()]||(it.id!=="user-image"?UMAG[it.id]:null);
     if(magId){ const meta=refById(it.id)||{}; list.push({ref:it.id,id:magId,url:null,...refRole(it.id,meta)}); continue; }
+    if(mine(it)&&it.blob){
+      try{ const nm=it.id==="user-image"?"brief-image":(isChar(it.id)?"character-"+charLabel(it.id):"reference-"+it.id);
+        const up=await rlUploadMag(it.blob,nm); if(!up?.id) throw {code:"tool_error",message:"Magnific returned no identifier"};
+        if(it.id!=="user-image"){ UMAG[it.id]=up.id; try{ localStorage.setItem("bae_user_magids",JSON.stringify(UMAG)); }catch{} }
+        const meta=it.id==="user-image"?{set:"user-image"}:(refById(it.id)||{}); list.push({ref:it.id,id:up.id,url:null,...refRole(it.id,meta)}); }
+      catch(e){ const why=e?.code==="blocked_by_policy"?"image upload is blocked in your Magnific tool permissions":(e?.message||e?.code||"unknown"); errors.push(`${isChar(it.id)?charLabel(it.id):it.id}: couldn't upload to Magnific — ${String(why).slice(0,140)}`); log("✕","reference "+it.id+" not uploaded",{code:e?.code,message:e?.message}); }
+      continue; }
     if(!S.allowDirectUpload){ missing.push(it.id); continue; }
     try{
       const plan=await buildArgs("creations_upload_image",`Upload one JPEG image named ${it.id}.jpg to the user's Magnific creations so it can be used as a reference image (@img) in image generation. The image bytes MUST go in: put the placeholder string "__FILE__" (raw base64) as the value of the property that carries the image content, or "__FILE_DATAURL__" if that property expects a data: URL.`,{filename:it.id+".jpg",mime_type:"image/jpeg",content:"__FILE__"});
@@ -1299,7 +1309,7 @@ async function describeChar(rec){ try{ if(!sample) return; const o=await sample.
 async function uploadChars(files){ let last=null;
   for(const f of [...files].slice(0,8)){ if(!/^image\//.test(f.type)) continue; const rec={id:"ch_u"+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name:"New character",blob:await toJpeg(f,2000)}; addUserChar(rec); try{ await IDB.put(rec); }catch{} describeChar(rec); last=rec.id; }
   if(last){ S._newChar=last; S.refTab="ch"; syncTabs(); renderRefs(); } }
-async function removeUserChar(id){ try{ await IDB.del(id); }catch{} for(const A of [ALL_REFS,CHAR_REFS]){ const i=A.findIndex(r=>r.id===id); if(i>=0) A.splice(i,1); } delete CHAR_NAMES[id]; try{ localStorage.setItem(CHAR_KEY,JSON.stringify(CHAR_NAMES)); }catch{} S.picked=S.picked.filter(x=>x!==id); S._autoCast=(S._autoCast||[]).filter(x=>x!==id); renderRefs(); }
+async function removeUserChar(id){ try{ await IDB.del(id); }catch{} for(const A of [ALL_REFS,CHAR_REFS]){ const i=A.findIndex(r=>r.id===id); if(i>=0) A.splice(i,1); } delete CHAR_NAMES[id]; try{ localStorage.setItem(CHAR_KEY,JSON.stringify(CHAR_NAMES)); const u=JSON.parse(localStorage.getItem("bae_user_magids")||"{}"); delete u[id]; localStorage.setItem("bae_user_magids",JSON.stringify(u)); }catch{} S.picked=S.picked.filter(x=>x!==id); S._autoCast=(S._autoCast||[]).filter(x=>x!==id); renderRefs(); }
 function addUserRef(rec){ if(/^ch_/.test(rec.id)) return addUserChar(rec); ALL_REFS.push({id:rec.id,d:"Your reference: "+(rec.name||"image"),src:URL.createObjectURL(rec.blob),blob:rec.blob,set:"user",studio:false}); }
 async function loadUserRefs(){ try{ (await IDB.all()).forEach(addUserRef); }catch{} renderRefs(); }
 $("addRef").addEventListener("change",async e=>{
