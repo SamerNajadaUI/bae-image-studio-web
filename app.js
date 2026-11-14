@@ -4429,7 +4429,7 @@ function uxPGHTML(){
   return `<div class="ux-pgbox" role="dialog" aria-label="Prompt Generator"><div class="hd"><b>Prompt Generator</b><button type="button" class="a-btn" data-pg="close">Close</button></div>
     <p class="muted">Describe what you need in your own words. You get a ready prompt to copy — nothing is generated and no credits are spent.</p>
     ${seg("kind",[["character","Character"],["sheet","Sheet from my photo"],["location","Place"],["prop","Prop"]])}
-    ${UXPG.kind==="sheet"?`<div class="pg-photo"><label class="btn small">${UXPG.file?"Change photo":"Choose the photo"}<input type="file" accept="image/*" class="sr" data-pgfile></label>${UXPG.fileUrl?`<img src="${UXPG.fileUrl}" alt="Your photo">`:`<span class="t12 muted">The portrait you chose. Claude looks at it and writes the three-panel character sheet prompt for that exact person.</span>`}</div>`:""}
+    ${UXPG.kind==="sheet"?`<label class="pg-photo pg-drop">${UXPG.fileUrl?`<img src="${UXPG.fileUrl}" alt="Your photo">`:""}<span class="tx"><b>${UXPG.file?"Drop another photo here, or click to change":"Drop the photo here, or click to choose"}</b><span class="t12 muted">You can also paste it. Claude looks at it and writes the three-panel character sheet prompt for that exact person.</span></span><input type="file" accept="image/*" class="sr" data-pgfile></label>`:""}
     ${UXPG.kind==="character"?`<div class="row">${seg("gender",[["","Any"],["man","Man"],["woman","Woman"]])}${seg("age",[["","Any age"],["child under 12","Child"],["teenager 13-17","Teen"],["young adult 18-35","Young"],["middle-aged 36-59","Middle-aged"],["elderly 60+","Elderly"]])}</div>`:""}
     <label class="lbl" for="uxPgText">${UXPG.kind==="sheet"?"Notes (optional)":"Description"}</label><textarea id="uxPgText" rows="3" dir="auto" placeholder="${ph}">${esc(UXPG.text)}</textarea>
     <div class="rl-btns"><button type="button" class="btn" data-pg="go" ${UXPG.busy?"disabled":""}>${UXPG.busy?"Writing the prompt…":UXPG.out?"Write another":"Write the prompt"}</button></div>
@@ -4450,7 +4450,14 @@ function uxPGWire(w){
     if(a==="go"&&!UXPG.busy){ UXPG.text=w.querySelector("#uxPgText")?.value.trim()||""; UXPG.busy=true; UXPG.err=null; uxPGDraw();
       try{ const o=await uxPGRun(); if(!o?.prompt) throw {code:"invalid_json"}; UXPG.out=o; UXPG.gen=null; }catch(err){ UXPG.err=err?.message&&!err.code?err.message:sampleCopy(err); }
       UXPG.busy=false; if(document.querySelector(".ux-pg")) uxPGDraw(); } });
-  w.addEventListener("change",e=>{ const f=e.target.matches?.("[data-pgfile]")&&e.target.files?.[0]; if(!f) return; if(UXPG.fileUrl) URL.revokeObjectURL(UXPG.fileUrl); UXPG.file=f; UXPG.fileUrl=URL.createObjectURL(f); UXPG.out=null; UXPG.gen=null; UXPG.err=null; uxPGDraw(); });
+  const setPhoto=f=>{ if(!f||!/^image\//.test(f.type)){ UXPG.err="That file isn't an image. Use JPEG, PNG or WebP."; uxPGDraw(); return; } if(UXPG.fileUrl) URL.revokeObjectURL(UXPG.fileUrl); UXPG.file=f; UXPG.fileUrl=URL.createObjectURL(f); UXPG.kind="sheet"; UXPG.out=null; UXPG.gen=null; UXPG.err=null; uxPGDraw(); };
+  w.addEventListener("change",e=>{ const f=e.target.matches?.("[data-pgfile]")&&e.target.files?.[0]; if(f) setPhoto(f); });
+  /* drop a photo anywhere on the window, or paste one */
+  const hasFile=e=>[...(e.dataTransfer?.types||[])].includes("Files");
+  w.addEventListener("dragover",e=>{ if(!hasFile(e)) return; e.preventDefault(); w.classList.add("drag"); });
+  w.addEventListener("dragleave",e=>{ if(e.target===w||!w.contains(e.relatedTarget)) w.classList.remove("drag"); });
+  w.addEventListener("drop",e=>{ if(!hasFile(e)) return; e.preventDefault(); w.classList.remove("drag"); setPhoto([...e.dataTransfer.files].find(f=>/^image\//.test(f.type))||e.dataTransfer.files[0]); });
+  w.addEventListener("paste",e=>{ const f=[...(e.clipboardData?.files||[])].find(x=>/^image\//.test(x.type)); if(f){ e.preventDefault(); setPhoto(f); } });
   w.addEventListener("keydown",e=>{ if(e.key==="Escape") w.remove(); });
 }
 /* ---------- wiring ---------- */
