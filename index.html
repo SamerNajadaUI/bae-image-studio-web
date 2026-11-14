@@ -1058,6 +1058,18 @@ details.rl-changes>summary::-webkit-details-marker{display:none}
 .rl-stages.ux4 .lb{display:block!important}
 .ux-nextbar .go .cost:empty{display:none}
 .ux-cost:empty{display:none}
+/* character library */
+.cl-head{grid-column:1/-1;display:flex;flex-direction:column;gap:8px}
+.cl-tabs{display:flex;flex-wrap:wrap;gap:8px}
+.cl-tabs button{all:unset;cursor:pointer;min-height:40px;padding:0 16px;border-radius:20px;border:1px solid var(--stone);font-size:15px;display:inline-flex;align-items:center;gap:8px}
+.cl-tabs button span{font-size:12px;color:var(--ink-med)}
+.cl-tabs button[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)} .cl-tabs button[aria-pressed="true"] span{color:#fff}
+.cl-tabs button:focus-visible{outline:2px solid var(--orange-dark);outline-offset:2px}
+.ch-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ch-cat{border:1px solid var(--stone);border-radius:12px;padding:8px 10px;font:inherit;font-size:14px;background:var(--white);color:var(--ink)}
+.ch-name[readonly]{border-color:transparent;background:transparent}
+.cl-empty{grid-column:1/-1;padding:24px 0}
+.rl-castchip span{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* your own characters in Photography */
 .ch-add{cursor:pointer;box-sizing:border-box;min-height:220px;border:1.5px dashed var(--stone);border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:18px}
 .ch-add:hover,.ch-add:focus-within{border-color:var(--orange-dark);background:rgba(255,255,255,.6)}

@@ -87,16 +87,11 @@ const ICON_REFS=[
 ALL_REFS.push(...ICON_REFS);
 const PICK_ICON=["ic_savings","ic_cards","ic_investments","ic_fraud_security"];
 /* Characters: identity references (face, hair, build). Named, renamable; naming one in the brief casts them. */
-const CHAR_REFS=[
- ["ch_wissam","Wissam / وسام","man in his early thirties, dark side-parted hair, short stubble beard, warm brown eyes, athletic build"],
- ["ch_lina","Lina / لينا","young woman, dark hair slicked back into a low braided ponytail, strong brows, grey-green eyes, slim build"],
- ["ch_sara","Sara / سارة","woman around thirty, light-blonde hair in a low bun, light freckles, grey-blue eyes, slim build"],
- ["ch_omar","Omar / عمر","man in his forties, heavy build, short brown swept-back hair, light stubble, grey-blue eyes"]
-].map(([id,name,d])=>({id,defName:name,d:"Character: "+d,look:d,src:`refs/${id}.jpg`,set:"ch",studio:false}));
-ALL_REFS.push(...CHAR_REFS);
+const CHAR_REFS=[]; /* the character library starts empty and is filled by the team owner (see "Character library") */
+
 const CHAR_KEY="bae_char_names_v1";
 let CHAR_NAMES={}; try{ CHAR_NAMES=JSON.parse(localStorage.getItem(CHAR_KEY)||"{}"); }catch{}
-const charName=id=>(CHAR_NAMES[id]||refById(id)?.defName||id).trim();
+const charName=id=>((refById(id)?.lib?refById(id).defName:CHAR_NAMES[id]||refById(id)?.defName)||id).trim();
 const charAliases=id=>charName(id).split("/").map(s=>s.trim()).filter(Boolean);
 const charLabel=id=>charAliases(id)[0]||id;
 const isChar=id=>/^ch_/.test(id);
@@ -519,16 +514,25 @@ function renderRefs(){
   ALL_REFS.filter(r=>r.set===S.refTab).forEach(r=>{ const b=document.createElement("button"); b.type="button"; b.className="ref"; b.title=r.d; b.setAttribute("aria-label",r.d);
     const i=S.picked.indexOf(r.id); b.setAttribute("aria-pressed",i>=0?"true":"false"); if(i>=0) b.dataset.n=i+1;
     b.innerHTML=`<img src="${r.src}" alt="" loading="lazy">${r.studio?'<span class="tag">Studio</span>':r.set==="yt"?'<span class="tag">Youth</span>':r.set==="user"?'<span class="tag">Yours</span>':r.set==="ch"?`<span class="tag ch">${esc(charLabel(r.id))}</span>`:""}`;
-    if(r.set==="ch"){ const w=document.createElement("div"); w.className="ch-card"; w.appendChild(b);
-      const inp=document.createElement("input"); inp.type="text"; inp.className="ch-name"; inp.value=charName(r.id); inp.setAttribute("aria-label","Character name, add other spellings after a slash"); inp.spellcheck=false;
-      inp.onchange=()=>{ const v=inp.value.trim(); if(v) CHAR_NAMES[r.id]=v; else delete CHAR_NAMES[r.id]; try{ localStorage.setItem(CHAR_KEY,JSON.stringify(CHAR_NAMES)); }catch{} if(r.user&&v){ r.defName=v; IDB.put({id:r.id,name:v,blob:r.blob,look:/^exactly the person/.test(r.look)?"":r.look}).catch(()=>{}); } syncCast(); renderRefs(); };
-      if(r.user){ inp.placeholder="Name — e.g. Ali / علي"; if(S._newChar===r.id){ inp.value=""; setTimeout(()=>{ inp.focus(); },60); S._newChar=null; } }
+    if(r.set==="ch"){ if(CL.cat!=="all"&&r.cat!==CL.cat) return; const w=document.createElement("div"); w.className="ch-card"; w.appendChild(b);
+      const inp=document.createElement("input"); inp.type="text"; inp.className="ch-name"; inp.value=charName(r.id); inp.setAttribute("aria-label","Character name, add other spellings after a slash"); inp.spellcheck=false; inp.dir="auto"; inp.placeholder="Name — e.g. Ali / علي";
+      if(!CL.canEdit) inp.readOnly=true;
+      inp.onchange=()=>{ const v=inp.value.trim(); if(v&&r.lib){ r.defName=v; clUpdate(r.docId,{name:v}); } syncCast(); renderRefs(); };
+      if(S._newChar===r.id){ setTimeout(()=>{ inp.focus(); inp.select(); },60); S._newChar=null; }
       w.appendChild(inp);
-      if(r.user){ const x=document.createElement("button"); x.type="button"; x.className="ch-del"; x.textContent="Remove"; x.onclick=()=>removeUserChar(r.id); w.appendChild(x); } b.onclick=()=>{ const j=S.picked.indexOf(r.id); if(j>=0){ S.picked.splice(j,1); S._autoCast=(S._autoCast||[]).filter(x=>x!==r.id); } else if(S.picked.length<MAX_REFS) S.picked.unshift(r.id); renderRefs(); };
+      if(CL.canEdit&&r.lib){ const row=document.createElement("div"); row.className="ch-row"; const sel=document.createElement("select"); sel.className="ch-cat"; sel.setAttribute("aria-label","Shelf"); sel.innerHTML=CL_CATS.map(([k,l])=>`<option value="${k}"${r.cat===k?" selected":""}>${l}</option>`).join(""); sel.onchange=()=>{ r.cat=sel.value; clUpdate(r.docId,{cat:sel.value}); renderRefs(); };
+        const x=document.createElement("button"); x.type="button"; x.className="ch-del"; x.textContent="Remove"; x.onclick=()=>{ if(x.dataset.sure){ clRemove(r.docId).then(renderRefs); } else { x.dataset.sure="1"; x.textContent="Remove for everyone?"; setTimeout(()=>{ delete x.dataset.sure; x.textContent="Remove"; },4000); } };
+        row.appendChild(sel); row.appendChild(x); w.appendChild(row); }
+      b.onclick=()=>{ const j=S.picked.indexOf(r.id); if(j>=0){ S.picked.splice(j,1); S._autoCast=(S._autoCast||[]).filter(x=>x!==r.id); } else if(S.picked.length<MAX_REFS) S.picked.unshift(r.id); renderRefs(); };
       box.appendChild(w); return; }
     b.onclick=()=>{ const j=S.picked.indexOf(r.id); if(j>=0) S.picked.splice(j,1); else if(S.picked.length<MAX_REFS) S.picked.push(r.id); renderRefs(); };
     box.appendChild(b); });
-  if(S.refTab==="ch"){ const w=document.createElement("label"); w.className="ch-card ch-add"; w.innerHTML=`<span class="plus" aria-hidden="true">+</span><b>Upload character</b><span class="t12 muted">A clear photo of the person. Give it a name, then write that name in the brief.</span><input type="file" accept="image/jpeg,image/png,image/webp" multiple class="sr">`; w.querySelector("input").onchange=e=>{ uploadChars(e.target.files); e.target.value=""; }; box.appendChild(w); }
+  if(S.refTab==="ch"){
+    if(!CL.loaded&&!CL._loading){ CL._loading=true; clLoad().then(()=>{ CL._loading=false; renderRefs(); clMigrateLocal(); }); }
+    const head=document.createElement("div"); head.className="cl-head"; head.innerHTML=clTabsHTML()+(CL.busy?`<p class="t12" role="status">${esc(CL.busy)}</p>`:"")+(CL.err?`<p class="t12 bad" role="alert">${esc(CL.err)}</p>`:"");
+    head.querySelectorAll("[data-clcat]").forEach(t=>t.onclick=()=>{ CL.cat=t.dataset.clcat; renderRefs(); }); box.prepend(head);
+    if(CL.canEdit){ const w=document.createElement("label"); w.className="ch-card ch-add"; w.innerHTML=`<span class="plus" aria-hidden="true">+</span><b>Add character</b><span class="t12 muted">A clear photo or a character sheet. It joins the team library; name it, then write the name in any brief.</span><input type="file" accept="image/jpeg,image/png,image/webp" multiple class="sr">`; w.querySelector("input").onchange=e=>{ clUpload(e.target.files); e.target.value=""; }; box.appendChild(w); }
+    else if(!CL.list.length&&CL.loaded){ const e=document.createElement("p"); e.className="muted cl-empty"; e.textContent="No characters in the library yet. The studio owner adds them."; box.appendChild(e); } }
   const nb=S.picked.filter(id=>refById(id)?.set==="bae").length;
   $("refCount").textContent=`${S.picked.length} / ${MAX_REFS} · ${nb} BAE`;
   /* selected strip: always visible, click to remove */
@@ -545,7 +549,7 @@ function syncTabs(){ document.querySelectorAll("#refTabs button").forEach(b=>b.s
     bae:"Photos from the Bank al Etihad guidelines. Picked frames go to Claude for style analysis and to Seedream 5.5 as references. Up to 6, from any set. Choosing Studio picks the BAE studio frames for you.",
     yt:"Youth campaign set: bold streetwear, low-angle wide camera, blue sky, hard sun and friends mid-laugh. Used for wardrobe, camera and energy; their logos and orange clothing are never copied.",
     mj:"Mari Juliano lifestyle set, for clean natural light and candid energy. Mix with the other sets, up to 6 in total.",
-    ch:"Write a character's name in the brief and they are cast automatically. Upload your own with +, name it (other spellings after a slash: Ali / علي)."})[S.refTab]; }
+    ch:"The team's character library. Write a character's name in the brief and they are cast automatically."})[S.refTab]; }
 $("refTabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return; S.refTab=b.dataset.tab; syncTabs(); renderRefs(); });
 renderRefs(); syncTabs();
 $("btnClearRefs").onclick=()=>{ S.picked=[]; renderRefs(); };
@@ -561,7 +565,7 @@ Catalog:\n${ALL_REFS.filter(r=>r.set!=="ch"&&r.set!=="ic").map(r=>r.id+(r.studio
   }catch(e){ flash($("s1state"),sampleCopy(e),true); }
   finally{ b.disabled=false; b.textContent="Auto-pick for this brief"; }
 };
-async function refBlobs(){ const out=[]; for(const id of S.picked){ const r=refById(id); if(r?.blob){ out.push({id,blob:r.blob}); continue; } try{ const res=await fetch(`refs/${id}.jpg`); if(res.ok) out.push({id,blob:await res.blob()}); }catch{} } return out; }
+async function refBlobs(){ const out=[]; for(const id of S.picked){ const r=refById(id); if(r?.lib&&!r.blob){ try{ r.blob=await clBlob(r.docId); }catch{} } if(r?.blob){ out.push({id,blob:r.blob}); continue; } try{ const res=await fetch(`refs/${id}.jpg`); if(res.ok) out.push({id,blob:await res.blob()}); }catch{} } return out; }
 
 function flash(el,txt,bad){ el.textContent=txt; el.style.color=bad?"var(--warn)":"";
   if(el&&/^s[123]state$/.test(el.id)){ const m=$("flowMsg"); if(m){ m.textContent=txt; m.classList.toggle("bad",!!bad); } } }
@@ -1303,6 +1307,54 @@ const IDB={ db:null, async open(){ if(this.db) return this.db; this.db=await new
   async all(){ const db=await this.open(); return new Promise(res=>{ const q=db.transaction("refs").objectStore("refs").getAll(); q.onsuccess=()=>res(q.result||[]); q.onerror=()=>res([]); }); },
   async put(v){ const db=await this.open(); return new Promise(res=>{ const t=db.transaction("refs","readwrite"); t.objectStore("refs").put(v); t.oncomplete=res; t.onerror=res; }); },
   async del(id){ const db=await this.open(); return new Promise(res=>{ const t=db.transaction("refs","readwrite"); t.objectStore("refs").delete(id); t.oncomplete=res; t.onerror=res; }); } };
+/* ================= Character library: ONE shared library for the whole team, kept in the page's database. The owner adds and removes; everyone casts. ================= */
+const CL={list:[],loaded:0,canEdit:false,cat:"all",busy:"",err:""};
+const CL_CATS=[["men","Men"],["women","Women"],["kids","Kids"],["elderly","Elderly"]];
+const clRefId=id=>"ch_l"+id;
+function clSync(){ for(const A of [ALL_REFS,CHAR_REFS]) for(let i=A.length-1;i>=0;i--) if(A[i].lib) A.splice(i,1);
+  for(const c of CL.list){ const r={id:clRefId(c.id),docId:c.id,defName:c.name||"Character",d:"Character: "+(c.look||c.name||""),look:c.look||"exactly the person in this reference image",src:c.thumb||"",blob:null,set:"ch",studio:false,user:true,lib:true,cat:c.cat||"men"}; ALL_REFS.push(r); CHAR_REFS.push(r); }
+  S.picked=S.picked.filter(id=>refById(id)); }
+async function clLoad(force){
+  await rlStoreInit(); const db=RLS.db; if(!db){ CL.err="The library needs the page's database — open the studio in claude.ai."; return CL; }
+  if(!force&&CL.loaded&&Date.now()-CL.loaded<60000) return CL;
+  try{ const sn=await db.collection("chars").get(); CL.list=sn.docs.map(d=>({id:d.id,...JSON.parse(JSON.stringify(d.data()))})).sort((a,b)=>(b.at||0)-(a.at||0)); CL.loaded=Date.now(); CL.err=""; }
+  catch(e){ CL.err="Couldn't open the character library."; log("✕","character library",{code:e?.code,message:e?.message}); }
+  try{ const u=await window.claude?.use?.("user"); CL.canEdit=!!u?.canEdit?.(); }catch{}
+  clSync(); return CL; }
+const CL_BLOB=new Map();
+async function clBlob(docId){ if(CL_BLOB.has(docId)) return CL_BLOB.get(docId);
+  const sn=await RLS.db.collection("charimg").doc(docId).get(); const d=sn.exists?sn.data()?.d:null; if(!d) throw {code:"not_found",message:"This character's image is missing from the library."};
+  const b=await (await fetch(d)).blob(); CL_BLOB.set(docId,b); return b; }
+async function clJpegUnder(blob,maxBytes){ let out=null; for(const [px,q] of [[1600,.88],[1400,.85],[1200,.82],[1000,.8],[800,.78]]){ const bmp=await createImageBitmap(blob); const k=Math.min(1,px/Math.max(bmp.width,bmp.height)); const c=document.createElement("canvas"); c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k); c.getContext("2d").drawImage(bmp,0,0,c.width,c.height); out=await new Promise(r=>c.toBlob(r,"image/jpeg",q)); if(out.size<=maxBytes) break; } return out; }
+const clDataUrl=blob=>new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result)); fr.onerror=rej; fr.readAsDataURL(blob); });
+/* add one character: Claude looks once to write the casting line and choose the shelf */
+async function clAdd(blob,name,cat){
+  if(!CL.canEdit||!RLS.db) throw {message:"Only the studio owner adds characters to the library."};
+  const full=await clJpegUnder(blob,520000), thumb=await clDataUrl(await toJpeg(full,640));
+  let look="", guess=cat||"";
+  try{ if(sample){ const o=await sample.json(`Describe the person in this image in ONE short casting phrase: man or woman (or boy / girl), approximate age, hair, facial hair if any, eye colour, build. No name, no clothes, no background. Also choose the shelf: "men" (adult man under 60), "women" (adult woman under 60), "kids" (under 18), "elderly" (60 or older, any gender). Reply with only JSON: {"look":"…","cat":"men|women|kids|elderly"}`,{images:[full],modelTier:"quick"}); look=String(o?.look||"").trim().slice(0,220); if(!guess&&CL_CATS.some(([k])=>k===o?.cat)) guess=o.cat; } }catch{}
+  const id="c"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  await RLS.db.collection("charimg").doc(id).set({d:await clDataUrl(full),at:Date.now()});
+  const doc={name:String(name||"New character").slice(0,60),cat:guess||"men",look,thumb,at:Date.now(),by:RLS.uid||null};
+  await RLS.db.collection("chars").doc(id).set(doc);
+  CL_BLOB.set(id,full); CL.list.unshift({id,...doc}); clSync(); return id; }
+async function clUpdate(id,patch){ const c=CL.list.find(x=>x.id===id); if(!c||!CL.canEdit) return; Object.assign(c,patch); clSync(); try{ await RLS.db.collection("chars").doc(id).update(patch); }catch(e){ log("✕","character update",{code:e?.code}); } }
+async function clRemove(id){ if(!CL.canEdit) return; CL.list=CL.list.filter(x=>x.id!==id); clSync(); try{ await RLS.db.collection("chars").doc(id).delete(); await RLS.db.collection("charimg").doc(id).delete(); }catch(e){ log("✕","character remove",{code:e?.code}); } }
+async function clUpload(files){ const L=[...files].filter(f=>/^image\//.test(f.type)).slice(0,8); if(!L.length) return; let n=0, last=null;
+  for(const f of L){ CL.busy=`Adding ${++n} of ${L.length}…`; renderRefs(); try{ last=await clAdd(f,"",""); CL.err=""; }catch(e){ CL.err="Couldn't add the image: "+String(e?.message||e?.code||e).slice(0,160); } }
+  CL.busy=""; if(last){ S._newChar=clRefId(last); CL.cat="all"; } renderRefs(); }
+/* the first version kept "your characters" in this browser: the owner's move into the team library once */
+async function clMigrateLocal(){ if(!CL.canEdit) return; let recs=[]; try{ recs=(await IDB.all()).filter(r=>/^ch_u/.test(r.id)); }catch{} if(!recs.length) return;
+  for(const r of recs){ try{ await clAdd(r.blob,CHAR_NAMES[r.id]||r.name||"Character",""); await IDB.del(r.id); delete CHAR_NAMES[r.id]; }catch{ break; } }
+  try{ localStorage.setItem(CHAR_KEY,JSON.stringify(CHAR_NAMES)); }catch{} renderRefs(); }
+function clTabsHTML(){ const n=k=>CL.list.filter(c=>k==="all"||c.cat===k).length; return `<div class="cl-tabs" role="group" aria-label="Character shelves">${[["all","All"],...CL_CATS].map(([k,l])=>`<button type="button" data-clcat="${k}" aria-pressed="${CL.cat===k}">${l} <span>${n(k)}</span></button>`).join("")}</div>`; }
+/* Reels: cast a library character into the open reel */
+async function uxCastLib(id){ const c=CL.list.find(x=>x.id===id); if(!c||!RL) return; const nm=String(c.name||"Character").split("/")[0].trim();
+  const e=rlNewElement("character",nm,c.look||""); e.lib=nm; e.libId=c.id; rlEnsureHandles(RL); rlSave(); rlBoard();
+  try{ await rlUseImage(e.tag,await clBlob(c.id),{quiet:true}); }catch(err){ e.err="Couldn't load this character from the library."; rlBoard(); } }
+async function uxSaveLib(tag,btn){ const e=rlElByTag(tag); if(!e||!(e.portraitId||e.id)) return; if(btn){ btn.disabled=true; btn.textContent="Saving…"; }
+  try{ await clLoad(); const blob=await rlFullImage(e.portraitId||e.id); if(!blob) throw {message:"Couldn't read the image from Magnific."}; await clAdd(blob,e.name||"Character",""); if(btn) btn.textContent="Saved to library ✓"; }
+  catch(err){ if(btn){ btn.disabled=false; btn.textContent="Save to library"; } rlSys("Couldn't save to the library: "+String(err?.message||err?.code||err).slice(0,160)); } }
 /* Your own characters: upload a photo, give it a name, then just write the name in the brief */
 function addUserChar(rec){ if(refById(rec.id)) return; const r={id:rec.id,defName:rec.name||"New character",d:"Character: "+(rec.look||rec.name||"your character"),look:rec.look||"exactly the person in this reference image",src:URL.createObjectURL(rec.blob),blob:rec.blob,set:"ch",studio:false,user:true}; ALL_REFS.push(r); CHAR_REFS.push(r); }
 async function describeChar(rec){ try{ if(!sample) return; const o=await sample.json(`Describe the person in this image in ONE short casting phrase: man or woman (or boy / girl), approximate age, hair, facial hair if any, eye colour, build. No name, no clothes, no background. Reply with only JSON: {"look":"…"}`,{images:[rec.blob],modelTier:"quick"}); const look=String(o?.look||"").trim().slice(0,220); if(!look) return; rec.look=look; const r=refById(rec.id); if(r){ r.look=look; r.d="Character: "+look; } try{ await IDB.put(rec); }catch{} }catch{} }
@@ -2484,7 +2536,7 @@ ${brText(memText,/scene|shot|prompt|seedance|مشهد|مشاهد|برومبت|ل
 ${canSearch?`
 MEMORY SEARCH: your long-term memory holds ${MEM.cards.length} memories. The most relevant ones are above. If this request touches something they don't cover (a new topic, place, occasion, product, technique), call search_memory (English or Arabic keywords) before deciding, and open_memory to follow links. At most 3 searches; never search for what is already above.`:""}
 
-TARGET: ${set.aspect} reel, about ${set.length} seconds in total, dialogue language: ${set.lang}. BAE characters already in the user's Magnific library (they can be cast): Wissam (man, early 30s), Lina (young woman, dark braided ponytail), Sara (woman, light-blonde low bun), Omar (man in his 40s, heavy build).
+TARGET: ${set.aspect} reel, about ${set.length} seconds in total, dialogue language: ${set.lang}. Characters in the team's character library (they can be cast by name): ${CL.list.length?CL.list.slice(0,40).map(c=>`${String(c.name||"").split("/").map(x=>x.trim()).filter(Boolean).join(" or ")} (${c.cat}${c.look?"; "+c.look:""})`).join(" · "):"none yet"}.
 
 STAGE FLOW: idea → script → characters → locations → directing → render. Work on what the user asks; by default the current stage. When the user approves ("تمام", "ok", "approve", picks an idea…), move to the next stage AND deliver it in the same answer. The user can come back at any time to change an earlier stage (a new idea, a new or edited character, a new location, a rewritten scene): do exactly that change, keep everything else, and update later stages only where the change requires it. If attachments are given (storyboards, characters, places, scripts), analyse them carefully and record the useful facts in "notes" because you will not see the images again.
 
@@ -2521,7 +2573,7 @@ Reply with ONLY one JSON object whose FIRST key is "reply" (the user watches it 
 - "ideas": [{"title","hook","logline","beats","why_viral","product_moment","jury"}]  (3 per request). Before answering, silently generate at least 8 directions through different lenses of the masters, score each with THE JURY in the brain, and return only the best 3; "jury" = one line on why it wins (score /35)
 - "picked_idea": index (0-based) into "ideas" when the user picks one
 - "script": {"title","duration_s","scenes":[{"n","time","title","action","dialogue":[{"who","line"}],"on_screen_text","sound"}]}
-- "characters": [{"tag","handle","name","role","description","wardrobe","library":null|"Wissam"|"Lina"|"Sara"|"Omar","prompt","from_attachment":null|N}]  — when you propose characters, ALWAYS give each one a complete, specific "prompt" (STAGE 1: a natural portrait photo of that one person in a real everyday place — face, hair, build, exact wardrobe, place and light; never a character sheet, never a plain backdrop) so the user can generate it or attach their own photo. A character with "own_image": true uses the user's photo — keep its description and wardrobe exactly as they are  — from_attachment: when the user ATTACHED a photo or sheet of this character (in THIS message), give its number N (1 = first attached image, in order). The studio then uses the user's image itself as the character's reference image — never redesign or re-imagine that person; describe them exactly as in the image. When the user attaches characters, map EVERY attached image to an element (characters, or locations/props for places and objects); if two attachments look the same, still map both and say so
+- "characters": [{"tag","handle","name","role","description","wardrobe","library":null|"<a name from the character library>","prompt","from_attachment":null|N}]  — when you propose characters, ALWAYS give each one a complete, specific "prompt" (STAGE 1: a natural portrait photo of that one person in a real everyday place — face, hair, build, exact wardrobe, place and light; never a character sheet, never a plain backdrop) so the user can generate it or attach their own photo. A character with "own_image": true uses the user's photo — keep its description and wardrobe exactly as they are  — from_attachment: when the user ATTACHED a photo or sheet of this character (in THIS message), give its number N (1 = first attached image, in order). The studio then uses the user's image itself as the character's reference image — never redesign or re-imagine that person; describe them exactly as in the image. When the user attaches characters, map EVERY attached image to an element (characters, or locations/props for places and objects); if two attachments look the same, still map both and say so
   — prompt = the STAGE 1 natural portrait prompt (the studio makes the three-panel sheet from the chosen portrait afterwards); set "library" only when the user wants that BAE character
 - "locations": [{"tag","handle","name","kind":"location"|"prop","description","prompt","from_attachment":null|N}]  — full image prompt (LOCATION template, empty of people / PROP SHEET template)
 - "film_look": the shared FILM LOOK paragraph (write it with the first scenes; change it only when asked)
@@ -2641,7 +2693,9 @@ function rlApply(o){
   if(o.stage&&rlStageIx(o.stage)>=0){ if(rlStageIx(o.stage)!==rlStageIx(RL.stage)) RL.view=o.stage; RL.stage=o.stage; }
   RL.chat.push({role:"a",text:String(o.reply||"…"),chips:Array.isArray(o.chips)?o.chips.slice(0,4):[],advisors:Array.isArray(o.advisors)?o.advisors.filter(x=>x&&x.note).slice(0,3).map(x=>({id:String(x.id||""),note:String(x.note).slice(0,400)})):[]});
 }
-function rlLinkLibrary(){ for(const c of RL.characters){ if(!c.lib){ if(c.fromLib){ c.fromLib=false; c.id=null; } continue; } const id="ch_"+String(c.lib).toLowerCase(); const mid=S.magIds?.[id]; if(refById(id)){ c.fromLib=true; if(mid) c.id=mid; } } }
+function rlLinkLibrary(){ for(const c of RL.characters){ if(c.fromLib){ c.fromLib=false; } if(!c.lib||c.id||c._live||c._libTried||c.status==="run") continue;
+    const want=String(c.lib).toLowerCase(); const hit=CL.list.find(x=>String(x.name||"").split("/").map(y=>y.trim().toLowerCase()).includes(want)); if(!hit) continue;
+    c._libTried=true; c.libId=hit.id; if(!c.description) c.description=hit.look||""; clBlob(hit.id).then(b=>rlUseImage(c.tag,b,{quiet:true})).catch(()=>{}); } }
 function rlSys(t,bad){ RL.chat.push({role:"sys",text:t,err:!!bad}); rlRenderChat(); }
 function rlTyping(on,note){ const b=$("rlMsgs"); b.querySelector(".rl-typing-m")?.remove(); if(!on){ RL_STEPS.length=0; RL_LIVE_TXT=""; return; }
   const d=document.createElement("div"); d.className="rl-m a rl-typing-m"; d.setAttribute("role","status"); d.setAttribute("aria-live","polite");
@@ -2741,7 +2795,7 @@ async function rlOpen(id){
   const p=id?await rlLoadProject(id):null;
   RL=p||rlNew(); if(!p) rlSave();
   $("rlLib").hidden=true; $("rlProjView").hidden=false; $("reels").dataset.mode="proj"; $("reels").dataset.view="chat";
-  rlLinkLibrary(); rlSyncSettings(); rlSavedState(p?(RLS.mode==="account"?"saved":"local"):"saving"); rlRender();
+  clLoad().then(()=>{ if(RL){ rlLinkLibrary(); rlBoard(); } }); rlLinkLibrary(); rlSyncSettings(); rlSavedState(p?(RLS.mode==="account"?"saved":"local"):"saving"); rlRender();
   setTimeout(rlResume,400);
   $("reels").scrollTop=0; setTimeout(()=>$("rlInput").focus({preventScroll:true}),60);
 }
@@ -2878,7 +2932,7 @@ function rlBoard(){
     out.push(rlHead(isC?"Cast":"Locations & props",isC?"Reference sheets keep every face the same in every shot.":"Empty establishing images and product sheets. Every shot inherits their light.",
       `${list.some(e=>!e.id&&!e.fromLib&&e.prompt)?`<button class="a-btn" type="button" data-rl="genall" data-list="${isC?"c":"l"}">Generate all missing</button>`:""}`));
     const add=RL._adding&&((isC&&RL._adding==="character")||(!isC&&RL._adding!=="character"))?rlAddForm(RL._adding):"";
-    out.push(`<div class="rl-grid">${list.map(e=>rlElCard(e,isC?"c":"l")).join("")}${add||`<div class="rl-addcard">${isC?`<button type="button" class="rl-add" data-rl="add" data-k="character"><span aria-hidden="true">+</span>Add character</button><div class="rl-libcast"><span class="t12 muted">Or cast a BAE character</span><div>${["Wissam","Lina","Sara","Omar"].map(n=>{ const r=refById("ch_"+n.toLowerCase()); return `<button type="button" class="rl-castchip" data-rl="cast" data-n="${n}" ${RL.characters.some(c=>c.lib===n)?"disabled":""}>${r?`<img src="${r.src}" alt="">`:""}${n}</button>`; }).join("")}</div></div>`:`<button type="button" class="rl-add" data-rl="add" data-k="location"><span aria-hidden="true">+</span>Add location</button><button type="button" class="rl-add" data-rl="add" data-k="prop"><span aria-hidden="true">+</span>Add prop</button>`}</div>`}</div>`);
+    out.push(`<div class="rl-grid">${list.map(e=>rlElCard(e,isC?"c":"l")).join("")}${add||`<div class="rl-addcard">${isC?`<button type="button" class="rl-add" data-rl="add" data-k="character"><span aria-hidden="true">+</span>Add character</button><div class="rl-libcast"><span class="t12 muted">${CL.list.length?"Or cast from the character library":"The character library is empty — add characters in Photography → References → Characters"}</span><div>${CL.list.slice(0,24).map(c=>`<button type="button" class="rl-castchip" data-ux="castlib" data-id="${esc(c.id)}" ${RL.characters.some(x=>x.libId===c.id)?"disabled":""}>${c.thumb?`<img src="${c.thumb}" alt="">`:""}<span dir="auto">${esc(String(c.name||"").split("/")[0].trim())}</span></button>`).join("")}</div></div>`:`<button type="button" class="rl-add" data-rl="add" data-k="location"><span aria-hidden="true">+</span>Add location</button><button type="button" class="rl-add" data-rl="add" data-k="prop"><span aria-hidden="true">+</span>Add prop</button>`}</div>`}</div>`);
     if(isC&&rlStageIx(RL.stage)<=rlStageIx("characters")&&list.length) out.push(rlNext("approveCast","Approve cast · build the locations"));
     if(!isC&&rlStageIx(RL.stage)<=rlStageIx("locations")&&list.length) out.push(rlNext("approveLoc","Approve locations · direct the shots"));
   }
@@ -2929,7 +2983,7 @@ function rlElCard(e,kind){
     ${e.fromUser&&e.id?`<p class="rl-status">✓ Your image — used as ${esc(e.handle||e.tag)} in every first frame and shot.</p>`:""}
     ${e.fromLib?`<p class="rl-status${e.id?"":" bad"}">${e.id?"BAE character from your Magnific library":"Link your Magnific library first (Photography → References → Link library), so this character can be attached."}</p>`:""}
     ${kind==="c"&&e.id&&e.stage==="portrait"&&!busy?`<p class="rl-status ux-keep">Step 1 of 2 — this is the portrait. Happy with the face? Turn it into the character sheet. Not yet? Generate another.</p>`:""}${kind==="c"&&e.stage==="sheet"&&!busy?`<p class="rl-status ux-keep">✓ Character sheet made from the chosen portrait.</p>`:""}
-    <div class="rl-btns">${kind==="c"&&e.id&&(e.stage==="portrait"||(e.fromUser&&e.stage!=="sheet"))&&!e.fromLib?`<button class="btn small primary" type="button" data-ux="sheet" data-tag="${e.tag}" ${busy||writing?"disabled":""}>Make character sheet</button>`:""}${e.fromLib?"":`<button class="btn small${e.id&&!e.stale?"":" primary"}" type="button" data-rl="gen" data-tag="${e.tag}" ${busy||writing||!e.prompt?"disabled":""}>${busy?(e._note?"Working…":"Generating…"):e.fromUser?"Generate instead":e.id?(kind==="c"&&!rlIsSheetPrompt(e.prompt)?"Another portrait":"Regenerate"):(kind==="c"&&!rlIsSheetPrompt(e.prompt)?"Generate portrait":"Generate image")}</button><label class="btn small rl-own" ${busy?'aria-disabled="true"':""}>${e.fromUser?"Replace my image":"Use my image"}<input type="file" accept="image/*" class="sr" data-rl-own="${esc(e.tag)}" ${busy?"disabled":""}></label>`}<button class="btn small" type="button" data-rl="edit" data-tag="${e.tag}">Edit</button>${e.web?`<a class="btn small" href="${esc(e.web)}" target="_blank" rel="noopener">Magnific</a>`:""}<span class="rl-sp"></span>${rlRate(kind==="c"?"character":e.kind||"location","el:"+e.tag+":"+(e.id||"p"),`${e.name}: ${e.description||""} | ${String(e.prompt||"").slice(0,600)}`)}</div>
+    <div class="rl-btns">${kind==="c"&&e.id&&CL.canEdit&&!e.libId&&!busy?`<button class="btn small" type="button" data-ux="savelib" data-tag="${e.tag}">Save to library</button>`:""}${kind==="c"&&e.id&&(e.stage==="portrait"||(e.fromUser&&e.stage!=="sheet"))&&!e.fromLib?`<button class="btn small primary" type="button" data-ux="sheet" data-tag="${e.tag}" ${busy||writing?"disabled":""}>Make character sheet</button>`:""}${e.fromLib?"":`<button class="btn small${e.id&&!e.stale?"":" primary"}" type="button" data-rl="gen" data-tag="${e.tag}" ${busy||writing||!e.prompt?"disabled":""}>${busy?(e._note?"Working…":"Generating…"):e.fromUser?"Generate instead":e.id?(kind==="c"&&!rlIsSheetPrompt(e.prompt)?"Another portrait":"Regenerate"):(kind==="c"&&!rlIsSheetPrompt(e.prompt)?"Generate portrait":"Generate image")}</button><label class="btn small rl-own" ${busy?'aria-disabled="true"':""}>${e.fromUser?"Replace my image":"Use my image"}<input type="file" accept="image/*" class="sr" data-rl-own="${esc(e.tag)}" ${busy?"disabled":""}></label>`}<button class="btn small" type="button" data-rl="edit" data-tag="${e.tag}">Edit</button>${e.web?`<a class="btn small" href="${esc(e.web)}" target="_blank" rel="noopener">Magnific</a>`:""}<span class="rl-sp"></span>${rlRate(kind==="c"?"character":e.kind||"location","el:"+e.tag+":"+(e.id||"p"),`${e.name}: ${e.description||""} | ${String(e.prompt||"").slice(0,600)}`)}</div>
     ${e.fromLib?"":`<form class="rl-revise" data-revise="${e.tag}"><input class="rl-field" name="q" placeholder="Ask for a change… e.g. older, navy blazer" aria-label="Ask Claude to change ${esc(e.name||"")}" dir="auto"><button class="a-btn" type="submit" ${writing?"disabled":""}>Revise</button></form>`}
     ${e.err?`<p class="rl-status bad">${esc(e.err)}</p>`:""}</div>`;
 }
@@ -4351,6 +4405,8 @@ function uxInit(){
     else if(a==="resize"){ b.disabled=true; uxResize(b.dataset.a); }
     else if(a==="sbstyleoff"){ RL.sbStyle=null; rlSave(); rlBoard(); }
     else if(a==="sheet") rlGenSheet(b.dataset.tag);
+    else if(a==="castlib"){ b.disabled=true; uxCastLib(b.dataset.id); }
+    else if(a==="savelib") uxSaveLib(b.dataset.tag,b);
   });
   R.addEventListener("change",async e=>{ const f=e.target.matches?.("[data-ux-sbstyle]")&&e.target.files?.[0]; if(!f||!RL) return;
     RL._sbUp=true; rlBoard(); try{ const up=await rlUploadMag(f,f.name||"storyboard-style"); const id=typeof up==="string"?up:(up?.id||up?.identifier); if(id){ RL.sbStyle={id,name:f.name||"style"}; rlEvent("A storyboard style reference was added."); } }catch(err){ rlSys("Couldn't upload the style image: "+String(err?.message||err?.code||err).slice(0,160)); } finally{ delete RL._sbUp; rlSave(); rlBoard(); } });
