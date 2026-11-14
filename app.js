@@ -524,6 +524,9 @@ function renderRefs(){
       if(CL.canEdit&&r.lib){ const row=document.createElement("div"); row.className="ch-row"; const sel=document.createElement("select"); sel.className="ch-cat"; sel.setAttribute("aria-label","Shelf"); sel.innerHTML=CL_CATS.map(([k,l])=>`<option value="${k}"${r.cat===k?" selected":""}>${l}</option>`).join(""); sel.onchange=()=>{ r.cat=sel.value; clUpdate(r.docId,{cat:sel.value}); renderRefs(); };
         const x=document.createElement("button"); x.type="button"; x.className="ch-del"; x.textContent="Remove"; x.onclick=()=>{ if(x.dataset.sure){ clRemove(r.docId).then(renderRefs); } else { x.dataset.sure="1"; x.textContent="Remove for everyone?"; setTimeout(()=>{ delete x.dataset.sure; x.textContent="Remove"; },4000); } };
         row.appendChild(sel); row.appendChild(x); w.appendChild(row); }
+      if(r.lib){ const row2=document.createElement("div"); row2.className="ch-row ch-acts"; const d=document.createElement("button"); d.type="button"; d.className="btn small"; d.textContent="Download"; d.onclick=()=>clDownload(r.docId,d); row2.appendChild(d);
+        if(CL.canEdit){ const l=document.createElement("label"); l.className="btn small"; l.innerHTML=`Replace<input type="file" accept="image/jpeg,image/png,image/webp" class="sr">`; l.querySelector("input").onchange=e=>{ const f=e.target.files?.[0]; e.target.value=""; if(f) clReplace(r.docId,f); }; row2.appendChild(l); }
+        w.appendChild(row2); }
       b.onclick=()=>{ const j=S.picked.indexOf(r.id); if(j>=0){ S.picked.splice(j,1); S._autoCast=(S._autoCast||[]).filter(x=>x!==r.id); } else if(S.picked.length<MAX_REFS) S.picked.unshift(r.id); renderRefs(); };
       box.appendChild(w); return; }
     b.onclick=()=>{ const j=S.picked.indexOf(r.id); if(j>=0) S.picked.splice(j,1); else if(S.picked.length<MAX_REFS) S.picked.push(r.id); renderRefs(); };
@@ -1332,23 +1335,42 @@ async function clBlob(docId){ if(CL_BLOB.has(docId)) return CL_BLOB.get(docId);
   const b=await (await fetch(d)).blob(); CL_BLOB.set(docId,b); return b; }
 async function clJpegUnder(blob,maxBytes){ let out=null; for(const [px,q] of [[2000,.9],[1800,.88],[1600,.86],[1400,.84],[1200,.82],[1000,.8]]){ const bmp=await createImageBitmap(blob); const k=Math.min(1,px/Math.max(bmp.width,bmp.height)); const c=document.createElement("canvas"); c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k); c.getContext("2d").drawImage(bmp,0,0,c.width,c.height); out=await new Promise(r=>c.toBlob(r,"image/jpeg",q)); if(out.size<=maxBytes) break; } return out; }
 const clDataUrl=blob=>new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result)); fr.onerror=rej; fr.readAsDataURL(blob); });
-/* add one character: Claude looks once to write the casting line and choose the shelf */
-async function clAdd(blob,name,cat){
-  if(!CL.canEdit||!RLS.db) throw {message:"Only the studio owner adds characters to the library."};
+/* Download: one helper for every image on the site */
+async function uxSaveBlob(blob,name){ const ext=/png/.test(blob.type)?".png":/webp/.test(blob.type)?".webp":".jpg"; const filename=String(name||"image").replace(/[\\/:*?"<>|]+/g," ").replace(/\.[a-z0-9]{2,5}$/i,"").trim().slice(0,80)+ext;
+  if(S.web||!downloads){ const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1500); return; }
+  await downloads.save({filename,data:blob}); }
+/* keeps one character image: the original in the page's file store, a reduced copy in pieces as a fallback, a small preview for the card */
+async function clStoreImage(id,blob){
   const full=await clJpegUnder(blob,900000); let thumb=""; for(const [px,q] of [[560,.8],[480,.76],[400,.72],[320,.7]]){ const bmp=await createImageBitmap(full); const k=Math.min(1,px/Math.max(bmp.width,bmp.height)); const c=document.createElement("canvas"); c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k); c.getContext("2d").drawImage(bmp,0,0,c.width,c.height); thumb=c.toDataURL("image/jpeg",q); if(thumb.length<=60000) break; }
-  let look="", guess=cat||"";
-  try{ if(sample){ const o=await sample.json(`Describe the person in this image in ONE short casting phrase: man or woman (or boy / girl), approximate age, hair, facial hair if any, eye colour, build. No name, no clothes, no background. Also choose the shelf: "men" (adult man under 60), "women" (adult woman under 60), "kids" (under 18), "elderly" (60 or older, any gender). Reply with only JSON: {"look":"…","cat":"men|women|kids|elderly"}`,{images:[full],modelTier:"quick"}); look=String(o?.look||"").trim().slice(0,220); if(!guess&&CL_CATS.some(([k])=>k===o?.cat)) guess=o.cat; } }catch{}
-  const id="c"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   { const data=await clDataUrl(full), SZ=90000, n=Math.ceil(data.length/SZ), col=RLS.db.collection("charimg");
     for(let i=0;i<n;i++) await col.doc(id+"_"+i).set({d:data.slice(i*SZ,(i+1)*SZ)});
     await col.doc(id).set({n,at:Date.now()}); }
   let asset=null; try{ const A=await window.claude?.use?.("assets"); if(A&&blob.size<=19.5*1048576){ const r=await A.upload(blob); asset=r?.id||null; } }catch(e){ log("·","original not stored in the file store",{code:e?.code,message:e?.message}); }
   let dims=null; try{ const bm=await createImageBitmap(blob); dims=[bm.width,bm.height]; }catch{}
-  const doc={name:String(name||"New character").slice(0,60),cat:guess||"men",look,thumb,at:Date.now(),by:RLS.uid||null,asset,mime:blob.type||"image/jpeg",px:dims,orig:!!asset};
+  CL_BLOB.set(id,asset?blob:full);
   /* the owner's own Magnific gets the untouched original now, so their renders never use a reduced copy */
-  rlUploadMag(blob,"character-"+id).then(up=>{ if(!up?.id) return; try{ const u=JSON.parse(localStorage.getItem("bae_user_magids")||"{}"); u[clRefId(id)]=up.id; localStorage.setItem("bae_user_magids",JSON.stringify(u)); }catch{} const c=CL.list.find(x=>x.id===id); if(c){ c._mag=true; if(typeof renderRefs==="function"&&S.refTab==="ch") renderRefs(); } }).catch(e=>log("·","original not sent to Magnific yet",{code:e?.code,message:e?.message}));
+  try{ const u=JSON.parse(localStorage.getItem("bae_user_magids")||"{}"); delete u[clRefId(id)]; localStorage.setItem("bae_user_magids",JSON.stringify(u)); }catch{}
+  rlUploadMag(blob,"character-"+id).then(up=>{ if(!up?.id) return; try{ const u=JSON.parse(localStorage.getItem("bae_user_magids")||"{}"); u[clRefId(id)]=up.id; localStorage.setItem("bae_user_magids",JSON.stringify(u)); }catch{} const c=CL.list.find(x=>x.id===id); if(c){ c._mag=true; if(S.refTab==="ch") renderRefs(); } }).catch(e=>log("·","original not sent to Magnific yet",{code:e?.code,message:e?.message}));
+  return {full,fields:{thumb,asset,mime:blob.type||"image/jpeg",px:dims,orig:!!asset}}; }
+async function clReplace(id,blob){ const c=CL.list.find(x=>x.id===id); if(!c||!CL.canEdit) return; const old=c.asset;
+  CL.busy="Replacing the image…"; renderRefs();
+  try{ const {fields}=await clStoreImage(id,blob); fields.at=Date.now(); Object.assign(c,fields); await RLS.db.collection("chars").doc(id).update(fields); refCache=null;
+    if(old&&old!==fields.asset){ try{ const A=await window.claude?.use?.("assets"); await A?.delete(old); }catch{} } CL.err=""; }
+  catch(e){ CL.err="Couldn't replace the image: "+String(e?.message||e?.code||e).slice(0,160); }
+  CL.busy=""; clSync(); renderRefs(); }
+async function clDownload(id,btn){ const c=CL.list.find(x=>x.id===id); if(!c) return; const t=btn?.textContent; if(btn){ btn.disabled=true; btn.textContent="Preparing…"; }
+  try{ await uxSaveBlob(await clBlob(id),"BAE character "+String(c.name||"").split("/")[0].trim()); }catch(e){ CL.err="Couldn't download: "+String(e?.message||e?.code||e).slice(0,140); renderRefs(); }
+  if(btn){ btn.disabled=false; btn.textContent=t; } }
+/* add one character: Claude looks once to write the casting line and choose the shelf */
+async function clAdd(blob,name,cat){
+  if(!CL.canEdit||!RLS.db) throw {message:"Only the studio owner adds characters to the library."};
+  const id="c"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  const {full,fields}=await clStoreImage(id,blob);
+  let look="", guess=cat||"";
+  try{ if(sample){ const o=await sample.json(`Describe the person in this image in ONE short casting phrase: man or woman (or boy / girl), approximate age, hair, facial hair if any, eye colour, build. No name, no clothes, no background. Also choose the shelf: "men" (adult man under 60), "women" (adult woman under 60), "kids" (under 18), "elderly" (60 or older, any gender). Reply with only JSON: {"look":"…","cat":"men|women|kids|elderly"}`,{images:[full],modelTier:"quick"}); look=String(o?.look||"").trim().slice(0,220); if(!guess&&CL_CATS.some(([k])=>k===o?.cat)) guess=o.cat; } }catch{}
+  const doc={name:String(name||"New character").slice(0,60),cat:guess||"men",look,at:Date.now(),by:RLS.uid||null,...fields};
   await RLS.db.collection("chars").doc(id).set(doc);
-  CL_BLOB.set(id,asset?blob:full); CL.list.unshift({id,...doc}); clSync(); return id; }
+  CL.list.unshift({id,...doc}); clSync(); return id; }
 async function clUpdate(id,patch){ const c=CL.list.find(x=>x.id===id); if(!c||!CL.canEdit) return; Object.assign(c,patch); clSync(); try{ await RLS.db.collection("chars").doc(id).update(patch); }catch(e){ log("✕","character update",{code:e?.code}); } }
 const CL_WAS=new Map();
 async function clRemove(id){ if(!CL.canEdit) return; CL_WAS.set(id,CL.list.find(x=>x.id===id)); CL.list=CL.list.filter(x=>x.id!==id); clSync(); try{ const col=RLS.db.collection("charimg"); const sn=await col.doc(id).get().catch(()=>null); const n=+(sn?.exists?sn.data()?.n:0)||0; const was=CL_WAS.get(id); await RLS.db.collection("chars").doc(id).delete(); if(was?.asset){ try{ const A=await window.claude?.use?.("assets"); await A?.delete(was.asset); }catch{} } for(let i=0;i<n;i++) await col.doc(id+"_"+i).delete().catch(()=>{}); await col.doc(id).delete(); }catch(e){ log("✕","character remove",{code:e?.code}); } }
@@ -2997,7 +3019,7 @@ function rlElCard(e,kind){
     ${e.fromUser&&e.id?`<p class="rl-status">✓ Your image — used as ${esc(e.handle||e.tag)} in every first frame and shot.</p>`:""}
     ${e.fromLib?`<p class="rl-status${e.id?"":" bad"}">${e.id?"BAE character from your Magnific library":"Link your Magnific library first (Photography → References → Link library), so this character can be attached."}</p>`:""}
     ${kind==="c"&&e.id&&e.stage==="portrait"&&!busy?`<p class="rl-status ux-keep">Step 1 of 2 — this is the portrait. Happy with the face? Turn it into the character sheet. Not yet? Generate another.</p>`:""}${kind==="c"&&e.stage==="sheet"&&!busy?`<p class="rl-status ux-keep">✓ Character sheet made from the chosen portrait.</p>`:""}
-    <div class="rl-btns">${kind==="c"&&e.id&&CL.canEdit&&!e.libId&&!busy?`<button class="btn small" type="button" data-ux="savelib" data-tag="${e.tag}">Save to library</button>`:""}${kind==="c"&&e.id&&(e.stage==="portrait"||(e.fromUser&&e.stage!=="sheet"))&&!e.fromLib?`<button class="btn small primary" type="button" data-ux="sheet" data-tag="${e.tag}" ${busy||writing?"disabled":""}>Make character sheet</button>`:""}${e.fromLib?"":`<button class="btn small${e.id&&!e.stale?"":" primary"}" type="button" data-rl="gen" data-tag="${e.tag}" ${busy||writing||!e.prompt?"disabled":""}>${busy?(e._note?"Working…":"Generating…"):e.fromUser?"Generate instead":e.id?(kind==="c"&&!rlIsSheetPrompt(e.prompt)?"Another portrait":"Regenerate"):(kind==="c"&&!rlIsSheetPrompt(e.prompt)?"Generate portrait":"Generate image")}</button><label class="btn small rl-own" ${busy?'aria-disabled="true"':""}>${e.fromUser?"Replace my image":"Use my image"}<input type="file" accept="image/*" class="sr" data-rl-own="${esc(e.tag)}" ${busy?"disabled":""}></label>`}<button class="btn small" type="button" data-rl="edit" data-tag="${e.tag}">Edit</button>${e.web?`<a class="btn small" href="${esc(e.web)}" target="_blank" rel="noopener">Magnific</a>`:""}<span class="rl-sp"></span>${rlRate(kind==="c"?"character":e.kind||"location","el:"+e.tag+":"+(e.id||"p"),`${e.name}: ${e.description||""} | ${String(e.prompt||"").slice(0,600)}`)}</div>
+    <div class="rl-btns">${kind==="c"&&e.id&&CL.canEdit&&!e.libId&&!busy?`<button class="btn small" type="button" data-ux="savelib" data-tag="${e.tag}">Save to library</button>`:""}${kind==="c"&&e.id&&(e.stage==="portrait"||(e.fromUser&&e.stage!=="sheet"))&&!e.fromLib?`<button class="btn small primary" type="button" data-ux="sheet" data-tag="${e.tag}" ${busy||writing?"disabled":""}>Make character sheet</button>`:""}${e.fromLib?"":`<button class="btn small${e.id&&!e.stale?"":" primary"}" type="button" data-rl="gen" data-tag="${e.tag}" ${busy||writing||!e.prompt?"disabled":""}>${busy?(e._note?"Working…":"Generating…"):e.fromUser?"Generate instead":e.id?(kind==="c"&&!rlIsSheetPrompt(e.prompt)?"Another portrait":"Regenerate"):(kind==="c"&&!rlIsSheetPrompt(e.prompt)?"Generate portrait":"Generate image")}</button><label class="btn small rl-own" ${busy?'aria-disabled="true"':""}>${e.id?"Replace":"Use my image"}<input type="file" accept="image/*" class="sr" data-rl-own="${esc(e.tag)}" ${busy?"disabled":""}></label>`}${e.id&&!busy?`<button class="btn small" type="button" data-ux="dl" data-id="${esc(e.id)}" data-name="${esc(e.name||e.handle||"image")}">Download</button>`:""}<button class="btn small" type="button" data-rl="edit" data-tag="${e.tag}">Edit</button>${e.web?`<a class="btn small" href="${esc(e.web)}" target="_blank" rel="noopener">Magnific</a>`:""}<span class="rl-sp"></span>${rlRate(kind==="c"?"character":e.kind||"location","el:"+e.tag+":"+(e.id||"p"),`${e.name}: ${e.description||""} | ${String(e.prompt||"").slice(0,600)}`)}</div>
     ${e.fromLib?"":`<form class="rl-revise" data-revise="${e.tag}"><input class="rl-field" name="q" placeholder="Ask for a change… e.g. older, navy blazer" aria-label="Ask Claude to change ${esc(e.name||"")}" dir="auto"><button class="a-btn" type="submit" ${writing?"disabled":""}>Revise</button></form>`}
     ${e.err?`<p class="rl-status bad">${esc(e.err)}</p>`:""}</div>`;
 }
@@ -3660,7 +3682,7 @@ function rlBoardCell(s,i){
   const b=s.board||{}; const thumb=b.id?rlTGet(b.id):null; if(b.id&&!thumb) rlNeed(b.id); const live=!!b._live;
   const st=live&&b.status==="queued"?"Waiting…":live&&b.status==="write"?"Planning the shots…":live&&b.status==="run"?"Drawing in Seedream 5.5 · 2K…":b.status==="err"?esc(b.err||"Failed"):b.pending&&!b.id?"Finishing in Magnific…":b.id&&!thumb?"Loading the preview…":"";
   return `<div class="rl-sbcell${live||(b.id&&!thumb)?" busy":""}">${thumb?`<img src="${thumb}" alt="Storyboard sheet ${i+1}" data-rl-zoom="${esc(b.id)}">`:`<div class="ph">${st||"No sheet yet"}</div>`}
-    <div class="cap"><span class="t12 muted">${thumb&&st?st:esc(b.moment||"")}</span><button type="button" class="btn small" data-rl="board1" data-i="${i}"${live?" disabled":""}>${b.id?"Redraw":"Draw"}</button></div></div>`;
+    <div class="cap"><span class="t12 muted">${thumb&&st?st:esc(b.moment||"")}</span><span class="rl-btns">${b.id?`<button type="button" class="btn small" data-ux="dl" data-id="${esc(b.id)}" data-name="Storyboard sheet ${i+1}">Download</button>`:""}<label class="btn small"${live?' aria-disabled="true"':""}>Replace<input type="file" accept="image/*" class="sr" data-ux-sbrep="${i}"${live?" disabled":""}></label><button type="button" class="btn small" data-rl="board1" data-i="${i}"${live?" disabled":""}>${b.id?"Redraw":"Draw"}</button></span></div></div>`;
 }
 /* ---------- Magnific: images for cast, locations and first frames ---------- */
 async function rlImage({prompt,aspect,refs=[],label,onQueued}){
@@ -4420,11 +4442,17 @@ function uxInit(){
     else if(a==="sbstyleoff"){ RL.sbStyle=null; rlSave(); rlBoard(); }
     else if(a==="sheet") rlGenSheet(b.dataset.tag);
     else if(a==="castlib"){ b.disabled=true; uxCastLib(b.dataset.id); }
+    else if(a==="dl"){ const t=b.textContent; b.disabled=true; b.textContent="Preparing…"; rlFullImage(b.dataset.id).then(bl=>{ if(!bl) throw 0; return uxSaveBlob(bl,"BAE "+(b.dataset.name||"image")); }).catch(()=>rlSys("Couldn't download this image from Magnific.",true)).finally(()=>{ b.disabled=false; b.textContent=t; }); }
     else if(a==="savelib") uxSaveLib(b.dataset.tag,b);
   });
   R.addEventListener("change",async e=>{ const f=e.target.matches?.("[data-ux-sbstyle]")&&e.target.files?.[0]; if(!f||!RL) return;
     RL._sbUp=true; rlBoard(); try{ const up=await rlUploadMag(f,f.name||"storyboard-style"); const id=typeof up==="string"?up:(up?.id||up?.identifier); if(id){ RL.sbStyle={id,name:f.name||"style"}; rlEvent("A storyboard style reference was added."); } }catch(err){ rlSys("Couldn't upload the style image: "+String(err?.message||err?.code||err).slice(0,160)); } finally{ delete RL._sbUp; rlSave(); rlBoard(); } });
   R.addEventListener("click",e=>{ if(e.target.closest("[data-uxpg]")){ uxPGDraw(); setTimeout(()=>$("uxPgText")?.focus(),60); } });
+  R.addEventListener("change",async e=>{ const t=e.target.matches?.("[data-ux-sbrep]")?e.target:null; const f=t?.files?.[0]; if(!f||!RL) return; const i=+t.dataset.uxSbrep; t.value=""; const sc=RL.script?.scenes?.[i]; if(!sc) return;
+    const b=sc.board=Object.assign(sc.board||{},{status:"run",err:null,_live:true}); rlBoard();
+    try{ const up=await rlUploadMag(f,"storyboard-sheet-"+(i+1)); if(!up?.id) throw {message:"Magnific returned no identifier"}; RL_SBBIG.add(up.id); Object.assign(b,{id:up.id,web:up.web||null,status:"ok",sheet:true,fromUser:true,moment:"your image",at:Date.now()}); rlEvent(`The user replaced storyboard sheet ${i+1} with their own image.`); }
+    catch(err){ b.status=b.id?"ok":"err"; b.err="Couldn't upload: "+String(err?.message||err?.code||err).slice(0,140); }
+    finally{ delete b._live; rlSave(); rlBoard(); } });
   uxApply(); uxObserve(); uxMicInit();
 }
 
