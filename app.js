@@ -117,6 +117,23 @@ function castText(){ const chars=refPlan().filter(r=>isChar(r.id)); if(!chars.le
   return "CAST — these people are fixed characters; keep each one's exact identity (face, facial features, hairline and hairstyle, eye colour, skin tone, build): "+chars.map(r=>`${charLabel(r.id)} = ${r.tag} (${refById(r.id).look})`).join("; ")+". When the brief names a character, or describes a person of the same gender and age who is not otherwise named, that person IS the character. Characters keep their own look even where the generic people description would differ. Their clothing, pose and background in the reference are NOT used: dress them by the look rules for this scene."; }
 const MAX_REFS=6;
 
+/* ---------------- Jordanian faces: one casting lock for every image and video prompt in the studio ---------------- */
+const JO_FACE = `JORDANIAN FACES — CASTING LOCK (applies to every person in every image or video prompt):
+- Never write "Arab" or "Middle Eastern" on its own: image models answer with one stereotype (dark skin, heavy beard, traditional dress, everyone alike). Write "Jordanian man / woman / boy / girl from Amman" and then the concrete features.
+- Give EVERY person their own explicit values, and never repeat the same combination for two people in one project: skin tone · eye colour · hair colour, texture and cut · eyebrows · nose · face shape and jaw · build · for men, facial hair.
+- Skin: the centre of the range is light olive to medium olive (also fair; tan-brown less often). It is lighter than models assume; never default to deep brown.
+- Eyes: dark brown for most; hazel, green or grey for about one person in five.
+- Hair: black or dark brown for most, sometimes medium brown; straight or wavy.
+- Eyebrows: dark and full; men's straight and low-set, women's defined with a soft arch.
+- Young men 18-35: the most common look is a short boxed beard with a clean cheek line, joined to the moustache (also: stubble, or a thick moustache alone; clean-shaven is the minority); black hair with a low or mid fade and a brushed-back or textured top; broad jaw, full cheeks, sturdy neck; build from athletic to heavy-set. A metal wristwatch reads local.
+- Young women 18-35: long hair, straight or softly waved, centre part, black to brown; oval or heart-shaped face; natural full lips; light everyday makeup.
+- Middle-aged 36-59: men have a fuller face, a receding or thinning hairline, grey in the beard and at the temples, a moustache or short beard or a shaved face with shadow; women have shoulder-length styled hair, dark or dyed brown to caramel, a softer jaw, light makeup.
+- Elderly 60+: grey or white hair; men often keep a white moustache or trimmed beard; deep lines around the eyes and mouth, uneven pigmentation, heavier brows, warm expressive eyes.
+- Teens 13-17: slimmer faces; boys with a first thin moustache and a fade haircut; girls with long hair tied back; clear skin with a few blemishes, no makeup look.
+- Children under 12: round soft faces, big dark eyes, hair often a shade lighter (dark to chestnut brown); boys in short cuts, girls with a ponytail or loose hair.
+- Real people, not influencers: visible skin texture, slight asymmetry, a faint darker tone under the eyes, now and then a mole or freckles; no filter look, no lip-filler look, no contact-lens eyes, no heavy contour, unless the brief asks for a glam look. Where a retouching rule applies, keep it; the features still follow this lock.
+- Wardrobe follows the wardrobe rules (modern, casual or smart; no head covering or traditional dress unless the brief asks for it).
+- Never copy the face of a real person.`;
 /* ---------------- BAE guideline digest given to Claude ---------------- */
 const BAE_RULES = `BANK AL ETIHAD (BAE) PHOTOGRAPHY GUIDELINES — "Deep Clarity" direction
 1. Depth over flatness: compose in distinct layers (foreground, subject, background). Nothing sits on a single flat plane.
@@ -135,6 +152,8 @@ const CLIENT_RULES = `CLIENT ART DIRECTION — MANDATORY, OVERRIDES EVERYTHING E
 A. Modern and contemporary everything. Even when the place is Amman, show a modern, new, upscale location (contemporary architecture, new buildings, sleek cafés, modern apartments and offices). Nothing old, traditional, rustic or dated.
 B. People: NO hijab, NO headscarf, NO head covering of any kind; NO traditional Arab clothing (no thobe, dishdasha, abaya, keffiyeh, shemagh, kaftan). Wardrobe is modern and contemporary and follows the selected LOOK below (bold colourful streetwear, or elegant and calm). NO ORANGE CLOTHING on anyone: no orange, rust, terracotta, coral, amber, tangerine or peach garments or accessories. Brand orange may appear only in the light, background or props, never on people.
 C. Skin: high-end professional retouching — even, refined skin tone, smooth healthy complexion, soft glow, minimised blemishes and pores, while keeping a subtle real texture (never plastic, waxy or airbrushed-flat).
+D. Faces: every person follows the casting lock below.
+${JO_FACE}
 D. Phones: any phone is a modern iPhone 18 (latest flagship, ultra-thin uniform bezels, Dynamic Island, slim metal frame), with no visible logo. Never an old or generic phone.
 E. Decor and furniture: modern Scandinavian IKEA-style interiors — light oak/birch wood, white and warm-neutral walls, clean lines, functional minimal furniture, soft textiles, a few plants. No clutter, no ornate or traditional decor, no brand names.`;
 /* LOOK: bold colourful youth streetwear (from the 9 campaign references) or elegant and calm */
@@ -1719,7 +1738,8 @@ const RL_JO=`JORDAN, FROM THE INSIDE (you are the best creative director in Jord
 - Occasions: Ramadan (iftar rush, fanous, sohour, family gatherings), the two Eids (عيدية, new clothes, visiting elders first), Tawjihi results day (the whole family waiting, horns, knafeh), weddings (zaffeh, dabke, the jaha asking for the bride's hand with coffee), graduation, back to school, Independence Day 25 May, Mother's Day 21 March, the first salary, the first car, the first flat (with the whole family inspecting).
 - Humour that lands: understatement and self-irony, the mother who knows everything, the auntie's questions (إيمتى بدنا نفرح فيك؟), the dad who negotiates every price, cousins in the family WhatsApp group, "ولا يهمك" that hides a sacrifice, "على راسي", "تكرم عينك", "يا زلمة", "والله غير…" (the host's oath). Warm teasing, never mockery of anyone's origin, tribe, accent, religion or region.
 - Respect lines: modest wardrobe for families; no alcohol, no romance clichés, no mocking elders, no showing money flaunted vulgarly, no Gulf/Egyptian/Levantine-generic dialect (use Jordanian: شو، هسا، بدي، منيح، يا زلمة، ليش، كيفك، والله). Faces, names and skin tones look Jordanian. Arabic on screen is correct and Jordanian in tone.
-- Making ideas EXCLUSIVE: each idea starts from a real Jordanian truth (a small habit everyone recognises but nobody filmed), turns on one human value (nakhwa, karam, ghira, sharaf…), and lets the BAE product be the quiet enabler of that value, not the hero. Never repeat an idea, setting or twist already in memory or this chat; if it smells like a generic bank ad (smiling family + phone + city skyline), throw it away and dig deeper.`;
+- Making ideas EXCLUSIVE: each idea starts from a real Jordanian truth (a small habit everyone recognises but nobody filmed), turns on one human value (nakhwa, karam, ghira, sharaf…), and lets the BAE product be the quiet enabler of that value, not the hero. Never repeat an idea, setting or twist already in memory or this chat; if it smells like a generic bank ad (smiling family + phone + city skyline), throw it away and dig deeper.
+${JO_FACE}`;
 const RL_BAE=`BANK AL ETIHAD HOUSE STYLE (non-negotiable in every image and video prompt):
 - Cinematic, warm, premium, human. Clean natural light (golden hour, window light, soft daylight), warm neutral grade with orange and burgundy accents, fine grain, gentle halation. Never cold, never neon.
 - Modern Jordan only: today's Amman (Abdali, new towers, sleek cafés, modern homes and offices, modern malls). Modern Scandinavian IKEA-style interiors: light oak, white walls, clean lines.
@@ -2629,7 +2649,7 @@ Reel so far: ${trimJSON({title:RL.title,idea:RL.picked,notes:RL.notes,script:RL.
 Current element (JSON): ${trimJSON(base,4000)}
 User request: ${instruction||"Write it well from the name and description."}
 
-Reply with only JSON: {"name":"","role":"","description":"one or two lines","wardrobe":"${kind==="character"?"the outfit":""}","prompt":"the full image prompt"}`,{modelTier:"default"});
+${kind==="character"?JO_FACE+"\n":""}Reply with only JSON: {"name":"","role":"","description":"one or two lines","wardrobe":"${kind==="character"?"the outfit":""}","prompt":"the full image prompt"}`,{modelTier:"default"});
   if(!o||!o.prompt) throw {code:"invalid_json",message:"Claude didn't return a prompt."};
   return o;
 }
