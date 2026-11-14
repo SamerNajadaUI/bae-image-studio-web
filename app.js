@@ -1811,12 +1811,22 @@ async function rlDuplicate(id){ const p=await rlLoadProject(id); if(!p) return; 
 
 /* ---------- thumbnails: cached in this browser by Magnific creation id, fetched again when missing ---------- */
 const rlTmem={}, rlFull={}, rlTQ=new Set(), rlTTried=new Set(); let rlTBusy=0;
-function rlTGet(cid){ if(!cid) return null; if(String(cid).startsWith("lib:")) return refById(String(cid).slice(4))?.src||null; if(rlTmem[cid]) return rlTmem[cid]; try{ const v=localStorage.getItem(RL_T+cid); if(v) return rlTmem[cid]=v; }catch{} return null; }
-function rlTSet(cid,data){ if(!cid||!data) return; rlTmem[cid]=data; try{ localStorage.setItem(RL_T+cid,data); }catch{ try{ const ks=Object.keys(localStorage).filter(k=>k.startsWith(RL_T)); ks.slice(0,Math.ceil(ks.length/3)).forEach(k=>localStorage.removeItem(k)); localStorage.setItem(RL_T+cid,data); }catch{} } }
-function rlNeed(cid){ if(!cid||String(cid).startsWith("lib:")||rlTGet(cid)||rlTTried.has(cid)||!mcp||!S.connected) return; rlTQ.add(cid); rlPump(); }
+/* small previews also live in the user's account, so another device shows them at once instead of pulling every full image from Magnific */
+const rlTCol=()=>RLS.mode==="account"&&RLS.db&&RLS.uid?RLS.db.collection("data/users/"+RLS.uid+"/thumbs/t"):null;
+const rlTDoc=cid=>String(cid).replace(/[^A-Za-z0-9_-]/g,"_").slice(0,150);
+const rlTUp=new Set();
+function rlTCloud(cid,data){ const c=rlTCol(); if(!c||rlTUp.has(cid)||!data||data.length>700000) return; rlTUp.add(cid); try{ if(localStorage.getItem("rlTC:"+cid)) return; }catch{}
+  try{ c.doc(rlTDoc(cid)).set({d:data,at:Date.now()}).then(()=>{ try{ localStorage.setItem("rlTC:"+cid,"1"); }catch{} },()=>{ rlTUp.delete(cid); }); }catch{} }
+function rlTGet(cid){ if(!cid) return null; if(String(cid).startsWith("lib:")) return refById(String(cid).slice(4))?.src||null; if(rlTmem[cid]){ rlTCloud(cid,rlTmem[cid]); return rlTmem[cid]; } try{ const v=localStorage.getItem(RL_T+cid); if(v){ rlTCloud(cid,v); return rlTmem[cid]=v; } }catch{} return null; }
+function rlTSet(cid,data){ if(!cid||!data) return; rlTmem[cid]=data; rlTCloud(cid,data); try{ localStorage.setItem(RL_T+cid,data); }catch{ try{ const ks=Object.keys(localStorage).filter(k=>k.startsWith(RL_T)); ks.slice(0,Math.ceil(ks.length/3)).forEach(k=>localStorage.removeItem(k)); localStorage.setItem(RL_T+cid,data); }catch{} } }
+function rlNeed(cid){ if(!cid||String(cid).startsWith("lib:")||rlTGet(cid)||rlTTried.has(cid)||(!rlTCol()&&(!mcp||!S.connected))) return; rlTQ.add(cid); rlPump(); }
 async function rlPump(){
-  while(rlTBusy<2&&rlTQ.size){ const cid=rlTQ.values().next().value; rlTQ.delete(cid); rlTTried.add(cid); rlTBusy++;
-    preview(cid).then(async pv=>{ if(pv.image){ const src=`data:${pv.image.mime};base64,${pv.image.data}`; rlFull[cid]=src; rlTSet(cid,await rlThumb(src,rlIsSheet(cid)?1100:480)); rlBoardSoon(); } }).catch(()=>{}).finally(()=>{ rlTBusy--; rlPump(); }); }
+  while(rlTBusy<4&&rlTQ.size){ const cid=rlTQ.values().next().value; rlTQ.delete(cid); rlTTried.add(cid); rlTBusy++;
+    (async()=>{ const c=rlTCol(); let d=null; if(c){ try{ const sn=await c.doc(rlTDoc(cid)).get(); d=sn.exists?sn.data()?.d||null:null; }catch{} }
+      if(d){ rlTmem[cid]=d; rlTUp.add(cid); try{ localStorage.setItem(RL_T+cid,d); localStorage.setItem("rlTC:"+cid,"1"); }catch{} rlBoardSoon(); return; }
+      if(!mcp||!S.connected){ rlTTried.delete(cid); return; }
+      const pv=await preview(cid); if(pv.image){ const src=`data:${pv.image.mime};base64,${pv.image.data}`; rlFull[cid]=src; rlTSet(cid,await rlThumb(src,rlIsSheet(cid)?1100:480)); rlBoardSoon(); }
+    })().catch(()=>{}).finally(()=>{ rlTBusy--; rlPump(); }); }
 }
 let rlSoonT=null; function rlBoardSoon(){ clearTimeout(rlSoonT); rlSoonT=setTimeout(()=>{ if(RL&&!$("rlProjView").hidden) rlBoard(); else if(!$("rlLib").hidden) rlShowLib(); },120); }
 const rlImgOf=e=>e?.lib&&e.fromLib?"lib:ch_"+String(e.lib).toLowerCase():e?.id||null;
@@ -2675,7 +2685,7 @@ async function rlResume(){
     for(const s of RL.scenes){ if(stale(s.frame)){ s.frame.status=null; s.frame.err="Interrupted before Magnific started. Press Generate again."; } if(stale(s)){ s.status=null; s.note="Interrupted before Magnific started. Press Generate video again."; } }
     if(stale(RL.final)) RL.final={note:"Interrupted. Press Join again."};
     rlBoard();
-    const mag=[...rlEls().filter(e=>e.pending&&!e._live).map(e=>({kind:"el",o:e})),...RL.scenes.filter(s=>s.frame?.pending&&!s.frame._live).map(s=>({kind:"frame",o:s.frame})),...RL.scenes.filter(s=>s.pending&&!s._live).map(s=>({kind:"video",o:s})),...(RL.final?.pending&&!RL.final._live?[{kind:"final",o:RL.final}]:[])];
+    const mag=[...rlEls().filter(e=>e.pending&&!e._live).map(e=>({kind:"el",o:e})),...(RL.script?.scenes||[]).filter(s=>s.board?.pending&&!s.board._live).map(s=>({kind:"el",o:s.board})),...RL.scenes.filter(s=>s.frame?.pending&&!s.frame._live).map(s=>({kind:"frame",o:s.frame})),...RL.scenes.filter(s=>s.pending&&!s._live).map(s=>({kind:"video",o:s})),...(RL.final?.pending&&!RL.final._live?[{kind:"final",o:RL.final}]:[])];
     const claudeJobs=RL.scenes.filter(s=>(s.checkPending&&!s._checking)||(s.improvePending&&!s._improving)).length+rlEls().filter(e=>e.status==="write"||e.revisePending).length;
     if(!mag.length&&!claudeJobs&&!RL.chatPending) return;
     if(mag.length&&mcp){ if(!S.connected) await connect(true);
@@ -2780,9 +2790,9 @@ function rlBoard(){
     if(RL.ideasPrev.length) out.push(`<details class="rl-notes"><summary>Earlier ideas (${RL.ideasPrev.length})</summary>${RL.ideasPrev.map((x,i)=>`<div class="rl-prev" dir="auto"><b>${esc(x.title||"")}</b> — ${esc(x.hook||x.logline||"")} <button class="a-btn" type="button" data-rl="pickprev" data-i="${i}">Use this</button></div>`).join("")}</details>`);
   }
   if(v==="script"){
-    const nb=(RL.script?.scenes||[]).filter(s=>s.board?.id).length, busyB=(RL.script?.scenes||[]).some(s=>["queued","write","run"].includes(s.board?.status));
+    const nb=(RL.script?.scenes||[]).filter(s=>s.board?.id).length, busyB=(RL.script?.scenes||[]).some(s=>s.board?._live);
     out.push(rlHead("Script",RL.script?`${esc(RL.script.title||"")} · ${RL.script.duration_s||rlSet().length} s · edit any line, or ask Claude for changes in the chat`:"Scene by scene, with timing, dialogue, on-screen text and sound.",
-      RL.script?.scenes?.length?`<button class="a-btn" type="button" data-rl="genboard"${busyB?" disabled":""}>${busyB?"Drawing the storyboard…":nb?"Redraw storyboard":"Create storyboard"}</button><label class="a-btn ux-sbstyle" title="Optional: one image whose drawing style every sheet follows">${RL.sbStyle?.id?"Style reference ✓":RL._sbUp?"Uploading…":"Style reference"}<input type="file" accept="image/*" class="sr" data-ux-sbstyle></label>${RL.sbStyle?.id?`<button class="a-btn" type="button" data-ux="sbstyleoff">Remove style</button>`:""}${nb?`<button class="a-btn" type="button" data-ux="animatic">▶ Free preview</button><button class="a-btn" type="button" data-rl="dlboard">Download all (${nb})</button>`:""}`:""));
+      RL.script?.scenes?.length?`<button class="a-btn" type="button" data-rl="genboard"${busyB?" disabled":""}>${busyB?"Drawing the storyboard…":nb?"Redraw all scenes":"Create storyboard"}</button><label class="a-btn ux-sbstyle" title="Optional: one image whose drawing style every sheet follows">${RL.sbStyle?.id?"Style reference ✓":RL._sbUp?"Uploading…":"Style reference"}<input type="file" accept="image/*" class="sr" data-ux-sbstyle></label>${RL.sbStyle?.id?`<button class="a-btn" type="button" data-ux="sbstyleoff">Remove style</button>`:""}${nb?`<button class="a-btn" type="button" data-ux="animatic">▶ Free preview</button><button class="a-btn" type="button" data-rl="dlboard">Download all (${nb})</button>`:""}`:""));
     if(!RL.script?.scenes?.length) out.push(rlEmpty(RL.picked?"Ask Claude to write the script for the chosen idea.":"Choose an idea first.",RL.picked?`<button class="btn primary" type="button" data-rl="sayraw" data-t="${esc(rlAr()?"اكتبلي السيناريو للفكرة المختارة.":"Write the script for the chosen idea.")}">Write the script</button>`:`<button class="btn" type="button" data-tab="idea">Go to Idea</button>`));
     else{ out.push(`<div class="rl-card">${RL.script.scenes.map((s,i)=>`<div class="rl-beat${s.board?" has-sb":""}" dir="auto"><span class="tc">${esc(s.time||"")}</span><div class="ln"><b>${esc(s.title||"")}</b>
       <textarea class="rl-field" rows="2" data-rl-edit="b:${i}:action" aria-label="Action">${esc(s.action||"")}</textarea>
@@ -3438,7 +3448,7 @@ RULES: grayscale only, no colour. The same character design, room layout and pro
 }
 async function rlBoardFrame(i){
   const sc=RL.script?.scenes?.[i]; if(!sc) return;
-  const b=sc.board=Object.assign(sc.board||{},{status:"write",err:null}); rlSave(); rlBoard();
+  const b=sc.board=Object.assign(sc.board||{},{status:"write",err:null,_live:true}); rlSave(); rlBoard();
   try{
     if(!sc.sheet||!RL.sbplan) await (RL._sbplanP||(RL._sbplanP=rlBoardPlan().finally(()=>{ delete RL._sbplanP; })));
     if(!sc.sheet) throw {code:"invalid_json",message:"No plan for this stage. Press Create storyboard again."};
@@ -3453,14 +3463,14 @@ async function rlBoardFrame(i){
     RL_SBBIG.add(img.id); Object.assign(b,{id:img.id,web:img.web,status:"ok",at:Date.now()}); delete b.pending;
     rlEvent(`Storyboard sheet ${i+1} was drawn (${b.moment}).`);
   }catch(e){ b.status="err"; b.err=e?.code==="invalid_json"||e?.code==="refused"?sampleCopy(e):mcpCopy(e); delete b.pending; }
-  finally{ rlSave(); rlBoard(); }
+  finally{ delete b._live; rlSave(); rlBoard(); }
 }
 async function rlGenStoryboard(only){
   const S0=RL.script?.scenes||[]; const L=S0.map((_,i)=>i).filter(i=>only==null?true:only.includes(i));
   if(only==null){ for(const sc of S0){ delete sc.sheet; if(sc.board){ delete sc.board.id; delete sc.board.sheet; } } RL.sbplan=null; }
-  L.forEach(i=>{ const sc=S0[i]; sc.board=Object.assign(sc.board||{},{status:"queued",err:null}); }); rlSave(); rlBoard();
+  L.forEach(i=>{ const sc=S0[i]; sc.board=Object.assign(sc.board||{},{status:"queued",err:null,_live:true}); }); rlSave(); rlBoard();
   try{ if(!RL.sbplan) await (RL._sbplanP||(RL._sbplanP=rlBoardPlan().finally(()=>{ delete RL._sbplanP; }))); }
-  catch(e){ L.forEach(i=>{ const b=S0[i].board; b.status="err"; b.err=sampleCopy(e); }); rlSave(); rlBoard(); return; }
+  catch(e){ L.forEach(i=>{ const b=S0[i].board; b.status="err"; b.err=sampleCopy(e); delete b._live; }); rlSave(); rlBoard(); return; }
   const q=[...L];
   /* the first sheet sets the drawing style; the others follow it */
   if(!RL.sbStyle?.id&&!S0.some(x=>x.board?.id&&x.board.sheet)&&q.length>1) await rlBoardFrame(q.shift());
@@ -3507,10 +3517,10 @@ async function rlDownloadBoard(btn){
   catch(e){ if(e?.code!=="declined") rlSys("Couldn't save the file ("+(e?.code||"error")+")."); }
 }
 function rlBoardCell(s,i){
-  const b=s.board||{}; const thumb=b.id?rlTGet(b.id):null;
-  const st=b.status==="queued"?"Waiting…":b.status==="write"?"Planning the shots…":b.status==="run"?"Drawing in Seedream 5.5 · 2K…":b.status==="err"?esc(b.err||"Failed"):"";
-  return `<div class="rl-sbcell${b.status==="run"||b.status==="write"||b.status==="queued"?" busy":""}">${thumb?`<img src="${thumb}" alt="Storyboard sheet ${i+1}" data-rl-zoom="${esc(b.id)}">`:`<div class="ph">${st||"No sheet yet"}</div>`}
-    <div class="cap"><span class="t12 muted">${thumb&&st?st:esc(b.moment||"")}</span><button type="button" class="btn small" data-rl="board1" data-i="${i}"${b.status==="run"||b.status==="write"?" disabled":""}>${b.id?"Redraw":"Draw"}</button></div></div>`;
+  const b=s.board||{}; const thumb=b.id?rlTGet(b.id):null; if(b.id&&!thumb) rlNeed(b.id); const live=!!b._live;
+  const st=live&&b.status==="queued"?"Waiting…":live&&b.status==="write"?"Planning the shots…":live&&b.status==="run"?"Drawing in Seedream 5.5 · 2K…":b.status==="err"?esc(b.err||"Failed"):b.pending&&!b.id?"Finishing in Magnific…":b.id&&!thumb?"Loading the preview…":"";
+  return `<div class="rl-sbcell${live||(b.id&&!thumb)?" busy":""}">${thumb?`<img src="${thumb}" alt="Storyboard sheet ${i+1}" data-rl-zoom="${esc(b.id)}">`:`<div class="ph">${st||"No sheet yet"}</div>`}
+    <div class="cap"><span class="t12 muted">${thumb&&st?st:esc(b.moment||"")}</span><button type="button" class="btn small" data-rl="board1" data-i="${i}"${live?" disabled":""}>${b.id?"Redraw":"Draw"}</button></div></div>`;
 }
 /* ---------- Magnific: images for cast, locations and first frames ---------- */
 async function rlImage({prompt,aspect,refs=[],label,onQueued}){
@@ -4292,7 +4302,7 @@ function uxInit(){
     const z=e.target.closest("[data-zoom]"); if(z){ rlZoom(z.dataset.zoom); return; }
     const chip=e.target.closest(".rl-ask [data-chip]"); if(chip){ const ta=chip.closest("form").querySelector("textarea"); ta.value=(ta.value.trim()?ta.value.trim()+"، ":"")+chip.dataset.chip; ta.focus(); return; }
     const rv=e.target.closest(".rl-rate [data-v]"); if(rv){ const box=rv.closest(".rl-rate"); RL._rateOpen={key:box.dataset.key,v:+rv.dataset.v}; rlBoard(); setTimeout(()=>B.querySelector(".rl-rateform input")?.focus(),20); return; }
-    const zm=e.target.closest("[data-rl-zoom]"); if(zm&&typeof openLightbox==="function"){ openLightbox(rlFull[zm.dataset.rlZoom]||zm.src); return; }
+    const zm=e.target.closest("[data-rl-zoom]"); if(zm&&typeof openLightbox==="function"){ const zid=zm.dataset.rlZoom, small=zm.src; openLightbox(rlFull[zid]||small); if(!rlFull[zid]&&mcp&&S.connected) preview(zid).then(pv=>{ if(!pv.image) return; const src=`data:${pv.image.mime};base64,${pv.image.data}`; rlFull[zid]=src; const im=$("lbImg"); if(im&&!$("lightbox").hidden&&im.getAttribute("src")===small) im.src=src; }).catch(()=>{}); return; }
     const b=e.target.closest("[data-rl]"); if(!b) return; const a=b.dataset.rl, ar=rlAr();
     if(a==="pick") rlSend(ar?`اخترت الفكرة ${+b.dataset.i+1}: ${RL.ideas[+b.dataset.i]?.title||""}. اكتبلي السيناريو.`:`I choose idea ${+b.dataset.i+1}: ${RL.ideas[+b.dataset.i]?.title||""}. Write the script.`);
     else if(a==="pickprev"){ const x=RL.ideasPrev[+b.dataset.i]; if(x){ RL.ideas=[x,...RL.ideas.filter(y=>y.title!==x.title)].slice(0,4); RL.ideasPrev.splice(+b.dataset.i,1); rlSend(ar?`اخترت الفكرة: ${x.title}. اكتبلي السيناريو.`:`I choose the idea "${x.title}". Write the script.`); } }
