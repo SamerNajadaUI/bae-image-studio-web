@@ -2683,7 +2683,7 @@ function rlShowLib(){
     const card=p=>{ const im=rlTGet(p.cover); if(!im&&p.cover) rlNeed(p.cover); const st=RL_STAGES.find(([k])=>k===p.stage)?.[1]||"Idea";
       return `<article class="rl-pc"><button type="button" class="rl-pc-open" data-open="${esc(p.id)}"><span class="rl-pc-cover">${im?`<img src="${im}" alt="">`:`<i aria-hidden="true">${esc((p.title||"R").trim().slice(0,1).toUpperCase())}</i>`}</span><span class="rl-pc-meta"><b dir="auto">${esc(p.title)}</b><span>${esc(st)} · ${p.n?.cast||0} cast · ${p.n?.shots||0} shots${p.n?.done?` · ${p.n.done} filmed`:""}</span><span class="t12 muted">Edited ${rlAgo(p.updatedAt)}</span></span></button>
         <div class="rl-pc-act"><button type="button" class="a-btn" data-dup="${esc(p.id)}">Duplicate</button><button type="button" class="a-btn" data-del="${esc(p.id)}">Delete</button></div></article>`; };
-    box.innerHTML=`<button type="button" class="rl-pc rl-pc-new" id="rlNewCard"><span class="plus" aria-hidden="true">+</span><b>New reel</b><span class="t12 muted">Start from an idea, a brief or a storyboard</span></button>`+list.map(card).join("");
+    box.innerHTML=`<button type="button" class="rl-pc rl-pc-new" id="rlNewCard"><span class="plus" aria-hidden="true">+</span><b>New reel</b><span class="t12 muted">Start from an idea, a brief or a storyboard</span></button><button type="button" class="rl-pc rl-pc-new ux-pgcard" data-uxpg><span class="plus" aria-hidden="true">✎</span><b>Prompt Generator</b><span class="t12 muted">A ready prompt for a character, a place or a prop</span></button>`+list.map(card).join("");
   });
 }
 async function rlOpen(id){
@@ -4232,6 +4232,44 @@ async function uxResize(aspect){
 }
 function uxSizesHTML(){ const cur=rlSet().aspect; return `<section class="rl-card" style="padding:16px"><b>Other sizes</b><p class="muted" style="margin:6px 0 12px">Makes a copy of this reel in another format. Cast, places, script and voices come along; the scenes are generated again in the new size.</p><div class="rl-btns">${["9:16","1:1","4:5","16:9"].filter(a=>a!==cur).map(a=>`<button class="btn small" type="button" data-ux="resize" data-a="${a}">${a}</button>`).join("")}</div></section>`; }
 
+/* ---------- Prompt Generator: a ready prompt only, for a character, a place or a prop ---------- */
+const UXPG={kind:"character",gender:"",age:"",busy:false,out:null,err:null,text:""};
+async function uxPGRun(){
+  const kind=UXPG.kind, tpl=kind==="character"?rlTpl("char"):kind==="prop"?rlTpl("prop"):rlTpl("loc");
+  const who=kind==="character"?[UXPG.gender,UXPG.age].filter(Boolean).join(", "):"";
+  return await rlAsk(`You write ONE image-generation prompt for Bank al Etihad (Jordan) productions, for Seedream 5.5 at 2K. The user only wants the prompt.
+${kind==="character"?"Write a CHARACTER sheet prompt.":kind==="prop"?"Write a PROP / PRODUCT sheet prompt.":"Write a LOCATION prompt (an empty establishing image of the place)."} The prompt MUST follow this house template exactly, keeping every fixed sentence and replacing every [bracket] with specific, vivid, concrete detail:
+${tpl}
+${RL_BAE}
+${kind==="character"?JO_FACE:kind==="location"?"PLACES: today's Jordan, modern Amman unless the request says otherwise — real local materials (pale limestone facades, glass, terrazzo or stone floors), believable details a Jordanian would recognise, clean and contemporary; say where the walls, doors, windows and main furniture are. No people in the image, no clichés (no desert, camels or old souks unless asked).":"PROPS: one object, exact material, colour, size and markings; any text on it spelled exactly; real brand logos only when the user names them."}
+USER REQUEST (any language; the prompt itself is in English): ${UXPG.text||"(nothing written — invent a good, typical one)"}
+${who?`MUST BE: ${who}.`:""}
+Fill every choice the user left open with one specific, believable value. Never copy a real person's face.
+Reply with only JSON: {"title":"a short English name for it","prompt":"the complete prompt, ready to paste","note":"one short sentence in the user's language saying what you chose"}`,{modelTier:"default",cache:false});
+}
+function uxPGHTML(){
+  const seg=(key,opts)=>`<div class="a-seg" role="group">${opts.map(([v,l])=>`<button type="button" data-pg="${key}" data-v="${v}" aria-pressed="${UXPG[key]===v}">${l}</button>`).join("")}</div>`;
+  const ph=UXPG.kind==="character"?"e.g. a bank employee in her thirties, friendly, navy blazer":UXPG.kind==="prop"?"e.g. an orange leather wallet with a small logo":"e.g. a modern living room in Amman, afternoon light";
+  return `<div class="ux-pgbox" role="dialog" aria-label="Prompt Generator"><div class="hd"><b>Prompt Generator</b><button type="button" class="a-btn" data-pg="close">Close</button></div>
+    <p class="muted">Describe what you need in your own words. You get a ready prompt to copy — nothing is generated and no credits are spent.</p>
+    ${seg("kind",[["character","Character"],["location","Place"],["prop","Prop"]])}
+    ${UXPG.kind==="character"?`<div class="row">${seg("gender",[["","Any"],["man","Man"],["woman","Woman"]])}${seg("age",[["","Any age"],["child under 12","Child"],["teenager 13-17","Teen"],["young adult 18-35","Young"],["middle-aged 36-59","Middle-aged"],["elderly 60+","Elderly"]])}</div>`:""}
+    <label class="lbl" for="uxPgText">Description</label><textarea id="uxPgText" rows="3" dir="auto" placeholder="${ph}">${esc(UXPG.text)}</textarea>
+    <div class="rl-btns"><button type="button" class="btn" data-pg="go" ${UXPG.busy?"disabled":""}>${UXPG.busy?"Writing the prompt…":UXPG.out?"Write another":"Write the prompt"}</button></div>
+    ${UXPG.err?`<p class="rl-status err" role="alert">${esc(UXPG.err)}</p>`:""}
+    ${UXPG.out?`<div class="res"><div class="hd"><b dir="auto" data-noi18n>${esc(UXPG.out.title||"Prompt")}</b><button type="button" class="btn small" data-pg="copy">Copy prompt</button></div>${UXPG.out.note?`<p class="t12 muted" dir="auto" data-noi18n>${esc(UXPG.out.note)}</p>`:""}<pre class="rl-prompt" dir="ltr" data-noi18n>${esc(UXPG.out.prompt||"")}</pre></div>`:""}</div>`;
+}
+function uxPGDraw(){ let w=document.querySelector(".ux-pg"); if(!w){ w=document.createElement("div"); w.className="ux-pg"; $("reels").appendChild(w); uxPGWire(w); } const t=w.querySelector("#uxPgText"); if(t) UXPG.text=t.value; w.innerHTML=uxPGHTML(); uxT(w); }
+function uxPGWire(w){
+  w.addEventListener("click",async e=>{ if(e.target===w){ w.remove(); return; } const b=e.target.closest("[data-pg]"); if(!b) return; const a=b.dataset.pg;
+    if(a==="close"){ w.remove(); return; }
+    if(a==="kind"||a==="gender"||a==="age"){ UXPG[a]=b.dataset.v; if(a==="kind"){ UXPG.out=null; UXPG.err=null; } uxPGDraw(); return; }
+    if(a==="copy"){ try{ await navigator.clipboard.writeText(UXPG.out?.prompt||""); b.textContent="Copied ✓"; }catch{ const pre=w.querySelector("pre"); const r=document.createRange(); r.selectNodeContents(pre); const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r); b.textContent="Selected — press copy"; } return; }
+    if(a==="go"&&!UXPG.busy){ UXPG.text=w.querySelector("#uxPgText")?.value.trim()||""; UXPG.busy=true; UXPG.err=null; uxPGDraw();
+      try{ const o=await uxPGRun(); if(!o?.prompt) throw {code:"invalid_json"}; UXPG.out=o; }catch(err){ UXPG.err=sampleCopy(err); }
+      UXPG.busy=false; if(document.querySelector(".ux-pg")) uxPGDraw(); } });
+  w.addEventListener("keydown",e=>{ if(e.key==="Escape") w.remove(); });
+}
 /* ---------- wiring ---------- */
 function uxInit(){
   const R=$("reels"); if(!R) return;
@@ -4249,6 +4287,7 @@ function uxInit(){
   });
   R.addEventListener("change",async e=>{ const f=e.target.matches?.("[data-ux-sbstyle]")&&e.target.files?.[0]; if(!f||!RL) return;
     RL._sbUp=true; rlBoard(); try{ const up=await rlUploadMag(f,f.name||"storyboard-style"); const id=typeof up==="string"?up:(up?.id||up?.identifier); if(id){ RL.sbStyle={id,name:f.name||"style"}; rlEvent("A storyboard style reference was added."); } }catch(err){ rlSys("Couldn't upload the style image: "+String(err?.message||err?.code||err).slice(0,160)); } finally{ delete RL._sbUp; rlSave(); rlBoard(); } });
+  R.addEventListener("click",e=>{ if(e.target.closest("[data-uxpg]")){ uxPGDraw(); setTimeout(()=>$("uxPgText")?.focus(),60); } });
   uxApply(); uxObserve(); uxMicInit();
 }
 
