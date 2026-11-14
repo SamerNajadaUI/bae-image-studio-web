@@ -1816,7 +1816,7 @@ function rlTSet(cid,data){ if(!cid||!data) return; rlTmem[cid]=data; try{ localS
 function rlNeed(cid){ if(!cid||String(cid).startsWith("lib:")||rlTGet(cid)||rlTTried.has(cid)||!mcp||!S.connected) return; rlTQ.add(cid); rlPump(); }
 async function rlPump(){
   while(rlTBusy<2&&rlTQ.size){ const cid=rlTQ.values().next().value; rlTQ.delete(cid); rlTTried.add(cid); rlTBusy++;
-    preview(cid).then(async pv=>{ if(pv.image){ const src=`data:${pv.image.mime};base64,${pv.image.data}`; rlFull[cid]=src; rlTSet(cid,await rlThumb(src)); rlBoardSoon(); } }).catch(()=>{}).finally(()=>{ rlTBusy--; rlPump(); }); }
+    preview(cid).then(async pv=>{ if(pv.image){ const src=`data:${pv.image.mime};base64,${pv.image.data}`; rlFull[cid]=src; rlTSet(cid,await rlThumb(src,rlIsSheet(cid)?1100:480)); rlBoardSoon(); } }).catch(()=>{}).finally(()=>{ rlTBusy--; rlPump(); }); }
 }
 let rlSoonT=null; function rlBoardSoon(){ clearTimeout(rlSoonT); rlSoonT=setTimeout(()=>{ if(RL&&!$("rlProjView").hidden) rlBoard(); else if(!$("rlLib").hidden) rlShowLib(); },120); }
 const rlImgOf=e=>e?.lib&&e.fromLib?"lib:ch_"+String(e.lib).toLowerCase():e?.id||null;
@@ -2683,7 +2683,7 @@ async function rlResume(){
         try{ const video=kind==="video"||kind==="final"; let rr=await waitFor([o.pending],video?"video":"image",video?30:10,video);
           if(kind==="video"){ await rlFinishVideo(o,rr,o.pending); o.note="Finished while you were away."; }
           else if(kind==="final"){ const all=[...rr.urls,...rr.links]; Object.assign(o,{id:rr.ids[0]||o.pending,web:rr.webUrl||o.web||null,url:all.find(u=>/\.(mp4|mov|webm)(\?|#|$)/i.test(u))||null,status:null,note:"Final reel ready."}); delete o.pending; await rlLoadVideo(o,o.id); }
-          else { const id=rr.ids[0]||o.pending; let shot=rr.images[0]; if(!shot){ const pv=await preview(id); shot=pv.image; } if(shot){ const src=`data:${shot.mime};base64,${shot.data}`; rlFull[id]=src; rlTSet(id,await rlThumb(src)); }
+          else { const id=rr.ids[0]||o.pending; let shot=rr.images[0]; if(!shot){ const pv=await preview(id); shot=pv.image; } if(shot){ const src=`data:${shot.mime};base64,${shot.data}`; rlFull[id]=src; rlTSet(id,await rlThumb(src,rlIsSheet(id)?1100:480)); }
             Object.assign(o,{id,status:"ok",stale:false,err:null}); delete o.pending; }
         }catch(err){ if(rlTransient(err)){ o.status="paused"; } else { o.status="err"; if(kind==="video") o.note=mcpCopy(err); else o.err=mcpCopy(err); delete o.pending; } }
         finally{ delete o._live; if(RL===proj){ rlSave(); rlBoard(); } } })); }
@@ -2782,7 +2782,7 @@ function rlBoard(){
   if(v==="script"){
     const nb=(RL.script?.scenes||[]).filter(s=>s.board?.id).length, busyB=(RL.script?.scenes||[]).some(s=>["queued","write","run"].includes(s.board?.status));
     out.push(rlHead("Script",RL.script?`${esc(RL.script.title||"")} · ${RL.script.duration_s||rlSet().length} s · edit any line, or ask Claude for changes in the chat`:"Scene by scene, with timing, dialogue, on-screen text and sound.",
-      RL.script?.scenes?.length?`<button class="a-btn" type="button" data-rl="genboard"${busyB?" disabled":""}>${busyB?"Drawing the storyboard…":nb?"Redraw storyboard":"Generate storyboard"}</button>${nb?`<button class="a-btn" type="button" data-ux="animatic">▶ Free preview</button><button class="a-btn" type="button" data-rl="dlboard">Download all (${nb})</button>`:""}`:""));
+      RL.script?.scenes?.length?`<button class="a-btn" type="button" data-rl="genboard"${busyB?" disabled":""}>${busyB?"Drawing the storyboard…":nb?"Redraw storyboard":"Create storyboard"}</button><label class="a-btn ux-sbstyle" title="Optional: one image whose drawing style every sheet follows">${RL.sbStyle?.id?"Style reference ✓":RL._sbUp?"Uploading…":"Style reference"}<input type="file" accept="image/*" class="sr" data-ux-sbstyle></label>${RL.sbStyle?.id?`<button class="a-btn" type="button" data-ux="sbstyleoff">Remove style</button>`:""}${nb?`<button class="a-btn" type="button" data-ux="animatic">▶ Free preview</button><button class="a-btn" type="button" data-rl="dlboard">Download all (${nb})</button>`:""}`:""));
     if(!RL.script?.scenes?.length) out.push(rlEmpty(RL.picked?"Ask Claude to write the script for the chosen idea.":"Choose an idea first.",RL.picked?`<button class="btn primary" type="button" data-rl="sayraw" data-t="${esc(rlAr()?"اكتبلي السيناريو للفكرة المختارة.":"Write the script for the chosen idea.")}">Write the script</button>`:`<button class="btn" type="button" data-tab="idea">Go to Idea</button>`));
     else{ out.push(`<div class="rl-card">${RL.script.scenes.map((s,i)=>`<div class="rl-beat${s.board?" has-sb":""}" dir="auto"><span class="tc">${esc(s.time||"")}</span><div class="ln"><b>${esc(s.title||"")}</b>
       <textarea class="rl-field" rows="2" data-rl-edit="b:${i}:action" aria-label="Action">${esc(s.action||"")}</textarea>
@@ -3248,7 +3248,8 @@ async function rlRoom(n){
 ${ids.map(id=>{ const A=rlAdv(id); return `[${id}] ${A.name} — ${A.role}\nLatest notes: ${String(A.notes||"").slice(0,700)}`; }).join("\n\n")}
 Team lessons: ${BR.sections.find(s=>s.id==="lessons")?.text||"none"}
 Team memory relevant to this scene: ${memSearch([sc.title,sc.logline,String(sc.prompt||"").slice(0,900)].filter(Boolean).join(" "),{stage:"directing",limit:14}).map(x=>"\n- "+memLine(x)).join("")||"none"}
-Script beat: ${trimJSON(RL.script?.scenes?.[(+sc.n||1)-1]||null,1000)}
+Script beat: ${trimJSON((({board,sheet,...r})=>r)(RL.script?.scenes?.[(+sc.n||1)-1]||{}),1000)}
+${rlSbText()}
 Scene ${sc.n} "${sc.title||""}" (${sc.duration_s||""} s):
 ${String(sc.prompt||"").slice(0,6000)}
 Reply with only JSON: {"suggestions":[{"id":"trend","title":"3–6 words","why":"one line","instruction":"the exact edit to make, written as an instruction to the director"}]} — exactly 5, one per id in this order: ${ids.join(", ")}.`,{modelTier:"default",effort:"low",cache:false});
@@ -3390,36 +3391,86 @@ async function rlMissingCreations(ids){
     catch(e){ if(/not found|does not exist|no such|unknown (creation|identifier)|invalid identifier/i.test(String(e?.message||"")+" "+String(e?.code||""))) bad.push(id); } }));
   return bad;
 }
+/* ---------- Storyboard sheets: one black-and-white 16:9 sheet per script stage, numbered shots, before any video is made ---------- */
+const RL_SBBIG=new Set();
+const RL_SBSTYLE=`Black-and-white storyboard sheet, landscape 16:9, on clean off-white paper. Clean pencil and ink line drawing with simple soft grayscale marker shading, confident comic-storyboard linework, no photographic rendering. A hand-lettered header in the top-left corner. Under it, the panels sit in a neat grid with thin black frames and equal gutters; under every panel a narrow caption strip in hand-lettered capitals. Small handwritten margin notes and little arrows are allowed only where listed. Generous empty paper around the grid.`;
+async function rlBoardPlan(){
+  const S0=RL.script?.scenes||[]; if(!S0.length) return null;
+  const set=rlSet(); const els=rlEls().filter(e=>e.id||e.description);
+  const out=await rlAsk(`You are the storyboard artist's director for a Bank al Etihad (Jordan) reel. Plan the WHOLE storyboard before any video is generated: one storyboard SHEET per script stage, each sheet with 2 to 5 numbered SHOTS (panels).
+House method (Higgsfield): check camera angles and action while still working with images. Give EVERY shot a starting position, an action and an end state, and carry that end state into the next shot. Decide how much action fits one shot; keep it readable. The video prompts will later follow these panels exactly, so the plan must be shootable.
+Rules:
+- Exactly ${S0.length} sheets, in order, one for each script stage below (sheet k = stage k). Never merge or drop stages.
+- Shots are numbered continuously across sheets (1, 2, 3 …).
+- "name" = the camera angle or shot idea in 2-4 CAPITAL words (ANGLED WIDE, MACRO HANDS, OVER SHOULDER, TOP SHOT, LOW WIDE, REACTION CLOSE …). Vary angles; no two neighbouring shots with the same size and angle.
+- "draw" = what the artist draws in that panel: the key moment, who is where (screen left / right), the prop in which hand, the expression as a task, one line. English.
+- "note" = optional tiny margin note, max 5 words (e.g. "phone — RIGHT hand", "camera does NOT follow"). Usually empty.
+- "stage_title" = 2-4 CAPITAL words naming the stage; "note" on the sheet = optional rhythm note (e.g. "CUT ON SOUND", "FAST CUTS, ~1s EACH").
+- "refs" per sheet = handles of the characters / places / props that appear on it (only from ELEMENTS).
+- "continuity" = one paragraph that will be repeated on every sheet: each character's look (hair, age, wardrobe), the layout of each place (what is on the left / right), each prop's exact look, and which hand holds what. Fixed facts only.
+- No dialogue text inside panels. Everything in English (captions are lettered in English).
+FORMAT OF THE REEL: ${set.aspect} (panels are drawn in this frame shape) · ${RL.script.duration_s||set.length} s
+FILM LOOK: ${String(RL.look||"").slice(0,800)||"natural, premium, cinematic; Jordanian setting"}
+SCRIPT STAGES: ${trimJSON(S0.map((x,k)=>({stage:k+1,time:x.time,title:x.title,action:x.action,dialogue:(x.dialogue||[]).map(d=>d.who+": "+d.line),on_screen_text:x.on_screen_text,sound:x.sound})),7000)}
+ELEMENTS (handle · name · description): ${trimJSON(els.map(e=>`${e.handle} · ${e.name||""} · ${String(e.description||"").slice(0,220)}`),5000)}
+${RL_JO}
+Reply with only JSON: {"continuity":"…","sheets":[{"stage":1,"stage_title":"…","note":"","refs":["@char_…"],"shots":[{"n":1,"name":"…","draw":"…","start":"…","action":"…","end":"…","note":""}]}]}`,{modelTier:"default",cache:false});
+  const sheets=(Array.isArray(out?.sheets)?out.sheets:[]).filter(x=>Array.isArray(x?.shots)&&x.shots.length);
+  if(!sheets.length) throw {code:"invalid_json",message:"No storyboard plan came back."};
+  let n=0; RL.sbplan={continuity:String(out.continuity||""),at:Date.now()};
+  S0.forEach((sc,i)=>{ const sh=sheets.find(x=>+x.stage===i+1)||sheets[i]; if(!sh) return;
+    sc.sheet={title:String(sh.stage_title||sc.title||"").toUpperCase().slice(0,40),note:String(sh.note||"").slice(0,60),refs:(sh.refs||[]).map(String),
+      shots:sh.shots.slice(0,6).map(x=>({n:++n,name:String(x.name||"").toUpperCase().slice(0,36),draw:String(x.draw||x.action||""),start:String(x.start||""),action:String(x.action||""),end:String(x.end||""),note:String(x.note||"").slice(0,40)}))}; });
+  rlEvent(`The storyboard plan was written: ${S0.length} sheets, ${n} shots.`); rlSave(); return RL.sbplan;
+}
+function rlSheetPrompt(i,refs,styleTag){
+  const sc=RL.script.scenes[i], sh=sc.sheet, set=rlSet(), N=sh.shots.length;
+  const frame=set.aspect==="9:16"?"a tall vertical 9:16 frame":set.aspect==="16:9"?"a wide 16:9 frame":set.aspect==="1:1"?"a square frame":`a ${set.aspect} frame`;
+  const cols=N<=3?N:N===4?2:3;
+  return `${RL_SBSTYLE}
+HEADER (letter it exactly): "STAGE ${i+1} — ${sh.title}${sc.time?`  ${String(sc.time).replace(/\s/g,"")}`:""}${sh.note?`  ·  ${sh.note.toUpperCase()}`:""}"
+LAYOUT: exactly ${N} panels, ${cols} per row, read left to right, top to bottom. Every panel is ${frame}. No other panels, no title block, no logos.
+${sh.shots.map(x=>`PANEL ${x.n} — caption (letter it exactly): "SHOT ${x.n} · ${x.name}". Draw: ${x.draw}${x.start||x.end?` (starts: ${x.start||"—"}; action: ${x.action||"—"}; ends: ${x.end||"—"} — draw the clearest moment of the action)`:""}${x.note?` Margin note in small handwriting: "${x.note}".`:""}`).join("\n")}
+CONTINUITY (identical on every sheet): ${RL.sbplan?.continuity||""}
+${refs.length?`REFERENCES: ${refs.map((r,k)=>`@img${k+1} = ${r.name} — use ONLY for ${r.kind==="character"?"the face, hair, build and wardrobe":r.kind==="prop"?"the object's shape and markings":"the place's layout and furniture"}; redraw it as a pencil and ink drawing, never photographic`).join("; ")}.`:""}
+${styleTag?`STYLE REFERENCE: ${styleTag} shows the drawing style, paper, lettering and sheet layout to match. Copy its STYLE only — none of its people, places, panels or words.`:""}
+RULES: grayscale only, no colour. The same character design, room layout and props in every panel. No extra characters. No speech bubbles, no dialogue text, no decorative captions, no invented scenes. The only lettering is the header, the ${N} captions and the listed margin notes, spelled exactly as written.`;
+}
 async function rlBoardFrame(i){
   const sc=RL.script?.scenes?.[i]; if(!sc) return;
   const b=sc.board=Object.assign(sc.board||{},{status:"write",err:null}); rlSave(); rlBoard();
   try{
-    const set=rlSet(); const els=rlEls().filter(e=>e.id||e.description);
-    const txt=`${sc.title||""} ${sc.action||""} ${(sc.dialogue||[]).map(d=>d.who+" "+d.line).join(" ")} ${sc.on_screen_text||""}`;
-    const out=await rlAsk(`You draw the storyboard of a Bank al Etihad (Jordan) reel: ONE cinematic still per script scene, made with Seedream 5.5 at 2K. Write the image prompt for scene ${i+1} only.
-${RL_SEEDREAM}
-FILM LOOK: ${String(RL.look||"").slice(0,1500)||"natural, premium, cinematic; Jordanian setting"}
-FORMAT: ${set.aspect==="9:16"?"vertical 9:16":set.aspect==="16:9"?"wide 16:9":set.aspect}
-WHOLE SCRIPT (for continuity): ${trimJSON((RL.script.scenes||[]).map((x,k)=>`${k+1}. ${x.title}: ${x.action}`),3000)}
-THIS SCENE: ${trimJSON(sc,2500)}
-ELEMENTS (handle · name · has a reference image? · description): ${trimJSON(els.map(e=>`${e.handle} · ${e.name||""} · ${e.id?"IMAGE":"no image"} · ${String(e.description||"").slice(0,200)}`),5000)}
-Pick the ONE moment that tells this scene best (the key frame), and frame it like a director: shot size, lens, angle, blocking, light, emotion. Use the elements that appear in this scene; list in "refs" only the handles that have an IMAGE (max 8), in the order you cite them as @img1, @img2… in the prompt. Characters without an image are described in words.
-Reply with only JSON: {"moment":"one line","prompt":"the full Seedream 5.5 prompt","refs":["@char_…"]}`,{modelTier:"default",cache:false});
-    const refs=(Array.isArray(out?.refs)?out.refs:[]).map(h=>rlElByTag(h)).filter(e=>e&&e.id).slice(0,10).map(e=>({id:e.id,tag:e.handle}));
-    const prompt=String(out?.prompt||"").trim(); if(!prompt) throw {code:"invalid_json",message:"No prompt came back."};
-    Object.assign(b,{status:"run",prompt,moment:String(out?.moment||""),refs:refs.map(r=>r.tag)}); rlSave(); rlBoard();
-    const img=await rlJob(()=>rlImage({prompt,aspect:set.aspect,refs,label:`storyboard ${i+1}`,onQueued:(id,web)=>{ b.pending=id; b.web=web||b.web; rlSave(); }}));
-    Object.assign(b,{id:img.id,web:img.web,status:"ok",at:Date.now()}); delete b.pending;
-    rlEvent(`Storyboard frame ${i+1} was drawn (${b.moment}).`);
+    if(!sc.sheet||!RL.sbplan) await (RL._sbplanP||(RL._sbplanP=rlBoardPlan().finally(()=>{ delete RL._sbplanP; })));
+    if(!sc.sheet) throw {code:"invalid_json",message:"No plan for this stage. Press Create storyboard again."};
+    const els=(sc.sheet.refs||[]).map(h=>rlElByTag(h)).filter(e=>e&&e.id).slice(0,7);
+    const refs=els.map(e=>({id:e.id,tag:e.handle,name:e.name||e.handle,kind:RL.characters.includes(e)?"character":e.kind==="prop"?"prop":"location"}));
+    /* one look for all sheets: the user's own style image, else the first finished sheet */
+    const styleId=RL.sbStyle?.id||(RL.script.scenes.find((x,k)=>k!==i&&x.board?.id&&x.board.sheet)?.board.id)||null;
+    const all=styleId?[...refs,{id:styleId,tag:"style"}]:refs;
+    const prompt=rlSheetPrompt(i,refs,styleId?`@img${all.length}`:null);
+    Object.assign(b,{status:"run",prompt,sheet:true,moment:`${sc.sheet.shots.length} shots · ${sc.sheet.shots.map(x=>x.n).join(", ")}`,refs:refs.map(r=>r.tag)}); rlSave(); rlBoard();
+    const img=await rlJob(()=>rlImage({prompt,aspect:"16:9",refs:all,label:`storyboard sheet ${i+1}`,onQueued:(id,web)=>{ b.pending=id; b.web=web||b.web; RL_SBBIG.add(id); rlSave(); }}));
+    RL_SBBIG.add(img.id); Object.assign(b,{id:img.id,web:img.web,status:"ok",at:Date.now()}); delete b.pending;
+    rlEvent(`Storyboard sheet ${i+1} was drawn (${b.moment}).`);
   }catch(e){ b.status="err"; b.err=e?.code==="invalid_json"||e?.code==="refused"?sampleCopy(e):mcpCopy(e); delete b.pending; }
   finally{ rlSave(); rlBoard(); }
 }
 async function rlGenStoryboard(only){
-  const L=(RL.script?.scenes||[]).map((_,i)=>i).filter(i=>only==null?true:only.includes(i));
-  L.forEach(i=>{ const sc=RL.script.scenes[i]; sc.board=Object.assign(sc.board||{},{status:"queued",err:null}); }); rlSave(); rlBoard();
-  const q=[...L]; const worker=async()=>{ while(q.length){ const i=q.shift(); await rlBoardFrame(i); } };
+  const S0=RL.script?.scenes||[]; const L=S0.map((_,i)=>i).filter(i=>only==null?true:only.includes(i));
+  if(only==null){ for(const sc of S0){ delete sc.sheet; if(sc.board){ delete sc.board.id; delete sc.board.sheet; } } RL.sbplan=null; }
+  L.forEach(i=>{ const sc=S0[i]; sc.board=Object.assign(sc.board||{},{status:"queued",err:null}); }); rlSave(); rlBoard();
+  try{ if(!RL.sbplan) await (RL._sbplanP||(RL._sbplanP=rlBoardPlan().finally(()=>{ delete RL._sbplanP; }))); }
+  catch(e){ L.forEach(i=>{ const b=S0[i].board; b.status="err"; b.err=sampleCopy(e); }); rlSave(); rlBoard(); return; }
+  const q=[...L];
+  /* the first sheet sets the drawing style; the others follow it */
+  if(!RL.sbStyle?.id&&!S0.some(x=>x.board?.id&&x.board.sheet)&&q.length>1) await rlBoardFrame(q.shift());
+  const worker=async()=>{ while(q.length){ const i=q.shift(); await rlBoardFrame(i); } };
   await Promise.all([worker(),worker()]);
 }
+/* the approved shot plan, for the scene writer: video prompts follow the panels */
+function rlSbText(){ const S0=(RL.script?.scenes||[]).filter(x=>x.sheet?.shots?.length); if(!S0.length) return "";
+  return `STORYBOARD (the approved shot plan — the video prompt's shots keep this order, these angles and these actions; each shot's end state is the next shot's start):\n${S0.map((x,i)=>`Stage ${i+1} ${x.sheet.title}${x.time?` (${x.time})`:""}: ${x.sheet.shots.map(h=>`Shot ${h.n} ${h.name} — ${h.draw}${h.end?` → ends: ${h.end}`:""}`).join(" | ")}`).join("\n").slice(0,5000)}\nCONTINUITY: ${String(RL.sbplan?.continuity||"").slice(0,1200)}`; }
+const rlIsSheet=id=>RL_SBBIG.has(id)||!!(RL?.script?.scenes||[]).some(x=>x.board?.sheet&&(x.board.id===id||x.board.pending===id));
 /* every storyboard still in one ZIP (stored, no re-compression) */
 const CRC_T=(()=>{ const t=new Uint32Array(256); for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c=c&1?0xEDB88320^(c>>>1):c>>>1; t[n]=c>>>0; } return t; })();
 function crc32(u){ let c=0xFFFFFFFF; for(let i=0;i<u.length;i++) c=CRC_T[(c^u[i])&255]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
@@ -3457,8 +3508,8 @@ async function rlDownloadBoard(btn){
 }
 function rlBoardCell(s,i){
   const b=s.board||{}; const thumb=b.id?rlTGet(b.id):null;
-  const st=b.status==="queued"?"Waiting…":b.status==="write"?"Choosing the key moment…":b.status==="run"?"Drawing in Seedream 5.5 · 2K…":b.status==="err"?esc(b.err||"Failed"):"";
-  return `<div class="rl-sbcell${b.status==="run"||b.status==="write"||b.status==="queued"?" busy":""}">${thumb?`<img src="${thumb}" alt="Storyboard frame ${i+1}" data-rl-zoom="${esc(b.id)}">`:`<div class="ph">${st||"No frame yet"}</div>`}
+  const st=b.status==="queued"?"Waiting…":b.status==="write"?"Planning the shots…":b.status==="run"?"Drawing in Seedream 5.5 · 2K…":b.status==="err"?esc(b.err||"Failed"):"";
+  return `<div class="rl-sbcell${b.status==="run"||b.status==="write"||b.status==="queued"?" busy":""}">${thumb?`<img src="${thumb}" alt="Storyboard sheet ${i+1}" data-rl-zoom="${esc(b.id)}">`:`<div class="ph">${st||"No sheet yet"}</div>`}
     <div class="cap"><span class="t12 muted">${thumb&&st?st:esc(b.moment||"")}</span><button type="button" class="btn small" data-rl="board1" data-i="${i}"${b.status==="run"||b.status==="write"?" disabled":""}>${b.id?"Redraw":"Draw"}</button></div></div>`;
 }
 /* ---------- Magnific: images for cast, locations and first frames ---------- */
@@ -3475,7 +3526,7 @@ async function rlImage({prompt,aspect,refs=[],label,onQueued}){
   if(!rr.images.length&&!DONE.test(rr.status)&&id0) rr=await waitFor([id0],label||"image");
   const id=rr.ids[0]||id0; if(!id) throw {code:"tool_error",message:"Magnific returned no creation."};
   let shot=rr.images[0]; if(!shot){ const pv=await preview(id); shot=pv.image; }
-  if(shot){ const src=`data:${shot.mime};base64,${shot.data}`; rlFull[id]=src; rlTSet(id,await rlThumb(src)); }
+  if(shot){ const src=`data:${shot.mime};base64,${shot.data}`; rlFull[id]=src; rlTSet(id,await rlThumb(src,rlIsSheet(id)?1100:480)); }
   return {id, web:rr.webUrl||web};
 }
 /* the user's own image becomes the element's reference (uploaded to Magnific, used as @img in every frame and shot) */
@@ -4072,7 +4123,7 @@ function uxTimeline(){
   const beats=(RL.script?.scenes||[]), total=+RL.script?.duration_s||rlSet().length||30; const F=[];
   beats.forEach((s,i)=>{ const parts=String(s.time||"").split(/[-–—]/); let a=uxSecs(parts[0]), b=uxSecs(parts[1]);
     if(a==null||b==null||b<=a){ a=i*total/beats.length; b=(i+1)*total/beats.length; }
-    F.push({a,b,img:s.board?.id?rlTGet(s.board.id):null,id:s.board?.id||null,title:s.title||"",text:(s.dialogue||[]).map(d=>d.line).filter(Boolean).join(" · ")||s.on_screen_text||s.action||""}); });
+    F.push({a,b,sheet:!!s.board?.sheet,img:s.board?.id?rlTGet(s.board.id):null,id:s.board?.id||null,title:s.title||"",text:(s.dialogue||[]).map(d=>d.line).filter(Boolean).join(" · ")||s.on_screen_text||s.action||""}); });
   if(!F.length){ let t=0; for(const sc of RL.scenes){ const d=+sc.duration_s||8; F.push({a:t,b:t+d,img:rlTGet(sc.frame?.id)||rlTGet(sc.clip)||null,title:sc.title||"",text:sc.logline||""}); t+=d; } }
   const V=[]; let off=0; for(const sc of RL.scenes){ for(const d of sc.dialogue||[]) if(d.audio?.id){ const st=uxSecs(String(d.at||"").split(/[-–—]/)[0]); V.push({t:off+(st??0),a:d.audio,line:d.line}); } off+=+sc.duration_s||8; }
   const end=Math.max(F.length?F[F.length-1].b:0,off,1); return {F,V,end};
@@ -4081,9 +4132,9 @@ async function uxAnimatic(){
   if(!RL) return; document.querySelector(".ux-anim")?.remove();
   const T=uxTimeline(); if(!T.F.length){ return; }
   T.F.forEach(f=>{ if(f.id&&!f.img) rlNeed(f.id); });
-  const ar=rlSet().aspect.replace(":","/");
+  const wide=T.F.some(f=>f.sheet), ar=wide?"16/9":rlSet().aspect.replace(":","/");
   const box=document.createElement("div"); box.className="ux-anim"; box.setAttribute("role","dialog"); box.setAttribute("aria-label","Free preview"); box.dir=$("reels").dir;
-  box.innerHTML=`<div class="stage" style="aspect-ratio:${ar}"><div class="ph"></div><div class="cap" data-noi18n dir="auto"></div></div><div class="bar"><i></i></div>
+  box.innerHTML=`<div class="stage${wide?" wide":""}" style="aspect-ratio:${ar}"><div class="ph"></div><div class="cap" data-noi18n dir="auto"></div></div><div class="bar"><i></i></div>
     <div class="ctl"><button type="button" class="p" data-a="play">Play</button><button type="button" data-a="close">Close</button></div>
     <p class="t12"><span>${T.V.length?"Free preview: storyboard frames with your generated voices on the real timing.":"Free preview: storyboard frames on the real timing. Generate voices to hear the dialogue too."}</span> <span>No credits are spent.</span></p>`;
   document.body.appendChild(box); uxT(box);
@@ -4164,7 +4215,10 @@ function uxInit(){
     else if(a==="speak") uxSpeak(b.dataset.n,b);
     else if(a==="unspeak"){ const sc=RL.scenes.find(x=>+x.n===+b.dataset.n); if(sc?.clipOrig){ Object.assign(sc,sc.clipOrig); delete sc.clipOrig; delete sc._src; sc.note=null; rlLoadVideo(sc,sc.clip).finally(()=>{ rlSave(); rlBoard(); }); } }
     else if(a==="resize"){ b.disabled=true; uxResize(b.dataset.a); }
+    else if(a==="sbstyleoff"){ RL.sbStyle=null; rlSave(); rlBoard(); }
   });
+  R.addEventListener("change",async e=>{ const f=e.target.matches?.("[data-ux-sbstyle]")&&e.target.files?.[0]; if(!f||!RL) return;
+    RL._sbUp=true; rlBoard(); try{ const up=await rlUploadMag(f,f.name||"storyboard-style"); const id=typeof up==="string"?up:(up?.id||up?.identifier); if(id){ RL.sbStyle={id,name:f.name||"style"}; rlEvent("A storyboard style reference was added."); } }catch(err){ rlSys("Couldn't upload the style image: "+String(err?.message||err?.code||err).slice(0,160)); } finally{ delete RL._sbUp; rlSave(); rlBoard(); } });
   uxApply(); uxObserve(); uxMicInit();
 }
 
