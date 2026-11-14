@@ -521,11 +521,14 @@ function renderRefs(){
     b.innerHTML=`<img src="${r.src}" alt="" loading="lazy">${r.studio?'<span class="tag">Studio</span>':r.set==="yt"?'<span class="tag">Youth</span>':r.set==="user"?'<span class="tag">Yours</span>':r.set==="ch"?`<span class="tag ch">${esc(charLabel(r.id))}</span>`:""}`;
     if(r.set==="ch"){ const w=document.createElement("div"); w.className="ch-card"; w.appendChild(b);
       const inp=document.createElement("input"); inp.type="text"; inp.className="ch-name"; inp.value=charName(r.id); inp.setAttribute("aria-label","Character name, add other spellings after a slash"); inp.spellcheck=false;
-      inp.onchange=()=>{ const v=inp.value.trim(); if(v) CHAR_NAMES[r.id]=v; else delete CHAR_NAMES[r.id]; try{ localStorage.setItem(CHAR_KEY,JSON.stringify(CHAR_NAMES)); }catch{} syncCast(); renderRefs(); };
-      w.appendChild(inp); b.onclick=()=>{ const j=S.picked.indexOf(r.id); if(j>=0){ S.picked.splice(j,1); S._autoCast=(S._autoCast||[]).filter(x=>x!==r.id); } else if(S.picked.length<MAX_REFS) S.picked.unshift(r.id); renderRefs(); };
+      inp.onchange=()=>{ const v=inp.value.trim(); if(v) CHAR_NAMES[r.id]=v; else delete CHAR_NAMES[r.id]; try{ localStorage.setItem(CHAR_KEY,JSON.stringify(CHAR_NAMES)); }catch{} if(r.user&&v){ r.defName=v; IDB.put({id:r.id,name:v,blob:r.blob,look:/^exactly the person/.test(r.look)?"":r.look}).catch(()=>{}); } syncCast(); renderRefs(); };
+      if(r.user){ inp.placeholder="Name — e.g. Ali / علي"; if(S._newChar===r.id){ inp.value=""; setTimeout(()=>{ inp.focus(); },60); S._newChar=null; } }
+      w.appendChild(inp);
+      if(r.user){ const x=document.createElement("button"); x.type="button"; x.className="ch-del"; x.textContent="Remove"; x.onclick=()=>removeUserChar(r.id); w.appendChild(x); } b.onclick=()=>{ const j=S.picked.indexOf(r.id); if(j>=0){ S.picked.splice(j,1); S._autoCast=(S._autoCast||[]).filter(x=>x!==r.id); } else if(S.picked.length<MAX_REFS) S.picked.unshift(r.id); renderRefs(); };
       box.appendChild(w); return; }
     b.onclick=()=>{ const j=S.picked.indexOf(r.id); if(j>=0) S.picked.splice(j,1); else if(S.picked.length<MAX_REFS) S.picked.push(r.id); renderRefs(); };
     box.appendChild(b); });
+  if(S.refTab==="ch"){ const w=document.createElement("label"); w.className="ch-card ch-add"; w.innerHTML=`<span class="plus" aria-hidden="true">+</span><b>Upload character</b><span class="t12 muted">A clear photo of the person. Give it a name, then write that name in the brief.</span><input type="file" accept="image/jpeg,image/png,image/webp" multiple class="sr">`; w.querySelector("input").onchange=e=>{ uploadChars(e.target.files); e.target.value=""; }; box.appendChild(w); }
   const nb=S.picked.filter(id=>refById(id)?.set==="bae").length;
   $("refCount").textContent=`${S.picked.length} / ${MAX_REFS} · ${nb} BAE`;
   /* selected strip: always visible, click to remove */
@@ -542,7 +545,7 @@ function syncTabs(){ document.querySelectorAll("#refTabs button").forEach(b=>b.s
     bae:"Photos from the Bank al Etihad guidelines. Picked frames go to Claude for style analysis and to Seedream 5.5 as references. Up to 6, from any set. Choosing Studio picks the BAE studio frames for you.",
     yt:"Youth campaign set: bold streetwear, low-angle wide camera, blue sky, hard sun and friends mid-laugh. Used for wardrobe, camera and energy; their logos and orange clothing are never copied.",
     mj:"Mari Juliano lifestyle set, for clean natural light and candid energy. Mix with the other sets, up to 6 in total.",
-    ch:"Characters keep the same face in every image. Write a name in the brief (e.g. \"a young man like Wissam\") and that character is added automatically, or tap one to cast them. Rename under each photo; add other spellings after a slash."})[S.refTab]; }
+    ch:"Write a character's name in the brief and they are cast automatically. Upload your own with +, name it (other spellings after a slash: Ali / علي)."})[S.refTab]; }
 $("refTabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return; S.refTab=b.dataset.tab; syncTabs(); renderRefs(); });
 renderRefs(); syncTabs();
 $("btnClearRefs").onclick=()=>{ S.picked=[]; renderRefs(); };
@@ -1290,7 +1293,14 @@ const IDB={ db:null, async open(){ if(this.db) return this.db; this.db=await new
   async all(){ const db=await this.open(); return new Promise(res=>{ const q=db.transaction("refs").objectStore("refs").getAll(); q.onsuccess=()=>res(q.result||[]); q.onerror=()=>res([]); }); },
   async put(v){ const db=await this.open(); return new Promise(res=>{ const t=db.transaction("refs","readwrite"); t.objectStore("refs").put(v); t.oncomplete=res; t.onerror=res; }); },
   async del(id){ const db=await this.open(); return new Promise(res=>{ const t=db.transaction("refs","readwrite"); t.objectStore("refs").delete(id); t.oncomplete=res; t.onerror=res; }); } };
-function addUserRef(rec){ ALL_REFS.push({id:rec.id,d:"Your reference: "+(rec.name||"image"),src:URL.createObjectURL(rec.blob),blob:rec.blob,set:"user",studio:false}); }
+/* Your own characters: upload a photo, give it a name, then just write the name in the brief */
+function addUserChar(rec){ if(refById(rec.id)) return; const r={id:rec.id,defName:rec.name||"New character",d:"Character: "+(rec.look||rec.name||"your character"),look:rec.look||"exactly the person in this reference image",src:URL.createObjectURL(rec.blob),blob:rec.blob,set:"ch",studio:false,user:true}; ALL_REFS.push(r); CHAR_REFS.push(r); }
+async function describeChar(rec){ try{ if(!sample) return; const o=await sample.json(`Describe the person in this image in ONE short casting phrase: man or woman (or boy / girl), approximate age, hair, facial hair if any, eye colour, build. No name, no clothes, no background. Reply with only JSON: {"look":"…"}`,{images:[rec.blob],modelTier:"quick"}); const look=String(o?.look||"").trim().slice(0,220); if(!look) return; rec.look=look; const r=refById(rec.id); if(r){ r.look=look; r.d="Character: "+look; } try{ await IDB.put(rec); }catch{} }catch{} }
+async function uploadChars(files){ let last=null;
+  for(const f of [...files].slice(0,8)){ if(!/^image\//.test(f.type)) continue; const rec={id:"ch_u"+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name:"New character",blob:await toJpeg(f,2000)}; addUserChar(rec); try{ await IDB.put(rec); }catch{} describeChar(rec); last=rec.id; }
+  if(last){ S._newChar=last; S.refTab="ch"; syncTabs(); renderRefs(); } }
+async function removeUserChar(id){ try{ await IDB.del(id); }catch{} for(const A of [ALL_REFS,CHAR_REFS]){ const i=A.findIndex(r=>r.id===id); if(i>=0) A.splice(i,1); } delete CHAR_NAMES[id]; try{ localStorage.setItem(CHAR_KEY,JSON.stringify(CHAR_NAMES)); }catch{} S.picked=S.picked.filter(x=>x!==id); S._autoCast=(S._autoCast||[]).filter(x=>x!==id); renderRefs(); }
+function addUserRef(rec){ if(/^ch_/.test(rec.id)) return addUserChar(rec); ALL_REFS.push({id:rec.id,d:"Your reference: "+(rec.name||"image"),src:URL.createObjectURL(rec.blob),blob:rec.blob,set:"user",studio:false}); }
 async function loadUserRefs(){ try{ (await IDB.all()).forEach(addUserRef); }catch{} renderRefs(); }
 $("addRef").addEventListener("change",async e=>{
   for(const f of [...e.target.files].slice(0,12)){ if(!/^image\//.test(f.type)) continue; const rec={id:"u"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:f.name,blob:await toJpeg(f,1600)}; addUserRef(rec); try{ await IDB.put(rec); }catch{} if(S.picked.length<MAX_REFS) S.picked.push(rec.id); }
