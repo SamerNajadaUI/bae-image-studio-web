@@ -520,6 +520,7 @@ function renderRefs(){
       inp.onchange=()=>{ const v=inp.value.trim(); if(v&&r.lib){ r.defName=v; clUpdate(r.docId,{name:v}); } syncCast(); renderRefs(); };
       if(S._newChar===r.id){ setTimeout(()=>{ inp.focus(); inp.select(); },60); S._newChar=null; }
       w.appendChild(inp);
+      if(r.lib){ const c=CL.list.find(x=>x.id===r.docId); if(c){ const t=document.createElement("span"); t.className="t12 muted ch-size"; t.textContent=c.orig?`Original kept${c.px?` · ${c.px[0]}×${c.px[1]}`:""}`:c._mag?"Original sent to your Magnific · team copy max 2000 px":"Stored reduced (max 2000 px) — add it again to keep the original"; w.appendChild(t); } }
       if(CL.canEdit&&r.lib){ const row=document.createElement("div"); row.className="ch-row"; const sel=document.createElement("select"); sel.className="ch-cat"; sel.setAttribute("aria-label","Shelf"); sel.innerHTML=CL_CATS.map(([k,l])=>`<option value="${k}"${r.cat===k?" selected":""}>${l}</option>`).join(""); sel.onchange=()=>{ r.cat=sel.value; clUpdate(r.docId,{cat:sel.value}); renderRefs(); };
         const x=document.createElement("button"); x.type="button"; x.className="ch-del"; x.textContent="Remove"; x.onclick=()=>{ if(x.dataset.sure){ clRemove(r.docId).then(renderRefs); } else { x.dataset.sure="1"; x.textContent="Remove for everyone?"; setTimeout(()=>{ delete x.dataset.sure; x.textContent="Remove"; },4000); } };
         row.appendChild(sel); row.appendChild(x); w.appendChild(row); }
@@ -1323,6 +1324,8 @@ async function clLoad(force){
   clSync(); return CL; }
 const CL_BLOB=new Map();
 async function clBlob(docId){ if(CL_BLOB.has(docId)) return CL_BLOB.get(docId);
+  const meta=CL.list.find(x=>x.id===docId);
+  if(meta?.asset){ try{ const r=await fetch("/_blob/"+meta.asset); if(r.ok){ const b=await r.blob(); if(b.size>1000&&/^image\//.test(b.type||meta.mime||"image/jpeg")){ const o=b.type?b:new Blob([b],{type:meta.mime||"image/jpeg"}); CL_BLOB.set(docId,o); return o; } } }catch{} }
   const col=RLS.db.collection("charimg"); const sn=await col.doc(docId).get(); const m=sn.exists?sn.data():null; let d=m?.d||null;
   if(!d&&m?.n){ const parts=await Promise.all([...Array(+m.n)].map((_,i)=>col.doc(docId+"_"+i).get())); d=parts.map(x=>x.exists?x.data()?.d||"":"").join(""); }
   if(!d) throw {code:"not_found",message:"This character's image is missing from the library."};
@@ -1339,11 +1342,16 @@ async function clAdd(blob,name,cat){
   { const data=await clDataUrl(full), SZ=90000, n=Math.ceil(data.length/SZ), col=RLS.db.collection("charimg");
     for(let i=0;i<n;i++) await col.doc(id+"_"+i).set({d:data.slice(i*SZ,(i+1)*SZ)});
     await col.doc(id).set({n,at:Date.now()}); }
-  const doc={name:String(name||"New character").slice(0,60),cat:guess||"men",look,thumb,at:Date.now(),by:RLS.uid||null};
+  let asset=null; try{ const A=await window.claude?.use?.("assets"); if(A&&blob.size<=19.5*1048576){ const r=await A.upload(blob); asset=r?.id||null; } }catch(e){ log("·","original not stored in the file store",{code:e?.code,message:e?.message}); }
+  let dims=null; try{ const bm=await createImageBitmap(blob); dims=[bm.width,bm.height]; }catch{}
+  const doc={name:String(name||"New character").slice(0,60),cat:guess||"men",look,thumb,at:Date.now(),by:RLS.uid||null,asset,mime:blob.type||"image/jpeg",px:dims,orig:!!asset};
+  /* the owner's own Magnific gets the untouched original now, so their renders never use a reduced copy */
+  rlUploadMag(blob,"character-"+id).then(up=>{ if(!up?.id) return; try{ const u=JSON.parse(localStorage.getItem("bae_user_magids")||"{}"); u[clRefId(id)]=up.id; localStorage.setItem("bae_user_magids",JSON.stringify(u)); }catch{} const c=CL.list.find(x=>x.id===id); if(c){ c._mag=true; if(typeof renderRefs==="function"&&S.refTab==="ch") renderRefs(); } }).catch(e=>log("·","original not sent to Magnific yet",{code:e?.code,message:e?.message}));
   await RLS.db.collection("chars").doc(id).set(doc);
-  CL_BLOB.set(id,full); CL.list.unshift({id,...doc}); clSync(); return id; }
+  CL_BLOB.set(id,asset?blob:full); CL.list.unshift({id,...doc}); clSync(); return id; }
 async function clUpdate(id,patch){ const c=CL.list.find(x=>x.id===id); if(!c||!CL.canEdit) return; Object.assign(c,patch); clSync(); try{ await RLS.db.collection("chars").doc(id).update(patch); }catch(e){ log("✕","character update",{code:e?.code}); } }
-async function clRemove(id){ if(!CL.canEdit) return; CL.list=CL.list.filter(x=>x.id!==id); clSync(); try{ const col=RLS.db.collection("charimg"); const sn=await col.doc(id).get().catch(()=>null); const n=+(sn?.exists?sn.data()?.n:0)||0; await RLS.db.collection("chars").doc(id).delete(); for(let i=0;i<n;i++) await col.doc(id+"_"+i).delete().catch(()=>{}); await col.doc(id).delete(); }catch(e){ log("✕","character remove",{code:e?.code}); } }
+const CL_WAS=new Map();
+async function clRemove(id){ if(!CL.canEdit) return; CL_WAS.set(id,CL.list.find(x=>x.id===id)); CL.list=CL.list.filter(x=>x.id!==id); clSync(); try{ const col=RLS.db.collection("charimg"); const sn=await col.doc(id).get().catch(()=>null); const n=+(sn?.exists?sn.data()?.n:0)||0; const was=CL_WAS.get(id); await RLS.db.collection("chars").doc(id).delete(); if(was?.asset){ try{ const A=await window.claude?.use?.("assets"); await A?.delete(was.asset); }catch{} } for(let i=0;i<n;i++) await col.doc(id+"_"+i).delete().catch(()=>{}); await col.doc(id).delete(); }catch(e){ log("✕","character remove",{code:e?.code}); } }
 async function clUpload(files){ const L=[...files].filter(f=>/^image\//.test(f.type)).slice(0,8); if(!L.length) return; let n=0, last=null;
   for(const f of L){ CL.busy=`Adding ${++n} of ${L.length}…`; renderRefs(); try{ last=await clAdd(f,"",""); CL.err=""; }catch(e){ CL.err="Couldn't add the image: "+String(e?.message||e?.code||e).slice(0,160); } }
   CL.busy=""; if(last){ S._newChar=clRefId(last); CL.cat="all"; } renderRefs(); }
