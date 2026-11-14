@@ -145,6 +145,23 @@ const JO_PLACE = `JORDANIAN PLACES — LOCATION LOCK (applies to every exterior 
 - LIGHT: very clear deep-blue sky and crisp sun for most of the year; blue hour with warm interior light glowing from shopfronts; winter days can be grey with rain and wet, reflective asphalt; at night LED outlines on towers and a carpet of city lights over the hills.
 - Avoid unless asked: desert, camels, mud-brick, onion domes, souk alleys, Gulf-style skyscraper skylines, ornate arches everywhere.
 - Never show a real brand's sign or logo unless the user names it; invent neutral shop signs.`;
+/* ---------------- Characters are made in two stages: a natural portrait first, the character sheet from the chosen portrait second ---------------- */
+const JO_PORTRAIT = `CHARACTER PROMPTS — STAGE 1 IS A NATURAL PORTRAIT, NEVER A CHARACTER SHEET:
+A character's "prompt" describes ONE ordinary, natural photograph of that one person, so the user can generate a few and choose the face they like:
+- one person only, vertical 3:4, framed chest-up or waist-up, looking toward the camera or just past it, a relaxed natural expression;
+- in a real everyday place that suits them (a street in Amman, a café, an office, a living room, a car park, a shop) with the real light of that place and a softly out-of-focus background with depth — NOT a studio, NOT a plain, grey or seamless backdrop, NOT a multi-panel sheet, no turnaround views;
+- write, in this order: who they are (Jordanian man / woman / boy / girl from Amman, exact age, role), the face in concrete features from the casting lock, hair and facial hair, build, the exact outfit (every garment the user asked for, with colour and fabric), then the place and the light;
+- eye-level 50mm or 85mm lens, photoreal, natural colour, real skin texture, no beauty filter; no text, no logos, nobody else in focus.
+STAGE 2 (the studio does it, you do not write it): when the user has chosen a portrait, the studio turns that exact image into the three-panel character sheet on plain grey, using the portrait as the identity reference.`;
+function rlSheetPrompt2(e){
+  const T=String(rlTpl("char")||RL_TPL.char).split("\n"); const layout=(T[0]||"").replace(/\s*\[and headwear\]/i,""); const skin=(T.find(x=>/^SKIN AND TEXTURE/i.test(x))||"").replace(/\[wardrobe colours\]/i,"the outfit's own colours");
+  return `Use the person in the reference image (@img1) as the ONLY source of identity: the same face, age, skin tone, eyes, eyebrows, hair, facial hair and build, and the same outfit, all unchanged. Do not redesign, beautify, slim or restyle them. Ignore the reference's background, pose and lighting.
+${layout}
+THE PERSON: exactly the person in @img1${e?.name?` (${e.name})`:""}${e?.description?` — ${String(e.description).slice(0,300)}`:""}. Upright balanced posture, relaxed empty hands at the sides, calm neutral expression with the mouth closed.
+WARDROBE, identical in every view: exactly the outfit worn in @img1${e?.wardrobe?` (${String(e.wardrobe).slice(0,300)})`:""}, continued naturally down to trousers or skirt and shoes that belong with it. No bag, no props, no logos, no lettering.
+${skin}`;
+}
+const rlIsSheetPrompt=t=>/three-panel|character sheet|plain gr[ae]y clean background/i.test(String(t||""));
 /* ---------------- BAE guideline digest given to Claude ---------------- */
 const BAE_RULES = `BANK AL ETIHAD (BAE) PHOTOGRAPHY GUIDELINES — "Deep Clarity" direction
 1. Depth over flatness: compose in distinct layers (foreground, subject, background). Nothing sits on a single flat plane.
@@ -1711,7 +1728,8 @@ const RL_STAGES=[["idea","Idea"],["script","Script"],["characters","Cast"],["loc
 const RL_METHOD=`PRODUCTION METHOD (follow it exactly):
 1. IDEA — 3 distinct concepts built to go viral as short-form reels: a scroll-stopping HOOK in the first 1–2 seconds (visual surprise, relatable pain, pattern break), ONE clear emotion, a simple turn, the product moment as the payoff (never a lecture), and a loop-able or punchy ending + BAE end card. Cinematic production value. Each: title, hook, logline, beats, why it will travel, product moment.
 2. SCRIPT — scene by scene with timecodes summing to the target length: action, dialogue (who, language, exact line), on-screen text, sound. Short lines; dialogue sparse and natural.
-3. CHARACTERS — assets come first. One THREE-PANEL character sheet per character, ALWAYS on a plain gray clean background: (1) head-and-shoulders portrait, the ONLY head on the sheet; (2) neck-to-shoes FRONT view with no head; (3) neck-to-shoes BACK view with no head. Follow the CHARACTER SHEET template in the brain exactly, filling every bracket with specific detail (age, face, eyes, gaze, hair, build, every garment with colour, fabric, fit and wear, shoes; matte pore-level skin; giant-softbox light; 50mm portrait, 85mm body).
+3. CHARACTERS — assets come first, in TWO stages. Stage 1: for each character you write a natural PORTRAIT prompt (one person, a real everyday place, natural light — never a studio or a plain backdrop, never a sheet) so the user can generate and choose the face. Stage 2: the studio itself turns the chosen portrait into the THREE-PANEL character sheet on plain grey (portrait · neck-to-shoes front · neck-to-shoes back); you never write the sheet prompt. Be specific in the portrait: exact age, face, eyes, hair, build, every garment with colour and fabric.
+${JO_PORTRAIT}
 4. LOCATIONS & PROPS — each location is an EMPTY establishing plate (no people) with its layout written with positions (left/right/back wall, doors with hinge and opening direction, windows, furniture); it is a STYLE reference for textures and light, never a fixed frame. Each prop is a PRODUCT SHEET of ONE object shown twice (front three-quarter and back three-quarter, ~45° and slightly above), ALWAYS on a plain gray clean background, with its physical state and what it must NOT be confused with. Follow the LOCATION and PROP SHEET templates.
 5. DIRECTING — first a FILM LOOK shared by every scene (written once, reused verbatim so the reel reads as one film): format and aspect, film stock look, lens character, grade with a colour split (dominant 60% / secondary 30% / accent 10%) and white balance in K, 24 fps and 180° shutter, pore-level matte skin, "photorealistic — no 3D render, no game engine", global constraints (NO FADE, no slow motion unless written, nobody looks into the camera, no text/logos/watermark), audio policy (SFX and dialogue only, no music, no subtitles). Then one Seedance 2.5 prompt per scene (usually 4–15 s; whatever length the user asks for) written in the SCENE PROMPT FORMAT of the brain: opener, SECTION + location, first-frame blocking of every person, SHOT n (a–b s) with mm + FOV°, one named move with distance and speed, framing limits, camera height and position, ACTING micro-detail and what not to do, per-second ACTION timeline for continuous takes, framing guarantees (HEAD PRIORITY), props state, RULES, sound. Refer to every element by its HANDLE (@char_…, @loc_…, @prop_…). Do NOT write a REFERENCES block or the film look inside scenes: the studio adds both automatically when it renders.
    BLOCKING BLUEPRINT FIRST: before writing any scene, decide its geography like a director and script supervisor: the zones (INTERIOR/EXTERIOR, behind/in front of a counter, inside/outside a car), which zone every person is in, doors (hinge, opening direction), where the camera stands for each shot and which way it looks (lens as FOV°), the axis of action (180° rule), the motivated light source and the time of day, the exact head-count and the props in each hand. Then write the prompts FROM the blueprint and state the geography explicitly in words (e.g. "Sara @img1 is INSIDE the apartment hallway; Lina @img2 stands OUTSIDE on the landing; the door opens inward; the camera is inside, behind Sara's right shoulder"). Never leave the AI to guess where anyone is.
@@ -2484,8 +2502,8 @@ Reply with ONLY one JSON object whose FIRST key is "reply" (the user watches it 
 - "ideas": [{"title","hook","logline","beats","why_viral","product_moment","jury"}]  (3 per request). Before answering, silently generate at least 8 directions through different lenses of the masters, score each with THE JURY in the brain, and return only the best 3; "jury" = one line on why it wins (score /35)
 - "picked_idea": index (0-based) into "ideas" when the user picks one
 - "script": {"title","duration_s","scenes":[{"n","time","title","action","dialogue":[{"who","line"}],"on_screen_text","sound"}]}
-- "characters": [{"tag","handle","name","role","description","wardrobe","library":null|"Wissam"|"Lina"|"Sara"|"Omar","prompt","from_attachment":null|N}]  — when you propose characters, ALWAYS give each one a complete, specific "prompt" (a three-panel character sheet on a plain gray clean background describing face, hair, build, exact wardrobe and shoes) so the user can generate it or attach their own photo. A character with "own_image": true uses the user's photo — keep its description and wardrobe exactly as they are  — from_attachment: when the user ATTACHED a photo or sheet of this character (in THIS message), give its number N (1 = first attached image, in order). The studio then uses the user's image itself as the character's reference image — never redesign or re-imagine that person; describe them exactly as in the image. When the user attaches characters, map EVERY attached image to an element (characters, or locations/props for places and objects); if two attachments look the same, still map both and say so
-  — prompt = the full THREE-PANEL character sheet prompt (CHARACTER SHEET template); set "library" only when the user wants that BAE character
+- "characters": [{"tag","handle","name","role","description","wardrobe","library":null|"Wissam"|"Lina"|"Sara"|"Omar","prompt","from_attachment":null|N}]  — when you propose characters, ALWAYS give each one a complete, specific "prompt" (STAGE 1: a natural portrait photo of that one person in a real everyday place — face, hair, build, exact wardrobe, place and light; never a character sheet, never a plain backdrop) so the user can generate it or attach their own photo. A character with "own_image": true uses the user's photo — keep its description and wardrobe exactly as they are  — from_attachment: when the user ATTACHED a photo or sheet of this character (in THIS message), give its number N (1 = first attached image, in order). The studio then uses the user's image itself as the character's reference image — never redesign or re-imagine that person; describe them exactly as in the image. When the user attaches characters, map EVERY attached image to an element (characters, or locations/props for places and objects); if two attachments look the same, still map both and say so
+  — prompt = the STAGE 1 natural portrait prompt (the studio makes the three-panel sheet from the chosen portrait afterwards); set "library" only when the user wants that BAE character
 - "locations": [{"tag","handle","name","kind":"location"|"prop","description","prompt","from_attachment":null|N}]  — full image prompt (LOCATION template, empty of people / PROP SHEET template)
 - "film_look": the shared FILM LOOK paragraph (write it with the first scenes; change it only when asked)
 - "scenes": [{"n","title","logline","duration_s","refs":["@char_…","@loc_…"],"blueprint":{...},"frame_prompt","prompt","dialogue":[{"n","who","at","line","delivery"}]}]  — logline = one line "what it does"; blueprint = the top-down blocking plan written FIRST (format: ${RL_BP_SCHEMA}); frame_prompt = the still-image prompt (Seedream 5.5) for the scene's first frame, using the tags ("the man @img1 sits…"); prompt = the full Seedance 2.5 prompt that continues from that first frame, following the DIRECTING structure; duration 4–15 s, ${set.aspect}
@@ -2656,7 +2674,7 @@ function rlVideoQuestion(userText){
 async function rlWriteElement(kind,base,instruction){
   const set=rlSet();
   const o=await rlAsk(`You write production assets for a Bank al Etihad reel (${set.aspect}, ${set.length} s).
-${kind==="character"?"Write a CHARACTER. The image prompt MUST follow this house template exactly, keeping every fixed sentence and replacing every [bracket] with specific, vivid detail:\n"+rlTpl("char"):kind==="prop"?"Write a PROP / PRODUCT. The image prompt MUST follow this house template exactly, keeping every fixed sentence and replacing every [bracket] with specific detail:\n"+rlTpl("prop"):"Write a LOCATION. The image prompt MUST follow this house template, replacing every [bracket] with specific detail (positions of walls, doors, windows and furniture included):\n"+rlTpl("loc")}
+${kind==="character"?"Write a CHARACTER.\n"+JO_PORTRAIT:kind==="prop"?"Write a PROP / PRODUCT. The image prompt MUST follow this house template exactly, keeping every fixed sentence and replacing every [bracket] with specific detail:\n"+rlTpl("prop"):"Write a LOCATION. The image prompt MUST follow this house template, replacing every [bracket] with specific detail (positions of walls, doors, windows and furniture included):\n"+rlTpl("loc")}
 ${RL_BAE}
 
 Reel so far: ${trimJSON({title:RL.title,idea:RL.picked,notes:RL.notes,script:RL.script},6000)}
@@ -2886,12 +2904,13 @@ function rlElCard(e,kind){
     ${e.err?`<p class="rl-status bad">${esc(e.err)}</p>`:""}
     <div class="rl-btns"><button class="btn small primary" type="button" data-rl="editdone" data-tag="${e.tag}">Done</button><button class="btn small" type="button" data-rl="remove" data-tag="${e.tag}">Remove</button></div></div>`;
   return `<div class="rl-item" dir="auto"><div class="rl-ihead"><span class="rl-tag" title="${esc(e.tag)}">${esc(rlLabel(e))}</span><b>${esc(e.name||"")}</b>${e.stale?`<span class="rl-pill warn" title="The prompt changed after this image was made">Changed</span>`:""}</div>
-    <div class="rl-media${busy||writing?" busy":""}" style="aspect-ratio:${isProp?"1 / 1":"16 / 9"}">${th?`<img src="${th}" alt="${esc(e.name||"")}" data-zoom="${esc(img)}">`:`<span class="ph">${busy||writing?"":img?"Loading image…":"No image yet"}</span>`}${busy?`<span class="rl-busy">${e._note||"Generating…"}</span>`:writing?`<span class="rl-busy">Claude is writing…</span>`:""}</div>
+    <div class="rl-media${busy||writing?" busy":""}" style="aspect-ratio:${isProp?"1 / 1":kind==="c"&&e.stage==="portrait"?"3 / 4":"16 / 9"}">${th?`<img src="${th}" alt="${esc(e.name||"")}" data-zoom="${esc(img)}">`:`<span class="ph">${busy||writing?"":img?"Loading image…":"No image yet"}</span>`}${busy?`<span class="rl-busy">${e._note||"Generating…"}</span>`:writing?`<span class="rl-busy">Claude is writing…</span>`:""}</div>
     <p>${esc(e.description||e.role||"")}</p>
     ${e.status==="paused"?`<p class="rl-status">Still generating in Magnific — it appears here when it's done.</p>`:""}
     ${e.fromUser&&e.id?`<p class="rl-status">✓ Your image — used as ${esc(e.handle||e.tag)} in every first frame and shot.</p>`:""}
     ${e.fromLib?`<p class="rl-status${e.id?"":" bad"}">${e.id?"BAE character from your Magnific library":"Link your Magnific library first (Photography → References → Link library), so this character can be attached."}</p>`:""}
-    <div class="rl-btns">${e.fromLib?"":`<button class="btn small${e.id&&!e.stale?"":" primary"}" type="button" data-rl="gen" data-tag="${e.tag}" ${busy||writing||!e.prompt?"disabled":""}>${busy?(e._note?"Uploading…":"Generating…"):e.fromUser?"Generate instead":e.id?"Regenerate":"Generate image"}</button><label class="btn small rl-own" ${busy?'aria-disabled="true"':""}>${e.fromUser?"Replace my image":"Use my image"}<input type="file" accept="image/*" class="sr" data-rl-own="${esc(e.tag)}" ${busy?"disabled":""}></label>`}<button class="btn small" type="button" data-rl="edit" data-tag="${e.tag}">Edit</button>${e.web?`<a class="btn small" href="${esc(e.web)}" target="_blank" rel="noopener">Magnific</a>`:""}<span class="rl-sp"></span>${rlRate(kind==="c"?"character":e.kind||"location","el:"+e.tag+":"+(e.id||"p"),`${e.name}: ${e.description||""} | ${String(e.prompt||"").slice(0,600)}`)}</div>
+    ${kind==="c"&&e.id&&e.stage==="portrait"&&!busy?`<p class="rl-status ux-keep">Step 1 of 2 — this is the portrait. Happy with the face? Turn it into the character sheet. Not yet? Generate another.</p>`:""}${kind==="c"&&e.stage==="sheet"&&!busy?`<p class="rl-status ux-keep">✓ Character sheet made from the chosen portrait.</p>`:""}
+    <div class="rl-btns">${kind==="c"&&e.id&&(e.stage==="portrait"||(e.fromUser&&e.stage!=="sheet"))&&!e.fromLib?`<button class="btn small primary" type="button" data-ux="sheet" data-tag="${e.tag}" ${busy||writing?"disabled":""}>Make character sheet</button>`:""}${e.fromLib?"":`<button class="btn small${e.id&&!e.stale?"":" primary"}" type="button" data-rl="gen" data-tag="${e.tag}" ${busy||writing||!e.prompt?"disabled":""}>${busy?(e._note?"Working…":"Generating…"):e.fromUser?"Generate instead":e.id?(kind==="c"&&!rlIsSheetPrompt(e.prompt)?"Another portrait":"Regenerate"):(kind==="c"&&!rlIsSheetPrompt(e.prompt)?"Generate portrait":"Generate image")}</button><label class="btn small rl-own" ${busy?'aria-disabled="true"':""}>${e.fromUser?"Replace my image":"Use my image"}<input type="file" accept="image/*" class="sr" data-rl-own="${esc(e.tag)}" ${busy?"disabled":""}></label>`}<button class="btn small" type="button" data-rl="edit" data-tag="${e.tag}">Edit</button>${e.web?`<a class="btn small" href="${esc(e.web)}" target="_blank" rel="noopener">Magnific</a>`:""}<span class="rl-sp"></span>${rlRate(kind==="c"?"character":e.kind||"location","el:"+e.tag+":"+(e.id||"p"),`${e.name}: ${e.description||""} | ${String(e.prompt||"").slice(0,600)}`)}</div>
     ${e.fromLib?"":`<form class="rl-revise" data-revise="${e.tag}"><input class="rl-field" name="q" placeholder="Ask for a change… e.g. older, navy blazer" aria-label="Ask Claude to change ${esc(e.name||"")}" dir="auto"><button class="a-btn" type="submit" ${writing?"disabled":""}>Revise</button></form>`}
     ${e.err?`<p class="rl-status bad">${esc(e.err)}</p>`:""}</div>`;
 }
@@ -3687,11 +3706,24 @@ async function rlGenElement(tag){
   if(!S.connected) await connect(true);
   e.status="run"; e.err=null; e._live=true; rlBoard();
   const isLoc=RL.locations.includes(e)&&e.kind!=="prop";
-  const sendPrompt=isLoc||/plain gr[ae]y clean background/i.test(e.prompt)?e.prompt:`${e.prompt}\nBackground: plain gray clean background — seamless flat matte mid-grey, no gradient, no texture, no floor line, no shadows on the backdrop.`;
-  try{ const out=await rlJob(()=>rlImage({prompt:sendPrompt,aspect:"16:9",label:"reference image",onQueued:(id,web)=>{ e.pending=id; e.web=web||e.web; rlFlush(); }})); Object.assign(e,{id:out.id,web:out.web,status:"ok",stale:false}); delete e.pending; delete e.seen;
+  const isChar=RL.characters.includes(e), portrait=isChar&&!rlIsSheetPrompt(e.prompt);
+  const sendPrompt=isLoc||portrait||/plain gr[ae]y clean background/i.test(e.prompt)?e.prompt:`${e.prompt}\nBackground: plain gray clean background — seamless flat matte mid-grey, no gradient, no texture, no floor line, no shadows on the backdrop.`;
+  try{ const out=await rlJob(()=>rlImage({prompt:sendPrompt,aspect:portrait?"3:4":"16:9",label:portrait?"portrait":"reference image",onQueued:(id,web)=>{ e.pending=id; e.web=web||e.web; rlFlush(); }})); Object.assign(e,{id:out.id,web:out.web,status:"ok",stale:false}); delete e.pending; delete e.seen; if(isChar){ e.stage=portrait?"portrait":"sheet"; if(portrait){ e.portraitId=out.id; } }
     rlEvent(`A new image of ${e.handle} (${e.name||""}) was generated.`); setTimeout(()=>rlSee(e,`the reference image of ${rlKind(e)} ${e.handle} "${e.name||""}"`,e.prompt),1500); }
   catch(err){ if(e.pending&&rlTransient(err)){ e.status="paused"; e.err=null; } else { e.status="err"; e.err=mcpCopy(err); delete e.pending; } }
   finally{ delete e._live; }
+  rlSave(); rlBoard();
+}
+async function rlGenSheet(tag){
+  const e=rlElByTag(tag); if(!e||!mcp||!sample||e.status==="run") return; const src=e.portraitId||e.id; if(!src) return;
+  if(!S.connected) await connect(true);
+  e.status="run"; e.err=null; e._live=true; e._note="Making the character sheet…"; rlBoard();
+  try{ const prompt=rlSheetPrompt2(e);
+    const out=await rlJob(()=>rlImage({prompt,aspect:"16:9",refs:[{id:src,tag:e.handle,name:e.name||"the character"}],label:"character sheet",onQueued:(id,web)=>{ e.pending=id; rlFlush(); }}));
+    Object.assign(e,{portraitId:src,id:out.id,web:out.web,status:"ok",stale:false,stage:"sheet",sheetPrompt:prompt}); delete e.pending; delete e.seen;
+    rlEvent(`The character sheet of ${e.handle} (${e.name||""}) was made from the chosen portrait.`); }
+  catch(err){ if(e.pending&&rlTransient(err)){ e.status="paused"; e.err=null; } else { e.status="err"; e.err=mcpCopy(err); delete e.pending; } }
+  finally{ delete e._live; delete e._note; }
   rlSave(); rlBoard();
 }
 async function rlGenFrame(n){
@@ -4075,6 +4107,7 @@ function uxNextStep(){
     if(work(list)) return {label:"Preparing the images…",busy:true};
     const m=miss(list); if(m.length) return {label:`Generate the missing images (${m.length})`,gen:code,cost:{k:"image",n:m.length}};
     if(list.some(x=>!x.id&&!x.fromLib)) return {label:"Open the images",view:stage};
+    if(stage==="characters"&&list.some(x=>x.id&&x.stage==="portrait")) return {label:"Choose the portraits · make the character sheets",view:"characters"};
     return list.length?{label:okLabel,say,free:true}:null; }
   if(RL.stage==="directing"){ if(!RL.scenes.length) return null;
     const sc=RL.scenes.find(s=>s.status!=="done"); if(!sc) return {label:"All scenes are filmed · deliver",view:"render"};
@@ -4249,17 +4282,16 @@ function uxSizesHTML(){ const cur=rlSet().aspect; return `<section class="rl-car
 /* ---------- Prompt Generator: a ready prompt only, for a character, a place or a prop ---------- */
 const UXPG={kind:"character",gender:"",age:"",busy:false,out:null,err:null,text:""};
 async function uxPGRun(){
-  const kind=UXPG.kind, tpl=kind==="character"?rlTpl("char"):kind==="prop"?rlTpl("prop"):rlTpl("loc");
-  const who=kind==="character"?[UXPG.gender,UXPG.age].filter(Boolean).join(", "):"";
-  return await rlAsk(`You write ONE image-generation prompt for Bank al Etihad (Jordan) productions, for Seedream 5.5 at 2K. The user only wants the prompt.
-${kind==="character"?"Write a CHARACTER sheet prompt.":kind==="prop"?"Write a PROP / PRODUCT sheet prompt.":"Write a LOCATION prompt (an empty establishing image of the place)."} The prompt MUST follow this house template exactly, keeping every fixed sentence and replacing every [bracket] with specific, vivid, concrete detail:
-${tpl}
-${RL_BAE}
-${kind==="character"?JO_FACE:kind==="location"?JO_PLACE+"\nFor an interior, keep the same world: stone or terrazzo floors, large windows with that clear light, contemporary furniture; say where the walls, doors, windows and main furniture are. No people in the image.":"PROPS: one object, exact material, colour, size and markings; any text on it spelled exactly; real brand logos only when the user names them."}
+  const kind=UXPG.kind, who=kind==="character"?[UXPG.gender,UXPG.age].filter(Boolean).join(", "):"";
+  const o=await rlAsk(`You write ONE image-generation prompt for Bank al Etihad (Jordan) productions, for Seedream 5.5 at 2K. The user only wants the prompt.
+${kind==="character"?JO_PORTRAIT+"\n"+JO_FACE:kind==="prop"?"Write a PROP / PRODUCT sheet prompt. The prompt MUST follow this house template exactly, keeping every fixed sentence and replacing every [bracket] with specific detail:\n"+rlTpl("prop")+"\nPROPS: one object, exact material, colour, size and markings; any text on it spelled exactly; real brand logos only when the user names them.":"Write a LOCATION prompt (an empty establishing image of the place). The prompt MUST follow this house template, replacing every [bracket] with specific detail:\n"+rlTpl("loc")+"\n"+JO_PLACE+"\nFor an interior, keep the same world: stone or terrazzo floors, large windows with that clear light, contemporary furniture; say where the walls, doors, windows and main furniture are. No people in the image."}
+${kind==="character"?"":RL_BAE}
 USER REQUEST (any language; the prompt itself is in English): ${UXPG.text||"(nothing written — invent a good, typical one)"}
 ${who?`MUST BE: ${who}.`:""}
-Fill every choice the user left open with one specific, believable value. Never copy a real person's face.
+${kind==="character"?"Use exactly the outfit the user describes; if they describe none, choose ordinary modern casual clothes. ":""}Fill every choice the user left open with one specific, believable value. Never copy a real person's face.
 Reply with only JSON: {"title":"a short English name for it","prompt":"the complete prompt, ready to paste","note":"one short sentence in the user's language saying what you chose"}`,{modelTier:"default",cache:false});
+  if(o&&kind==="character") o.sheet=rlSheetPrompt2({name:"",description:"",wardrobe:""});
+  return o;
 }
 function uxPGHTML(){
   const seg=(key,opts)=>`<div class="a-seg" role="group">${opts.map(([v,l])=>`<button type="button" data-pg="${key}" data-v="${v}" aria-pressed="${UXPG[key]===v}">${l}</button>`).join("")}</div>`;
@@ -4271,13 +4303,14 @@ function uxPGHTML(){
     <label class="lbl" for="uxPgText">Description</label><textarea id="uxPgText" rows="3" dir="auto" placeholder="${ph}">${esc(UXPG.text)}</textarea>
     <div class="rl-btns"><button type="button" class="btn" data-pg="go" ${UXPG.busy?"disabled":""}>${UXPG.busy?"Writing the prompt…":UXPG.out?"Write another":"Write the prompt"}</button></div>
     ${UXPG.err?`<p class="rl-status err" role="alert">${esc(UXPG.err)}</p>`:""}
-    ${UXPG.out?`<div class="res"><div class="hd"><b dir="auto" data-noi18n>${esc(UXPG.out.title||"Prompt")}</b><button type="button" class="btn small" data-pg="copy">Copy prompt</button></div>${UXPG.out.note?`<p class="t12 muted" dir="auto" data-noi18n>${esc(UXPG.out.note)}</p>`:""}<pre class="rl-prompt" dir="ltr" data-noi18n>${esc(UXPG.out.prompt||"")}</pre></div>`:""}</div>`;
+    ${UXPG.out?`<div class="res"><div class="hd"><b dir="auto" data-noi18n>${esc(UXPG.out.title||"Prompt")}</b><button type="button" class="btn small" data-pg="copy">Copy prompt</button></div>${UXPG.out.note?`<p class="t12 muted" dir="auto" data-noi18n>${esc(UXPG.out.note)}</p>`:""}${UXPG.out.sheet?`<b class="t12">1 · Portrait prompt</b>`:""}<pre class="rl-prompt" dir="ltr" data-noi18n>${esc(UXPG.out.prompt||"")}</pre>${UXPG.out.sheet?`<div class="hd" style="margin-top:8px"><b class="t12">2 · Character sheet prompt — attach the portrait you chose as the reference image</b><button type="button" class="btn small" data-pg="copy2">Copy</button></div><pre class="rl-prompt" dir="ltr" data-noi18n id="uxPgSheet">${esc(UXPG.out.sheet)}</pre>`:""}</div>`:""}</div>`;
 }
 function uxPGDraw(){ let w=document.querySelector(".ux-pg"); if(!w){ w=document.createElement("div"); w.className="ux-pg"; $("reels").appendChild(w); uxPGWire(w); } const t=w.querySelector("#uxPgText"); if(t) UXPG.text=t.value; w.innerHTML=uxPGHTML(); uxT(w); }
 function uxPGWire(w){
   w.addEventListener("click",async e=>{ if(e.target===w){ w.remove(); return; } const b=e.target.closest("[data-pg]"); if(!b) return; const a=b.dataset.pg;
     if(a==="close"){ w.remove(); return; }
     if(a==="kind"||a==="gender"||a==="age"){ UXPG[a]=b.dataset.v; if(a==="kind"){ UXPG.out=null; UXPG.err=null; } uxPGDraw(); return; }
+    if(a==="copy2"){ try{ await navigator.clipboard.writeText(UXPG.out?.sheet||""); b.textContent="Copied ✓"; }catch{ b.textContent="Select the text and copy"; } return; }
     if(a==="copy"){ try{ await navigator.clipboard.writeText(UXPG.out?.prompt||""); b.textContent="Copied ✓"; }catch{ const pre=w.querySelector("pre"); const r=document.createRange(); r.selectNodeContents(pre); const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r); b.textContent="Selected — press copy"; } return; }
     if(a==="go"&&!UXPG.busy){ UXPG.text=w.querySelector("#uxPgText")?.value.trim()||""; UXPG.busy=true; UXPG.err=null; uxPGDraw();
       try{ const o=await uxPGRun(); if(!o?.prompt) throw {code:"invalid_json"}; UXPG.out=o; }catch(err){ UXPG.err=sampleCopy(err); }
@@ -4298,6 +4331,7 @@ function uxInit(){
     else if(a==="unspeak"){ const sc=RL.scenes.find(x=>+x.n===+b.dataset.n); if(sc?.clipOrig){ Object.assign(sc,sc.clipOrig); delete sc.clipOrig; delete sc._src; sc.note=null; rlLoadVideo(sc,sc.clip).finally(()=>{ rlSave(); rlBoard(); }); } }
     else if(a==="resize"){ b.disabled=true; uxResize(b.dataset.a); }
     else if(a==="sbstyleoff"){ RL.sbStyle=null; rlSave(); rlBoard(); }
+    else if(a==="sheet") rlGenSheet(b.dataset.tag);
   });
   R.addEventListener("change",async e=>{ const f=e.target.matches?.("[data-ux-sbstyle]")&&e.target.files?.[0]; if(!f||!RL) return;
     RL._sbUp=true; rlBoard(); try{ const up=await rlUploadMag(f,f.name||"storyboard-style"); const id=typeof up==="string"?up:(up?.id||up?.identifier); if(id){ RL.sbStyle={id,name:f.name||"style"}; rlEvent("A storyboard style reference was added."); } }catch(err){ rlSys("Couldn't upload the style image: "+String(err?.message||err?.code||err).slice(0,160)); } finally{ delete RL._sbUp; rlSave(); rlBoard(); } });
