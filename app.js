@@ -3922,8 +3922,8 @@ const UX_AR_RE=[
 [/^Edited (.+)$/,m=>`آخر تعديل ${m[1]}`]
 ];
 /*END*/
-const UX={lang:"ar",level:"simple",dict:null,costV:new Map(),costP:new Map(),autoN:0};
-try{ UX.lang=localStorage.getItem("bae_ui_lang")||"ar"; UX.level=localStorage.getItem("bae_ui_level")||"simple"; }catch{}
+const UX={lang:"en",level:"simple",dict:null,costV:new Map(),costP:new Map(),autoN:0};
+try{ UX.lang=localStorage.getItem("bae_ui_lang2")||"en"; UX.level=localStorage.getItem("bae_ui_level")||"simple"; }catch{}
 const UX_GROUPS=[["story","Story",["idea","script"]],["images","Images",["characters","locations"]],["scenes","Scenes",["directing"]],["video","Video",["render"]]];
 const UX_SUB={idea:"Idea",script:"Script",characters:"Cast",locations:"Places & props"};
 function uxApply(){
@@ -4155,11 +4155,11 @@ function uxSizesHTML(){ const cur=rlSet().aspect; return `<section class="rl-car
 function uxInit(){
   const R=$("reels"); if(!R) return;
   document.querySelectorAll("[data-uxlevel]").forEach(b=>b.onclick=()=>{ UX.level=b.dataset.uxlevel; try{ localStorage.setItem("bae_ui_level",UX.level); }catch{} uxApply(); });
-  const sel=$("uxLang"); if(sel) sel.onchange=()=>{ UX.lang=sel.value; try{ localStorage.setItem("bae_ui_lang",UX.lang); }catch{} uxApply(); if(RL) rlRender(); };
+  const sel=$("uxLang"); if(sel) sel.onchange=()=>{ UX.lang=sel.value; try{ localStorage.setItem("bae_ui_lang2",UX.lang); }catch{} uxApply(); if(RL) rlRender(); };
   R.addEventListener("change",e=>{ if(e.target.id==="uxAuto"&&RL){ RL.auto=e.target.checked; UX.autoN=0; rlSave(); uxRenderNext(); if(RL.auto) uxAutoStep(); } });
   R.addEventListener("click",e=>{ const b=e.target.closest("[data-ux]"); if(!b||!RL) return; const a=b.dataset.ux;
     if(a==="next"){ UX.autoN=0; uxDoNext(uxNextStep(),false); }
-    else if(a==="tpl"){ const t=UX_TPL[+b.dataset.i]; const i=$("rlInput"); i.value=t[2][UX.lang==="ar"?1:0]; i.dispatchEvent(new Event("input",{bubbles:true})); i.focus(); const m=i.value.indexOf("["); if(m>=0) i.setSelectionRange(m,i.value.indexOf("]",m)+1); }
+    else if(a==="tpl"){ const t=UX_TPL[+b.dataset.i]; const i=$("rlInput"); i.value=t[2][1]; i.dispatchEvent(new Event("input",{bubbles:true})); i.focus(); const m=i.value.indexOf("["); if(m>=0) i.setSelectionRange(m,i.value.indexOf("]",m)+1); }
     else if(a==="animatic") uxAnimatic();
     else if(a==="speak") uxSpeak(b.dataset.n,b);
     else if(a==="unspeak"){ const sc=RL.scenes.find(x=>+x.n===+b.dataset.n); if(sc?.clipOrig){ Object.assign(sc,sc.clipOrig); delete sc.clipOrig; delete sc._src; sc.note=null; rlLoadVideo(sc,sc.clip).finally(()=>{ rlSave(); rlBoard(); }); } }
