@@ -4389,8 +4389,29 @@ async function uxResize(aspect){
 function uxSizesHTML(){ const cur=rlSet().aspect; return `<section class="rl-card" style="padding:16px"><b>Other sizes</b><p class="muted" style="margin:6px 0 12px">Makes a copy of this reel in another format. Cast, places, script and voices come along; the scenes are generated again in the new size.</p><div class="rl-btns">${["9:16","1:1","4:5","16:9"].filter(a=>a!==cur).map(a=>`<button class="btn small" type="button" data-ux="resize" data-a="${a}">${a}</button>`).join("")}</div></section>`; }
 
 /* ---------- Prompt Generator: a ready prompt only, for a character, a place or a prop ---------- */
-const UXPG={kind:"character",gender:"",age:"",busy:false,out:null,err:null,text:""};
+const UXPG={kind:"character",gender:"",age:"",busy:false,out:null,err:null,text:"",file:null,fileUrl:"",gen:null,genBusy:"",saveName:""};
+async function uxPGSheetRun(){
+  if(!UXPG.file) throw {message:"Choose the photo first."};
+  const small=await toJpeg(UXPG.file,1400);
+  const o=await rlAsk(`Look at this photo of ONE person. It will be turned into a three-panel character sheet, so describe exactly what is visible, nothing invented.
+Reply with only JSON: {"title":"a short English label, e.g. 'Man, 30s, leather jacket'","person":"one sentence: man / woman / boy / girl, approximate age, face shape, skin tone, eyes, eyebrows, hair (colour, length, how it falls), facial hair, build","wardrobe":"every visible garment with colour, fabric and fit, top to bottom; jewellery or watch if visible","note":"one short sentence in the user's language saying what you saw"}
+${UXPG.text?`The user adds: ${UXPG.text}`:""}`,{images:[small],modelTier:"default",cache:false});
+  if(!o?.person) throw {code:"invalid_json"};
+  return {title:o.title||"Character sheet",note:o.note||"",prompt:rlSheetPrompt2({name:"",description:o.person,wardrobe:o.wardrobe||""}),fromPhoto:true};
+}
+/* make the sheet right here: the photo goes to Magnific as the identity reference, Seedream draws the three panels */
+async function uxPGSheetMake(){
+  if(!UXPG.out?.prompt||!UXPG.file||UXPG.genBusy) return; UXPG.err=null;
+  try{ UXPG.genBusy="Sending your photo to Magnific…"; uxPGDraw(); if(!S.connected) await connect(true);
+    const up=await rlUploadMag(UXPG.file,"character-photo"); if(!up?.id) throw {message:"Magnific returned no identifier for the photo."};
+    UXPG.genBusy="Seedream 5.5 is drawing the character sheet · 2K…"; uxPGDraw();
+    const out=await rlImage({prompt:UXPG.out.prompt,aspect:"16:9",refs:[{id:up.id,tag:"@character",name:"the character"}],label:"character sheet"});
+    const blob=await rlFullImage(out.id).catch(()=>null); UXPG.gen={id:out.id,web:out.web||null,blob,url:blob?URL.createObjectURL(blob):rlTGet(out.id)||""}; }
+  catch(e){ UXPG.err=mcpCopy(e); }
+  UXPG.genBusy=""; if(document.querySelector(".ux-pg")) uxPGDraw();
+}
 async function uxPGRun(){
+  if(UXPG.kind==="sheet") return await uxPGSheetRun();
   const kind=UXPG.kind, who=kind==="character"?[UXPG.gender,UXPG.age].filter(Boolean).join(", "):"";
   const o=await rlAsk(`You write ONE image-generation prompt for Bank al Etihad (Jordan) productions, for Seedream 5.5 at 2K. The user only wants the prompt.
 ${kind==="character"?JO_PORTRAIT+"\n"+JO_FACE:kind==="prop"?"Write a PROP / PRODUCT sheet prompt. The prompt MUST follow this house template exactly, keeping every fixed sentence and replacing every [bracket] with specific detail:\n"+rlTpl("prop")+"\nPROPS: one object, exact material, colour, size and markings; any text on it spelled exactly; real brand logos only when the user names them.":"Write a LOCATION prompt (an empty establishing image of the place). The prompt MUST follow this house template, replacing every [bracket] with specific detail:\n"+rlTpl("loc")+"\n"+JO_PLACE+"\nFor an interior, keep the same world: stone or terrazzo floors, large windows with that clear light, contemporary furniture; say where the walls, doors, windows and main furniture are. No people in the image."}
@@ -4404,26 +4425,32 @@ Reply with only JSON: {"title":"a short English name for it","prompt":"the compl
 }
 function uxPGHTML(){
   const seg=(key,opts)=>`<div class="a-seg" role="group">${opts.map(([v,l])=>`<button type="button" data-pg="${key}" data-v="${v}" aria-pressed="${UXPG[key]===v}">${l}</button>`).join("")}</div>`;
-  const ph=UXPG.kind==="character"?"e.g. a bank employee in her thirties, friendly, navy blazer":UXPG.kind==="prop"?"e.g. an orange leather wallet with a small logo":"e.g. a modern living room in Amman, afternoon light";
+  const ph=UXPG.kind==="sheet"?"e.g. keep the leather jacket, add white sneakers":UXPG.kind==="character"?"e.g. a bank employee in her thirties, friendly, navy blazer":UXPG.kind==="prop"?"e.g. an orange leather wallet with a small logo":"e.g. a modern living room in Amman, afternoon light";
   return `<div class="ux-pgbox" role="dialog" aria-label="Prompt Generator"><div class="hd"><b>Prompt Generator</b><button type="button" class="a-btn" data-pg="close">Close</button></div>
     <p class="muted">Describe what you need in your own words. You get a ready prompt to copy — nothing is generated and no credits are spent.</p>
-    ${seg("kind",[["character","Character"],["location","Place"],["prop","Prop"]])}
+    ${seg("kind",[["character","Character"],["sheet","Sheet from my photo"],["location","Place"],["prop","Prop"]])}
+    ${UXPG.kind==="sheet"?`<div class="pg-photo"><label class="btn small">${UXPG.file?"Change photo":"Choose the photo"}<input type="file" accept="image/*" class="sr" data-pgfile></label>${UXPG.fileUrl?`<img src="${UXPG.fileUrl}" alt="Your photo">`:`<span class="t12 muted">The portrait you chose. Claude looks at it and writes the three-panel character sheet prompt for that exact person.</span>`}</div>`:""}
     ${UXPG.kind==="character"?`<div class="row">${seg("gender",[["","Any"],["man","Man"],["woman","Woman"]])}${seg("age",[["","Any age"],["child under 12","Child"],["teenager 13-17","Teen"],["young adult 18-35","Young"],["middle-aged 36-59","Middle-aged"],["elderly 60+","Elderly"]])}</div>`:""}
-    <label class="lbl" for="uxPgText">Description</label><textarea id="uxPgText" rows="3" dir="auto" placeholder="${ph}">${esc(UXPG.text)}</textarea>
+    <label class="lbl" for="uxPgText">${UXPG.kind==="sheet"?"Notes (optional)":"Description"}</label><textarea id="uxPgText" rows="3" dir="auto" placeholder="${ph}">${esc(UXPG.text)}</textarea>
     <div class="rl-btns"><button type="button" class="btn" data-pg="go" ${UXPG.busy?"disabled":""}>${UXPG.busy?"Writing the prompt…":UXPG.out?"Write another":"Write the prompt"}</button></div>
     ${UXPG.err?`<p class="rl-status err" role="alert">${esc(UXPG.err)}</p>`:""}
-    ${UXPG.out?`<div class="res"><div class="hd"><b dir="auto" data-noi18n>${esc(UXPG.out.title||"Prompt")}</b><button type="button" class="btn small" data-pg="copy">Copy prompt</button></div>${UXPG.out.note?`<p class="t12 muted" dir="auto" data-noi18n>${esc(UXPG.out.note)}</p>`:""}${UXPG.out.sheet?`<b class="t12">1 · Portrait prompt</b>`:""}<pre class="rl-prompt" dir="ltr" data-noi18n>${esc(UXPG.out.prompt||"")}</pre>${UXPG.out.sheet?`<div class="hd" style="margin-top:8px"><b class="t12">2 · Character sheet prompt — attach the portrait you chose as the reference image</b><button type="button" class="btn small" data-pg="copy2">Copy</button></div><pre class="rl-prompt" dir="ltr" data-noi18n id="uxPgSheet">${esc(UXPG.out.sheet)}</pre>`:""}</div>`:""}</div>`;
+    ${UXPG.out?`<div class="res"><div class="hd"><b dir="auto" data-noi18n>${esc(UXPG.out.title||"Prompt")}</b><button type="button" class="btn small" data-pg="copy">Copy prompt</button></div>${UXPG.out.note?`<p class="t12 muted" dir="auto" data-noi18n>${esc(UXPG.out.note)}</p>`:""}${UXPG.out.sheet?`<b class="t12">1 · Portrait prompt</b>`:""}<pre class="rl-prompt" dir="ltr" data-noi18n>${esc(UXPG.out.prompt||"")}</pre>${UXPG.out.fromPhoto?`<p class="t12 muted">In Magnific: attach the same photo as the reference image, 16:9, then paste this prompt. Or let the studio do it:</p><div class="rl-btns"><button type="button" class="btn primary small" data-pg="make" ${UXPG.genBusy?"disabled":""}>${UXPG.genBusy?esc(UXPG.genBusy):UXPG.gen?"Make another sheet":"Make the sheet now"}</button><span class="ux-cost" data-uxcost='{"k":"image","n":1}'></span></div>${UXPG.gen?`<div class="pg-gen">${UXPG.gen.url?`<img src="${UXPG.gen.url}" alt="Character sheet">`:`<p class="t12 muted">The sheet is in your Magnific.</p>`}<div class="rl-btns">${UXPG.gen.blob?`<button type="button" class="btn small" data-pg="dlgen">Download</button>`:""}${UXPG.gen.web?`<a class="btn small" href="${esc(UXPG.gen.web)}" target="_blank" rel="noopener">Open in Magnific</a>`:""}${UXPG.gen.blob&&CL.canEdit?`<input class="rl-field" id="uxPgName" dir="auto" placeholder="Name — e.g. Ali / علي" value="${esc(UXPG.saveName)}" aria-label="Character name"><button type="button" class="btn small" data-pg="savegen">Save to library</button>`:""}</div></div>`:""}`:""}${UXPG.out.sheet?`<div class="hd" style="margin-top:8px"><b class="t12">2 · Character sheet prompt — attach the portrait you chose as the reference image</b><button type="button" class="btn small" data-pg="copy2">Copy</button></div><pre class="rl-prompt" dir="ltr" data-noi18n id="uxPgSheet">${esc(UXPG.out.sheet)}</pre>`:""}</div>`:""}</div>`;
 }
-function uxPGDraw(){ let w=document.querySelector(".ux-pg"); if(!w){ w=document.createElement("div"); w.className="ux-pg"; $("reels").appendChild(w); uxPGWire(w); } const t=w.querySelector("#uxPgText"); if(t) UXPG.text=t.value; w.innerHTML=uxPGHTML(); uxT(w); }
+function uxPGDraw(){ let w=document.querySelector(".ux-pg"); if(!w){ w=document.createElement("div"); w.className="ux-pg"; $("reels").appendChild(w); uxPGWire(w); clLoad().catch(()=>{}); } const t=w.querySelector("#uxPgText"); if(t) UXPG.text=t.value; const nm=w.querySelector("#uxPgName"); if(nm) UXPG.saveName=nm.value; w.innerHTML=uxPGHTML(); uxT(w); uxCostFillAny(w); }
+function uxCostFillAny(root){ root.querySelectorAll("[data-uxcost]").forEach(el=>{ let c; try{ c=JSON.parse(el.dataset.uxcost); }catch{ return; } uxCost(c).then(v=>{ if(v&&el.isConnected) el.textContent=uxCostText(v); }).catch(()=>{}); }); }
 function uxPGWire(w){
   w.addEventListener("click",async e=>{ if(e.target===w){ w.remove(); return; } const b=e.target.closest("[data-pg]"); if(!b) return; const a=b.dataset.pg;
     if(a==="close"){ w.remove(); return; }
-    if(a==="kind"||a==="gender"||a==="age"){ UXPG[a]=b.dataset.v; if(a==="kind"){ UXPG.out=null; UXPG.err=null; } uxPGDraw(); return; }
+    if(a==="kind"||a==="gender"||a==="age"){ UXPG[a]=b.dataset.v; if(a==="kind"){ UXPG.out=null; UXPG.err=null; UXPG.gen=null; } uxPGDraw(); return; }
+    if(a==="make"){ uxPGSheetMake(); return; }
+    if(a==="dlgen"){ if(UXPG.gen?.blob) uxSaveBlob(UXPG.gen.blob,"BAE character sheet "+(UXPG.out?.title||"")).catch(()=>{}); return; }
+    if(a==="savegen"){ const nm=(w.querySelector("#uxPgName")?.value||"").trim(); if(!nm){ w.querySelector("#uxPgName")?.focus(); return; } b.disabled=true; b.textContent="Saving…"; try{ await clLoad(); await clAdd(UXPG.gen.blob,nm,""); b.textContent="Saved to library ✓"; }catch(err){ b.disabled=false; b.textContent="Save to library"; UXPG.err="Couldn't save to the library: "+String(err?.message||err?.code||err).slice(0,140); uxPGDraw(); } return; }
     if(a==="copy2"){ try{ await navigator.clipboard.writeText(UXPG.out?.sheet||""); b.textContent="Copied ✓"; }catch{ b.textContent="Select the text and copy"; } return; }
     if(a==="copy"){ try{ await navigator.clipboard.writeText(UXPG.out?.prompt||""); b.textContent="Copied ✓"; }catch{ const pre=w.querySelector("pre"); const r=document.createRange(); r.selectNodeContents(pre); const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r); b.textContent="Selected — press copy"; } return; }
     if(a==="go"&&!UXPG.busy){ UXPG.text=w.querySelector("#uxPgText")?.value.trim()||""; UXPG.busy=true; UXPG.err=null; uxPGDraw();
-      try{ const o=await uxPGRun(); if(!o?.prompt) throw {code:"invalid_json"}; UXPG.out=o; }catch(err){ UXPG.err=sampleCopy(err); }
+      try{ const o=await uxPGRun(); if(!o?.prompt) throw {code:"invalid_json"}; UXPG.out=o; UXPG.gen=null; }catch(err){ UXPG.err=err?.message&&!err.code?err.message:sampleCopy(err); }
       UXPG.busy=false; if(document.querySelector(".ux-pg")) uxPGDraw(); } });
+  w.addEventListener("change",e=>{ const f=e.target.matches?.("[data-pgfile]")&&e.target.files?.[0]; if(!f) return; if(UXPG.fileUrl) URL.revokeObjectURL(UXPG.fileUrl); UXPG.file=f; UXPG.fileUrl=URL.createObjectURL(f); UXPG.out=null; UXPG.gen=null; UXPG.err=null; uxPGDraw(); });
   w.addEventListener("keydown",e=>{ if(e.key==="Escape") w.remove(); });
 }
 /* ---------- wiring ---------- */
