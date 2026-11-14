@@ -284,19 +284,19 @@ async function hostFile(args, env, request) {
   if (!env.UPLOADS) return toolError("The UPLOADS Durable Object is not configured on the worker.");
   if (args.host_id || (+args.bytes > 0)) return hostPart(args, env, request);
   const mime = String(args.mime || "image/jpeg");
-  if (!/^(image|video)\//.test(mime)) return toolError("Only images or videos.");
+  if (!/^(image|video|audio)\//.test(mime)) return toolError("Only images, videos or audio.");
   const b64s = String(args.data || "");
   const bytes = typeof Uint8Array.fromBase64 === "function" ? Uint8Array.fromBase64(b64s) : new Uint8Array(Buffer.from(b64s, "base64"));
   if (!bytes.byteLength || bytes.byteLength > 1900000) return toolError("The file must be under ~1.9 MB.");
   const id = "hf_" + crypto.randomUUID().replace(/-/g, "");
   const r = await store(env, id).fetch("https://do/file", { method: "PUT", headers: { "content-type": mime }, body: bytes });
   if (!r.ok) return toolError(`Could not keep the file (${r.status}).`);
-  const ext = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "video/mp4": ".mp4" }[mime] || "";
+  const ext = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "video/mp4": ".mp4", "audio/wav": ".wav", "audio/mpeg": ".mp3" }[mime] || "";
   const u = new URL(request.url); const link = `${u.origin}/f/${id}${ext}`;
   return { content: [{ type: "text", text: JSON.stringify({ url: link, expires_in_hours: 24 }) }], structuredContent: { url: link, expires_in_hours: 24 } };
 }
 
-const EXT = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/heic": ".heic", "image/tiff": ".tif", "video/mp4": ".mp4", "video/quicktime": ".mov", "video/webm": ".webm" };
+const EXT = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/heic": ".heic", "image/tiff": ".tif", "video/mp4": ".mp4", "video/quicktime": ".mov", "video/webm": ".webm", "audio/wav": ".wav", "audio/mpeg": ".mp3", "audio/mp4": ".m4a" };
 async function hostPart(args, env, request) {
   const b64s = String(args.data || "");
   const piece = typeof Uint8Array.fromBase64 === "function" ? Uint8Array.fromBase64(b64s) : new Uint8Array(Buffer.from(b64s, "base64"));
@@ -304,7 +304,7 @@ async function hostPart(args, env, request) {
   const off = Math.floor(+args.offset || 0);
   if (!id) {
     const mime = String(args.mime || "image/jpeg"), bytes = Math.floor(+args.bytes || 0);
-    if (!/^(image|video)\//.test(mime)) return toolError("Only images or videos.");
+    if (!/^(image|video|audio)\//.test(mime)) return toolError("Only images, videos or audio.");
     if (bytes <= 0 || bytes > 200 * 1024 * 1024) return toolError("bytes must be between 1 and 200 MB.");
     id = "hf_" + crypto.randomUUID().replace(/-/g, "");
     const r0 = await store(env, id).fetch("https://do/hmeta", { method: "PUT", body: JSON.stringify({ bytes, mime }) });

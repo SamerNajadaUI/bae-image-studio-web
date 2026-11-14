@@ -2532,7 +2532,7 @@ async function rlSend(text,{retry}={}){
     if(last?.role==="a"&&mem.count) last.mem={recalled:mem.ids.length,total:mem.count,used:(Array.isArray(out?.used_memories)?out.used_memories:[]).map(String).filter(id=>MEM.byId.has(id)).slice(0,8),searched:searched.slice(0,3)};
   }catch(e){ if(e?.code==="cancelled"){ RL.chatPending=null; RL.chat.push({role:"sys",text:rlAr()?"وقفت. أي إشي عملته الأدوات قبل الوقف ضل محفوظ.":"Stopped. Anything the tools already did stays."}); }
     else if(!rlTransient(e)){ RL.chatPending=null; RL.chat.push({role:"sys",err:true,text:sampleCopy(e)}); } }
-  finally{ rlTyping(false); rlBusy=false; RL._ctl=null; { const sb=$("rlSend"); sb.classList.remove("stop"); sb.setAttribute("aria-label","Send"); } rlSave(); rlRender(); } });
+  finally{ rlTyping(false); rlBusy=false; RL._ctl=null; { const sb=$("rlSend"); sb.classList.remove("stop"); sb.setAttribute("aria-label","Send"); } rlSave(); rlRender(); setTimeout(uxAutoStep,500); } });
 }
 function rlApply(o){
   if(o.title) RL.title=String(o.title);
@@ -2697,7 +2697,7 @@ async function rlResume(){
 }
 function rlSyncSettings(){ const s=rlSet(); $("rlLen").value=String(s.length); $("rlAspect").value=s.aspect; $("rlLang").value=s.lang; $("rlRes").value=s.res; }
 function rlRender(){ if(!RL) return; const t=$("rlTitle"); if(document.activeElement!==t) t.value=RL.title||""; rlRenderNav(); rlRenderChat(); rlBoard(); }
-function rlRenderNav(){
+function rlRenderNavOld(){
   const si=rlStageIx(RL.stage);
   const done=k=>({idea:!!RL.picked,script:!!RL.script?.scenes?.length,characters:RL.characters.length>0&&RL.characters.every(e=>e.id),locations:RL.locations.length>0&&RL.locations.every(e=>e.id),directing:RL.scenes.length>0&&RL.scenes.every(s=>s.status==="done"),render:!!RL.space?.url||!!RL.final?.id})[k];
   $("rlStages").innerHTML=RL_STAGES.map(([k,l],i)=>`<button type="button" role="tab" aria-selected="${RL.view===k}" data-tab="${k}" class="${done(k)?"done":""}${i===si?" cur":""}${i>si+1&&!done(k)?" later":""}"><span class="n" aria-hidden="true">${done(k)?"✓":i+1}</span><span class="lb">${l}</span></button>`).join("");
@@ -2747,7 +2747,7 @@ function rlStep(label,{done,id}={}){
 const rlStepsHTML=()=>RL_STEPS.slice(-6).map(x=>`<li class="${x.done?"ok":"run"}"><span class="d" aria-hidden="true">${x.done?"✓":""}</span>${esc(x.label)}</li>`).join("");
 function rlRenderChat(){
   const b=$("rlMsgs");
-  if(!RL.chat.length) b.innerHTML=`<div class="rl-hello" dir="auto"><span class="av" aria-hidden="true">✦</span><div><b>Hi, I'm your Director.</b><p>Tell me the reel you need — the product, the message, who it's for. Already have character photos, places or props? Drop them all here in any order — I sort them into the right place and keep their original quality. A storyboard, reference video or script works too.</p><p class="muted">Five assistant directors listen in and add their ideas. Everything is saved — come back any time.</p></div></div>`;
+  if(!RL.chat.length) b.innerHTML=uxHelloHTML();
   else b.innerHTML=RL.chat.map((m,mi)=>{
     const role=m.role==="u"?"u":m.role==="a"?"a":"sys";
     const media=`${m.thumbs?.length?`<div class="imgs">${m.thumbs.map(t=>`<img src="${t}" alt="">`).join("")}</div>`:m.n?`<div class="t12" style="opacity:.7;margin-top:6px">${m.n} image${m.n>1?"s":""} attached</div>`:""}${m.n&&role==="u"?`<div class="rl-sent">✓ ${m.n} image${m.n>1?"s":""} sent</div>`:""}${m.videos?.length?m.videos.map(v=>v.analysis&&!v._stage?`${rlVProgHTML({...v,_stage:"done"})}<details class="rl-vsaw"><summary>What Gemini saw</summary><div dir="auto">${esc(String(v.analysis).slice(0,6000))}</div></details>`:v._stage&&v._stage!=="done"&&v._stage!=="err"?rlVProgHTML(v):v.analysis?`${rlVProgHTML({...v,_stage:"done"})}<details class="rl-vsaw"><summary>What Gemini saw</summary><div dir="auto">${esc(String(v.analysis).slice(0,6000))}</div></details>`:rlVProgHTML({...v,_stage:"err"})).join(""):""}`;
@@ -2760,6 +2760,7 @@ function rlRenderChat(){
   const last=[...RL.chat].reverse().find(m=>m.role==="a");
   const chips=last?.chips?.length?last.chips:(RL.chat.length?rlChipsFor():["بدي ريلز عن Quick Pay: ادفع كل فواتيرك بكبسة زر","Give me 3 viral ideas for a BAE savings reel"]);
   $("rlChips").innerHTML=chips.map(c=>`<button type="button" dir="auto">${esc(c)}</button>`).join("");
+  uxRenderNext();
 }
 const rlHead=(title,sub,actions="")=>`<div class="rl-head"><div><h2>${title}</h2>${sub?`<p>${sub}</p>`:""}</div>${actions?`<div class="rl-btns">${actions}</div>`:""}</div>`;
 const rlNext=(k,label)=>`<div class="rl-next"><button class="btn primary" type="button" data-rl="say" data-t="${k}">${label}</button></div>`;
@@ -2781,7 +2782,7 @@ function rlBoard(){
   if(v==="script"){
     const nb=(RL.script?.scenes||[]).filter(s=>s.board?.id).length, busyB=(RL.script?.scenes||[]).some(s=>["queued","write","run"].includes(s.board?.status));
     out.push(rlHead("Script",RL.script?`${esc(RL.script.title||"")} · ${RL.script.duration_s||rlSet().length} s · edit any line, or ask Claude for changes in the chat`:"Scene by scene, with timing, dialogue, on-screen text and sound.",
-      RL.script?.scenes?.length?`<button class="a-btn" type="button" data-rl="genboard"${busyB?" disabled":""}>${busyB?"Drawing the storyboard…":nb?"Redraw storyboard":"Generate storyboard"}</button>${nb?`<button class="a-btn" type="button" data-rl="dlboard">Download all (${nb})</button>`:""}`:""));
+      RL.script?.scenes?.length?`<button class="a-btn" type="button" data-rl="genboard"${busyB?" disabled":""}>${busyB?"Drawing the storyboard…":nb?"Redraw storyboard":"Generate storyboard"}</button>${nb?`<button class="a-btn" type="button" data-ux="animatic">▶ Free preview</button><button class="a-btn" type="button" data-rl="dlboard">Download all (${nb})</button>`:""}`:""));
     if(!RL.script?.scenes?.length) out.push(rlEmpty(RL.picked?"Ask Claude to write the script for the chosen idea.":"Choose an idea first.",RL.picked?`<button class="btn primary" type="button" data-rl="sayraw" data-t="${esc(rlAr()?"اكتبلي السيناريو للفكرة المختارة.":"Write the script for the chosen idea.")}">Write the script</button>`:`<button class="btn" type="button" data-tab="idea">Go to Idea</button>`));
     else{ out.push(`<div class="rl-card">${RL.script.scenes.map((s,i)=>`<div class="rl-beat${s.board?" has-sb":""}" dir="auto"><span class="tc">${esc(s.time||"")}</span><div class="ln"><b>${esc(s.title||"")}</b>
       <textarea class="rl-field" rows="2" data-rl-edit="b:${i}:action" aria-label="Action">${esc(s.action||"")}</textarea>
@@ -2803,18 +2804,19 @@ function rlBoard(){
   if(v==="directing"){
     const set=rlSet(), ar=set.aspect.replace(":"," / ");
     const missing=rlEls().filter(e=>!e.id).map(e=>e.tag);
-    out.push(rlHead("Shots",`${RL.scenes.length?RL.scenes.length+" scenes · ":""}${set.aspect} · ${set.res==="draft"?"Draft 480p":set.res} · Seedance 2.5 with every asset as a reference (no start frame)`,RL.scenes.length?`<button class="a-btn" type="button" data-rl="allvideos">All videos</button>`:""));
+    out.push(rlHead("Shots",`${RL.scenes.length?RL.scenes.length+" scenes · ":""}${set.aspect} · ${set.res==="draft"?"Draft 480p":set.res} · Seedance 2.5 with every asset as a reference (no start frame)`,RL.scenes.length?`<button class="a-btn" type="button" data-ux="animatic">▶ Free preview</button><button class="a-btn" type="button" data-rl="allvideos">All videos</button>`:""));
     if(missing.length&&RL.scenes.length) out.push(`<p class="rl-warn">Generate ${missing.join(", ")} first (Cast / Locations) so every shot can use them.</p>`);
     if(!RL.scenes.length) out.push(rlEmpty("Claude writes one Seedance 2.5 prompt per scene, with its first frame, from the script, cast and locations.",`<button class="btn primary" type="button" data-rl="say" data-t="approveLoc">Direct the shots</button>`));
     else{ out.push(`<div class="rl-sb">${RL.scenes.map(sc=>{ const im=rlTGet(sc.clip)||rlTGet(sc.frame?.id); return `<button type="button" class="rl-sbi" data-rl="goto" data-n="${sc.n}" style="aspect-ratio:${ar}" aria-label="Scene ${sc.n}">${im?`<img src="${im}" alt="">`:""}<span>${sc.n}</span>${sc.status==="done"?'<i aria-hidden="true">▶</i>':""}${sc.status==="run"||sc.frame?.status==="run"?'<em class="dot" aria-hidden="true"></em>':""}</button>`; }).join("")}</div>`);
       out.push(`<details class="rl-card rl-look"${RL.look?"":" open"}><summary><b>Film look</b><span class="t12 muted">Shared by every shot, added on top of each prompt when it renders</span></summary><textarea class="rl-prompt" data-rl-edit="look:0" spellcheck="false" dir="ltr" placeholder="Claude writes the film look with the scenes: stock look, lens character, grade with a 60/30/10 colour split, white balance, 24 fps, skin, global constraints, audio policy.">${esc(RL.look||"")}</textarea></details>`);
       out.push(RL.scenes.map(rlShotCard).join("")); }
   }
-  if(v==="render") out.push(rlDeliver());
+  if(v==="render"){ out.push(rlDeliver()); out.push(uxSizesHTML()); }
   /* keep the page exactly where the user is: a re-render must never jump the scroll */
   const scr=[$("reels"),B,B.parentElement,document.scrollingElement].filter(Boolean).map(el=>[el,el.scrollTop,el.scrollLeft]); const viewWas=RL._viewShown; RL._viewShown=v;
   B.style.minHeight=B.offsetHeight+"px";
   B.innerHTML=out.join("");
+  uxCostFill(B); uxRenderNext(); if(RL.auto&&!rlBusy){ clearTimeout(UX.autoT); UX.autoT=setTimeout(uxAutoStep,1500); }
   if(viewWas===v) for(const [el,t,l] of scr){ if(el.scrollTop!==t) el.scrollTop=t; if(el.scrollLeft!==l) el.scrollLeft=l; }
   B.style.minHeight="";
   if(editing){ const t=B.querySelector(`[data-rl-edit="${editing.key}"]`); if(t){ t.focus({preventScroll:true}); try{ t.setSelectionRange(editing.s,editing.e); }catch{} t.scrollTop=editing.top; } }
@@ -2901,7 +2903,7 @@ function rlShotCard(sc){
       ${sc.logline?`<p class="rl-scn-log">${esc(sc.logline)}</p>`:""}
       <div class="rl-chips">${chips}</div>
       ${used.length?`<div class="rl-refs" aria-label="Cast and places in this scene">${used.map(r=>{ const e=rlElByTag(r.global), im=rlTGet(rlImgOf(e)); return `<span class="rl-ref" title="${esc(e?.name||"")}">${im?`<img src="${im}" alt="" data-zoom="${esc(rlImgOf(e))}">`:`<i></i>`}<b>${esc(e?.name||rlLabel(e)||r.global)}</b></span>`; }).join("")}</div>`:""}
-      <div class="rl-scn-cta">${nx.act?`<button class="btn small${nx.quiet?"":" primary"}" type="button" data-rl="${nx.act}" data-n="${sc.n}">${nx.label}</button>`:`<span class="rl-chip"><span class="spin" aria-hidden="true"></span> ${esc(nx.label)}</span>`}<button class="btn small" type="button" data-rl="ask" data-n="${sc.n}" aria-expanded="${!!sc._ask}" ${sc._improving?"disabled":""}>✎ Ask for edit</button></div>
+      <div class="rl-scn-cta">${nx.act?`<button class="btn small${nx.quiet?"":" primary"}" type="button" data-rl="${nx.act}" data-n="${sc.n}">${nx.label}</button>${nx.act==="render"?`<span class="ux-cost" data-uxcost='{"k":"video","s":${+sc.n}}'></span>`:""}`:`<span class="rl-chip"><span class="spin" aria-hidden="true"></span> ${esc(nx.label)}</span>`}<button class="btn small" type="button" data-rl="ask" data-n="${sc.n}" aria-expanded="${!!sc._ask}" ${sc._improving?"disabled":""}>✎ Ask for edit</button></div>
       ${f.err?`<p class="rl-status bad">${esc(f.err)}</p>`:""}${sc.note&&sc.status==="err"?`<p class="rl-status bad">${esc(sc.note)}</p>`:""}
       ${sc._ask||sc._improving||sc.improveErr||sc.lastChange?.changes?.length?`<div class="rl-scn-edit">${rlShotBar(sc,true)}</div>`:""}
       <details class="rl-scn-more" data-open-key="${K}"${rlOpenAttr(K)}><summary>Scene details <span class="t12 muted">prompts · blocking · the room · review</span></summary>
@@ -2913,7 +2915,7 @@ function rlShotCard(sc){
             <div class="rl-btns"><button class="btn small" type="button" data-rl="frame" data-n="${sc.n}" ${f.status==="run"||f.pending?"disabled":""}>${f.status==="run"||f.pending?"Generating…":f.id?"Regenerate first frame":"Generate first frame"}</button>${f.web?`<a class="btn small" href="${esc(f.web)}" target="_blank" rel="noopener">Magnific</a>`:""}</div>
             ${f.status==="paused"||(f.pending&&f.status!=="run")?`<p class="rl-status">Still generating in Magnific — it appears here when it's done.</p>`:""}${f.stale&&f.id?`<p class="rl-status warn">The supervisor corrected this prompt after the image was made. Regenerate it.</p>`:""}
           </details>
-          ${rlDialogueHTML(sc)}
+          ${rlDialogueHTML(sc)}${uxSpeakHTML(sc)}
           <details class="rl-sec" data-open-key="${K}:v"${rlOpenAttr(K+":v")}><summary>Video prompt <span class="t12 muted">Seedance 2.5 · ${Math.max(4,Math.min(120,+sc.duration_s||8))} s</span></summary>
             <textarea class="rl-prompt tall" data-rl-edit="s:${sc.n}" spellcheck="false" dir="ltr">${esc(sc.prompt||"")}</textarea>
             <label class="rl-chk"><input type="checkbox" data-rl-start="${sc.n}" ${useStart?"checked":""} ${startOK?"":"disabled"}> Start the video from the first frame (off = Seedance builds the shot from the references only)${startOK?"":" — generate a first frame first"}</label>
@@ -3483,7 +3485,7 @@ async function rlHostFile(file,mime,name,onP){
   const big=S.fileArgs, step=big?12*1048576:700*1024; let hostId=null, url=null;
   for(let off=0;off<file.size;off+=step){
     const piece=file.slice(off,off+step);
-    const data=big?{$file:{data:piece,name:(name||"file").replace(/\.[^.]+$/,"")+"_"+off+({"image/png":".png","image/webp":".webp"}[mime]||".jpg"),type:mime}}:await toB64(piece);
+    const data=big?{$file:{data:piece,name:(name||"file").replace(/\.[^.]+$/,"")+"_"+off+({"image/png":".png","image/webp":".webp","audio/wav":".wav"}[mime]||".jpg"),type:mime}}:await toB64(piece);
     let r; try{ r=await mcp.callTool(GEYE,"host_file",{data,mime,name,bytes:file.size,offset:off,...(hostId?{host_id:hostId}:{})},{cache:false}); }
     catch(e){ if(big&&off===0&&!/not_connected|not_granted|not in the manifest/i.test(String(e?.code||"")+String(e?.message||""))){ return rlHostFileSmall(file,mime,name); } throw {code:"tool_error",message:`BAE Gemini Eye couldn't keep the image (${e?.code||e?.message||"error"}). Reconnect the BAE Gemini Eye connector (Settings → Connectors), then try again.`}; }
     const o=r?.payload&&typeof r.payload==="object"?r.payload:(()=>{ try{ return JSON.parse((r?.content||[]).map(c=>c.text||"").join("")); }catch{ return {}; } })();
@@ -3880,6 +3882,292 @@ async function rlBible(){
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`BAE-${name}-production.txt`; a.click();
 }
 
+/* ================= New look + features (v84) ================= */
+/*UXDICT*/const UX_AR={
+"Reels":"الريلز","Home":"الرئيسية","New reel":"ريل جديد","Start from an idea, a brief or a storyboard":"ابدأ من فكرة أو بريف أو ستوري بورد","Director's brain":"عقل المخرج","What the Director knows and learns every day":"شو بيعرف المخرج وشو بيتعلم كل يوم",
+"Projects save to your account automatically. Only you can see them.":"المشاريع بتنحفظ بحسابك لحالها. إنت بس اللي بتشوفها.","Projects save in this browser automatically.":"المشاريع بتنحفظ بهالمتصفح لحالها.","From idea to film with Claude and Seedance 2.5, collected in a Magnific Space.":"من الفكرة للفيديو مع Claude و Seedance 2.5.",
+"Duplicate":"انسخ","Delete":"احذف","Reel title":"اسم الريل","Saved to your account":"محفوظ بحسابك","Saved in this browser":"محفوظ بهالمتصفح","Saving…":"عم يحفظ…","Couldn't save":"ما انحفظ",
+"Chat":"الشات","Board":"اللوحة","Simple":"بسيط","Pro":"محترف","Settings":"الإعدادات","Mode":"الوضع","View":"العرض","Interface":"لغة الواجهة","Length":"المدة","Format":"المقاس","Dialogue":"الحوار","Video quality":"جودة الفيديو",
+"15 s":"15 ثانية","30 s":"30 ثانية","45 s":"45 ثانية","60 s":"60 ثانية","9:16 · Reels / TikTok":"9:16 · ريلز وتيك توك","4:5 · Feed":"4:5 · فيد","16:9 · Widescreen":"16:9 · عريض","1:1 · Square":"1:1 · مربع","Jordanian Arabic":"عربي أردني","Modern Standard Arabic":"عربي فصحى","English":"إنجليزي","Draft 480p · cheap test":"تجربة 480p · رخيصة",
+"Story":"القصة","Images":"الصور","Scenes":"المشاهد","Video":"الفيديو","Idea":"الفكرة","Script":"السكريبت","Cast":"الشخصيات","Places & props":"الأماكن والأغراض","Production stages":"مراحل الشغل",
+"Director":"المخرج","with 5 assistant directors · Gemini Eye":"ومعه 5 مساعدين · Gemini Eye","Message the Director…":"اكتب للمخرج…","Message the Director":"اكتب للمخرج","Send":"ابعث","Stop":"وقّف","Speak":"احكي بصوتك","Attach images or videos":"ارفع صور أو فيديو","Attach images or videos — Gemini watches videos":"ارفع صور أو فيديو",
+"Images, videos (Gemini watches them), sheets or a script · Enter to send · Shift+Enter for a new line":"صور، فيديوهات، أو سكريبت · Enter للإرسال",
+"What are we filming today?":"شو بدنا نصوّر اليوم؟","Tell me the idea in your own words, or drop your images. I take it from there, step by step.":"احكيلي الفكرة بكلامك، أو ارفع صورك. أنا بكمّل الباقي خطوة خطوة.","Or start from a ready-made template":"أو ابدأ من قالب جاهز",
+"Product ad":"إعلان منتج","Introduce one product and its main benefit":"عرّف بمنتج وفايدته الأساسية","Offer or campaign":"عرض أو حملة","A limited offer people should act on":"عرض لفترة محدودة","Comedy situation":"موقف كوميدي","A relatable Jordanian moment, product as the hero":"موقف أردني من الحياة، والمنتج هو البطل","Occasion":"مناسبة","Ramadan, Eid, Mother's Day, national days":"رمضان، العيد، عيد الأم، المناسبات الوطنية",
+"Keep going on your own":"كمّل لحالك","Stops before anything that costs credits":"بوقف قبل أي إشي بيصرف credits","The Director is working…":"المخرج عم يشتغل…","Choose an idea":"اختار فكرة","Write the script":"اكتب السكريبت","Script is good · prepare the images":"السكريبت تمام · جهّز الصور","Cast is good · places and props next":"الشخصيات تمام · التالي: الأماكن والأغراض","Places are good · write the scenes":"الأماكن تمام · اكتب المشاهد","Preparing the images…":"عم يجهّز الصور…","Open the images":"افتح الصور","All scenes are filmed · deliver":"كل المشاهد جاهزة · التسليم","Unlimited plan":"اشتراك مفتوح",
+"Done in the studio":"انعمل بالستوديو","Undone":"انلغى","Undo":"تراجع","Answer it now":"جاوب هسا","The room":"غرفة المساعدين","Apply":"طبّق","Skip":"تجاوز","✓ Applied":"✓ انطبّق","Skipped":"انتجاوز","all answered":"كلهم انجاوبوا","Ideas from the assistant directors":"أفكار المساعدين","What Gemini saw":"شو شاف Gemini",
+"Your images, sorted":"صورك، مرتبة","wrong place? move it":"بمكان غلط؟ انقلها","Do you already have any of these?":"عندك أي إشي من هدول جاهز؟","Upload":"ارفع","＋ Upload several — I'll sort them":"＋ ارفع كذا صورة وأنا برتّبهم","Uploads keep their original quality. Drop them in any order, or write “image 1 = Omar, image 2 = the hall”.":"الصور بتنرفع بجودتها الأصلية. ارفعهم بأي ترتيب، أو اكتب: صورة 1 = عمر، صورة 2 = الصالة.","✓ Generated":"✓ جاهزة","All set — every element has an image":"تمام، كل عنصر إله صورة",
+"Three directions built to stop the scroll. Choose one, or ask for more.":"ثلاث أفكار بتوقّف السكرول. اختار وحدة، أو اطلب غيرهم.","More ideas":"أفكار ثانية","Suggest 3 ideas":"اقترح 3 أفكار","Describe the reel in the chat — the product, the message, the audience — or attach a storyboard. Claude answers with three viral ideas.":"احكي عن الريل بالشات: المنتج، الرسالة، الجمهور. والمخرج برجعلك بثلاث أفكار.","Choose":"اختار","Chosen":"المختارة","Hook":"الهوك","Why it travels":"ليش بتنتشر","Product moment":"لحظة المنتج","Jury":"التقييم","Use this":"استعمل هاي","Brief notes from Claude":"ملاحظات على البريف",
+"Scene by scene, with timing, dialogue, on-screen text and sound.":"مشهد مشهد، مع التوقيت والحوار والنص والصوت.","Generate storyboard":"ولّد الستوري بورد","Redraw storyboard":"ارسم الستوري بورد من جديد","Drawing the storyboard…":"عم يرسم الستوري بورد…","▶ Free preview":"▶ معاينة مجانية","Choose an idea first.":"اختار فكرة أول.","Ask Claude to write the script for the chosen idea.":"اطلب من المخرج يكتب السكريبت.","Go to Idea":"روح للفكرة","Action":"الحدث","Name: line":"الاسم: الجملة","Dialogue, one line per speaker as Name: line":"الحوار، كل جملة بسطر","On-screen text":"النص على الشاشة","Sound":"الصوت","How is this script?":"كيف السكريبت؟","Approve script · build the cast":"السكريبت تمام · جهّز الشخصيات","Waiting…":"بالدور…","Choosing the key moment…":"عم يختار اللحظة…","Drawing in Seedream 5.5 · 2K…":"عم يرسم بـ Seedream 5.5 · 2K…","Download":"نزّل","Redraw":"ارسم من جديد",
+"Reference sheets keep every face the same in every shot.":"صورة مرجعية لكل شخصية عشان يضل الوجه نفسه بكل لقطة.","Locations & props":"الأماكن والأغراض","Locations":"الأماكن","Empty establishing images and product sheets. Every shot inherits their light.":"صور للأماكن فاضية وللأغراض. كل لقطة بتوخذ إضاءتها منهم.","Generate all missing":"ولّد كل الناقص","Add character":"ضيف شخصية","Add location":"ضيف مكان","Add prop":"ضيف غرض","Or cast a BAE character":"أو اختار شخصية من BAE","Generate image":"ولّد الصورة","Generate instead":"ولّد بدالها","Regenerate":"ولّد من جديد","Generating…":"عم يولّد…","Uploading…":"عم يرفع…","Use my image":"استعمل صورتي","Replace my image":"بدّل صورتي","Replace":"بدّل","Edit":"عدّل","Revise":"عدّل","Remove":"احذف","Cancel":"إلغاء","Create":"أنشئ","Done":"تم","Close":"سكّر","No image yet":"ما في صورة لسا","Loading image…":"عم يحمّل الصورة…","Ask for a change… e.g. older, navy blazer":"اطلب تعديل… مثلاً: أكبر بالعمر، جاكيت كحلي","Approve cast · build the locations":"الشخصيات تمام · جهّز الأماكن","Approve locations · direct the shots":"الأماكن تمام · اكتب المشاهد","Direct the shots":"اكتب المشاهد","New character":"شخصية جديدة","New location":"مكان جديد","New prop":"غرض جديد","Who they are, age, look, role in the story":"مين هو، العمر، الشكل، ودوره بالقصة","The place, time of day, mood":"المكان، الوقت، والجو","The object and why it matters":"الغرض وليش مهم","Good — teach the Director":"حلو، علّم المخرج","Weak — teach the Director":"ضعيف، علّم المخرج",
+"Shots":"المشاهد","All videos":"كل الفيديوهات","Film look":"شكل الفيلم","Shared by every shot, added on top of each prompt when it renders":"مشترك بين كل المشاهد","Scene details":"تفاصيل المشهد","prompts · blocking · the room · review":"البرومبتات · الحركة · المساعدين · المراجعة","Not checked":"مش مفحوص","Not checked yet":"مش مفحوص لسا","Check again":"افحص كمان مرة","Checking":"عم يفحص","Checking…":"عم يفحص…","Check this scene":"افحص المشهد","First frame":"أول فريم","✓ Video":"✓ الفيديو","✓ First frame":"✓ أول فريم","Cast and places in this scene":"الشخصيات والأماكن بهالمشهد",
+"Generate video":"ولّد الفيديو","Generate video again":"ولّد الفيديو من جديد","Generate first frame":"ولّد أول فريم","Regenerate first frame":"ولّد أول فريم من جديد","Rendering…":"عم يطلع…","Rendering video…":"عم يطلع الفيديو…","Rendering in Magnific…":"عم يطلع بـ Magnific…","Generating first frame…":"عم يولّد أول فريم…","Updating the prompt…":"عم يحدّث البرومبت…","Writing the scene…":"عم يكتب المشهد…","Gemini is watching…":"Gemini عم يتفرج…","👁 Review with Gemini":"👁 راجع مع Gemini","Review again with Gemini":"راجع كمان مرة مع Gemini","Fix the prompt with Gemini’s notes":"صلّح حسب ملاحظات Gemini","✎ Ask for edit":"✎ اطلب تعديل","Apply edit":"طبّق التعديل","What should change in this scene? Write it any way you like.":"شو بدك تغيّر بالمشهد؟ اكتبها زي ما بدك.","✦ Auto-improve prompt":"✦ حسّن البرومبت لحاله","Ask the room":"اسأل المساعدين","The room is thinking…":"المساعدين عم يفكروا…","Rewriting…":"عم يعيد الكتابة…","Blocking & continuity":"الحركة والاستمرارية","Top-down blocking plan":"مخطط الحركة من فوق","Make a position map":"اعمل خريطة مواقع","Remake the map":"اعمل الخريطة من جديد","Making the map…":"عم يعمل الخريطة…","Position map":"خريطة المواقع","Who is where":"مين وين","Order of events":"ترتيب الأحداث","No blueprint yet. The script supervisor builds one when it checks the scene.":"ما في مخطط لسا. بينعمل لما ينفحص المشهد.","First frame prompt":"برومبت أول فريم","Video prompt":"برومبت الفيديو","Written from the scene when you generate the first frame":"بينكتب لما تولّد أول فريم","Copy prompt":"انسخ البرومبت","Play here":"شغّله هون","Gemini review":"مراجعة Gemini","How is this shot?":"كيف المشهد؟","How is this first frame?":"كيف أول فريم؟","The video can't play inside this page — open the MP4 or Magnific to watch it.":"الفيديو ما بيشتغل جوّا الصفحة. افتح MP4 أو Magnific.","The scene prompt was corrected after this video was made.":"البرومبت تعدّل بعد ما طلع هالفيديو.","Still generating in Magnific — it appears here when it's done.":"لسا عم يتولّد بـ Magnific. بيظهر هون لما يخلص.","No problems found.":"ما في مشاكل.","No dialogue":"بدون حوار",
+"Dialogue & voices":"الحوار والأصوات","Generate voice":"ولّد الصوت","Regenerate voice":"ولّد الصوت من جديد","Generate all missing voices":"ولّد كل الأصوات الناقصة","Generating the voice…":"عم يولّد الصوت…","Choose a voice":"اختار صوت","Change voice":"غيّر الصوت","Attach voice":"اربط صوت","Attach":"اربط","Copy line":"انسخ الجملة","Voice script":"نص الصوت","Loading voices…":"عم يحمّل الأصوات…","Loading your audio…":"عم يحمّل أصواتك…","No audio found in your Magnific yet.":"ما في أصوات بحسابك على Magnific لسا.",
+"Fit the exact voices · lip-sync (beta)":"ركّب الأصوات بالزبط مع حركة الشفايف (تجريبي)","Fitting the voice…":"عم يركّب الصوت…","Back to the original video":"رجّع الفيديو الأصلي","Replaces the video's sound with your generated voices and matches the lips. Background sound from Seedance is not kept.":"ببدّل صوت الفيديو بأصواتك المولّدة وبطابق حركة الشفايف. صوت الخلفية من Seedance ما بيضل.","Confirm":"أكّد",
+"Play":"شغّل","Pause":"وقّف مؤقت","Play again":"شغّل من الأول","Free preview":"معاينة مجانية","Free preview: storyboard frames with your generated voices on the real timing.":"معاينة مجانية: صور الستوري بورد مع أصواتك بالتوقيت الحقيقي.","Free preview: storyboard frames on the real timing. Generate voices to hear the dialogue too.":"معاينة مجانية: صور الستوري بورد بالتوقيت الحقيقي. ولّد الأصوات عشان تسمع الحوار كمان.","No credits are spent.":"ما بتنصرف أي credits.",
+"Deliver":"التسليم","Collect the whole production in a Magnific Space, join the clips into one reel, and keep a copy of every prompt.":"اجمع الشغل كله، ادمج المقاطع بريل واحد، واحتفظ بنسخة من كل البرومبتات.","Final reel":"الريل النهائي","Join clips into one reel":"ادمج المقاطع بريل واحد","Join again":"ادمج من جديد","Joining…":"عم يدمج…","Joining clips in Magnific…":"عم يدمج المقاطع بـ Magnific…","Build in Magnific Space":"ابنيه بـ Magnific Space","Update the Space":"حدّث الـ Space","Open Space":"افتح الـ Space","Building…":"عم يبني…","Production bible":"ملف الإنتاج","The idea, script, cast, locations and every image and Seedance prompt in one document.":"الفكرة والسكريبت والشخصيات والأماكن وكل البرومبتات بملف واحد.","Copy all prompts":"انسخ كل البرومبتات","Copied":"انتسخ","Other sizes":"مقاسات ثانية","Makes a copy of this reel in another format. Cast, places, script and voices come along; the scenes are generated again in the new size.":"بيعمل نسخة من الريل بمقاس ثاني. الشخصيات والأماكن والسكريبت والأصوات بتيجي معه، والمشاهد بتتولّد من جديد بالمقاس الجديد.","Generate at least the cast and locations first.":"ولّد الشخصيات والأماكن أول.",
+"Characters":"الشخصيات","Props":"الأغراض","Places":"الأماكن","Character":"شخصية","Location":"مكان","Prop":"غرض","No image yet":"ما في صورة لسا","Original quality":"الجودة الأصلية","Draft 480p":"تجربة 480p","Magnific Space":"Magnific Space","Download MP4":"نزّل MP4","Working…":"عم يشتغل…","Claude is writing…":"عم يكتب…"
+};
+const UX_AR_RE=[
+[/^Scene (\d+)$/,m=>`مشهد ${m[1]}`],[/^Idea (\d+)$/,m=>`فكرة ${m[1]}`],[/^Idea (\d+) · chosen$/,m=>`فكرة ${m[1]} · المختارة`],
+[/^(\d+) s$/,m=>`${m[1]} ثانية`],[/^Open scene (\d+)$/,m=>`افتح مشهد ${m[1]}`],
+[/^Generate the missing images \((\d+)\)$/,m=>`ولّد الصور الناقصة (${m[1]})`],[/^Download all \((\d+)\)$/,m=>`نزّل الكل (${m[1]})`],
+[/^(\d+)\/(\d+) scenes filmed$/,m=>`${m[1]} من ${m[2]} مشاهد جاهزة`],[/^(✓ )?(\d+)\/8 checks$/,m=>`${m[1]||""}${m[2]}/8 فحوصات`],
+[/^(\d+) ideas? from your assistant directors$/,m=>`${m[1]} أفكار من المساعدين`],
+[/^(\d+) lines? · (\d+) voices? attached$/,m=>`${m[1]} جمل · ${m[2]} أصوات مربوطة`],
+[/^≈ ([\d,]+) credits$/,m=>`≈ ${m[1]} credit`],[/^Ready in (.+?)\.?$/,m=>`جاهز خلال ${m[1]}`],
+[/^Generate the other (\d+) · Seedream 5\.5$/,m=>`ولّد الباقي (${m[1]}) · Seedream 5.5`],
+[/^Ask Claude to change (.+)$/,m=>`اطلب تعديل على ${m[1]}`],[/^Confirm · (.+)$/,m=>`أكّد · ${m[1]}`],
+[/^(\d+) characters?$/,m=>`${m[1]} شخصيات`],[/^Earlier ideas \((\d+)\)$/,m=>`أفكار سابقة (${m[1]})`],
+[/^Edited (.+)$/,m=>`آخر تعديل ${m[1]}`]
+];
+/*END*/
+const UX={lang:"ar",level:"simple",dict:null,costV:new Map(),costP:new Map(),autoN:0};
+try{ UX.lang=localStorage.getItem("bae_ui_lang")||"ar"; UX.level=localStorage.getItem("bae_ui_level")||"simple"; }catch{}
+const UX_GROUPS=[["story","Story",["idea","script"]],["images","Images",["characters","locations"]],["scenes","Scenes",["directing"]],["video","Video",["render"]]];
+const UX_SUB={idea:"Idea",script:"Script",characters:"Cast",locations:"Places & props"};
+function uxApply(){
+  const R=$("reels"); if(!R) return; R.dataset.level=UX.level; R.dataset.ui=UX.lang; R.dir=UX.lang==="ar"?"rtl":"ltr"; R.lang=UX.lang;
+  document.querySelectorAll("[data-uxlevel]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.uxlevel===UX.level)));
+  const sel=$("uxLang"); if(sel) sel.value=UX.lang;
+  uxT(R);
+}
+/* ---------- Arabic interface: every label is translated after it is drawn; the source stays English ---------- */
+const UX_ORIG=new WeakMap();
+const UX_SKIP=".rl-m,.rl-fmt,textarea,.rl-prompt,[data-noi18n],.rl-vsaw,.rl-memc,script,style,.rl-titlein,video";
+function uxTr(s){
+  const k=s.replace(/\s+/g," ").trim(); if(!k) return null;
+  const hit=UX_AR[k]; if(hit!=null) return s.replace(k,hit);
+  for(const [re,fn] of UX_AR_RE){ const m=k.match(re); if(m) return fn(m); }
+  return null;
+}
+function uxT(root){
+  if(!root) return; const ar=UX.lang==="ar";
+  const tw=document.createTreeWalker(root,NodeFilter.SHOW_TEXT); const nodes=[]; let n; while((n=tw.nextNode())) nodes.push(n);
+  for(const t of nodes){ const p=t.parentElement; if(!p||p.closest(UX_SKIP)) continue;
+    if(ar){ const src=UX_ORIG.get(t)?.en??t.nodeValue; const o=UX_ORIG.get(t); if(o&&o.ar===t.nodeValue) continue; const tr=uxTr(src); if(tr!=null&&tr!==t.nodeValue){ UX_ORIG.set(t,{en:src,ar:tr}); t.nodeValue=tr; } }
+    else { const o=UX_ORIG.get(t); if(o&&o.ar===t.nodeValue){ t.nodeValue=o.en; } } }
+  for(const el of root.querySelectorAll?.("[placeholder],[aria-label],[title]")||[]){ if(el.closest("[data-noi18n]")) continue;
+    for(const a of ["placeholder","aria-label","title"]){ const v=el.getAttribute(a); if(!v) continue; const key="ux_"+a.replace("-","_");
+      if(ar){ if(el.dataset[key+"Ar"]===v) continue; const tr=uxTr(v); if(tr!=null){ el.dataset[key]=v; el.dataset[key+"Ar"]=tr; el.setAttribute(a,tr); } }
+      else if(el.dataset[key]&&el.dataset[key+"Ar"]===v) el.setAttribute(a,el.dataset[key]); } }
+}
+let uxObsT=0;
+function uxObserve(){ const R=$("reels"); if(!R||!window.MutationObserver) return;
+  new MutationObserver(()=>{ if(UX.lang!=="ar"||uxObsT) return; uxObsT=requestAnimationFrame(()=>{ uxObsT=0; uxT(R); const a=document.querySelector(".ux-anim"); if(a) uxT(a); }); }).observe(R,{childList:true,subtree:true,characterData:true}); }
+const uxL=s=>UX.lang==="ar"?(uxTr(s)??s):s;
+
+/* ---------- 4 steps instead of 6 tabs ---------- */
+function rlRenderNav(){
+  const done=k=>({idea:!!RL.picked,script:!!RL.script?.scenes?.length,characters:RL.characters.length>0&&RL.characters.every(e=>e.id),locations:RL.locations.length>0&&RL.locations.every(e=>e.id),directing:RL.scenes.length>0&&RL.scenes.every(s=>s.status==="done"),render:!!RL.space?.url||!!RL.final?.id})[k];
+  const N=$("rlStages"); N.classList.add("ux4");
+  const gi=Math.max(0,UX_GROUPS.findIndex(g=>g[2].includes(RL.view))), cur=UX_GROUPS[gi];
+  N.innerHTML=UX_GROUPS.map(([k,l,subs],i)=>{ const target=subs.includes(RL.view)?RL.view:(subs.find(x=>!done(x))||subs[subs.length-1]);
+    return `<button type="button" role="tab" aria-selected="${i===gi}" data-tab="${target}" data-g="${k}" class="${subs.every(done)?"done":""}"><span class="bar" aria-hidden="true"></span><span class="lb">${l}</span></button>`; }).join("")
+    +(cur[2].length>1?`<div class="ux-sub">${cur[2].map(k=>`<button type="button" role="tab" aria-selected="${RL.view===k}" data-tab="${k}">${UX_SUB[k]}</button>`).join("")}</div>`:"");
+}
+
+/* ---------- the one big button: what happens next ---------- */
+function uxNextStep(){
+  if(!RL||!RL.chat.length) return null;
+  const ar=rlAr()||UX.lang==="ar", ix=rlStageIx(RL.stage), miss=l=>l.filter(x=>!x.id&&!x.fromLib&&x.prompt), work=l=>l.some(x=>["run","queued","write"].includes(x.status));
+  if(rlBusy) return {label:"The Director is working…",busy:true};
+  if(!RL.picked) return RL.ideas.length?{label:"Choose an idea",view:"idea",pick:true}:null;
+  if(!RL.script?.scenes?.length) return {label:"Write the script",raw:ar?"اكتبلي السيناريو للفكرة المختارة.":"Write the script for the chosen idea.",free:true};
+  if(ix<=rlStageIx("script")) return {label:"Script is good · prepare the images",say:"approveScript",free:true};
+  for(const [stage,list,code,say,okLabel] of [["characters",RL.characters,"c","approveCast","Cast is good · places and props next"],["locations",RL.locations,"l","approveLoc","Places are good · write the scenes"]]){
+    if(ix>rlStageIx(stage)) continue;
+    if(work(list)) return {label:"Preparing the images…",busy:true};
+    const m=miss(list); if(m.length) return {label:`Generate the missing images (${m.length})`,gen:code,cost:{k:"image",n:m.length}};
+    if(list.some(x=>!x.id&&!x.fromLib)) return {label:"Open the images",view:stage};
+    return list.length?{label:okLabel,say,free:true}:null; }
+  if(RL.stage==="directing"){ if(!RL.scenes.length) return null;
+    const sc=RL.scenes.find(s=>s.status!=="done"); if(!sc) return {label:"All scenes are filmed · deliver",view:"render"};
+    const nx=rlShotNext(sc); return nx.busy?{label:nx.label,busy:true}:{label:`Open scene ${sc.n}`,view:"directing",scroll:"rlShot"+sc.n}; }
+  return null;
+}
+function uxRenderNext(){
+  const el=$("uxNext"); if(!el||!RL) return; const st=uxNextStep();
+  el.innerHTML=st?`<button type="button" class="go" data-ux="next" ${st.busy?"disabled":""}><span>${esc(st.label)}</span>${st.cost?`<span class="cost" data-uxcost='${JSON.stringify(st.cost)}'></span>`:""}</button>
+    <div class="row"><label class="ux-auto"><input type="checkbox" id="uxAuto" ${RL.auto?"checked":""}><span>Keep going on your own</span></label><span>${RL.auto?"Stops before anything that costs credits":""}</span></div>`:"";
+  uxCostFill(el);
+}
+function uxSay(k){ const t=RL_SAY[k], ar=rlAr()||UX.lang==="ar";
+  if(k==="approveScript") brSignal("script","approved",1,{item:(RL.script?.scenes||[]).map(s=>`${s.title}: ${s.action}`).join(" / "),key:"script"});
+  if(k==="approveCast") brSignal("character","approved",1,{item:RL.characters.map(e=>`${e.name}: ${e.description||""}`).join(" | "),key:"cast"});
+  if(k==="approveLoc") brSignal("location","approved",1,{item:RL.locations.map(e=>`${e.name}: ${e.description||""}`).join(" | "),key:"loc"});
+  rlSend(t?t[ar?1:0]:k); }
+function uxDoNext(st,auto){
+  if(!st||st.busy) return false;
+  if(st.say){ uxSay(st.say); return true; }
+  if(st.raw){ rlSend(st.raw); return true; }
+  if(auto){ if(st.pick&&RL.ideas.length){ const ar=rlAr()||UX.lang==="ar", x=RL.ideas[0]; rlSend(ar?`اخترت الفكرة 1: ${x.title||""}. اكتبلي السيناريو.`:`I choose idea 1: ${x.title||""}. Write the script.`); return true; } return false; }
+  if(st.gen){ (st.gen==="c"?RL.characters:RL.locations).filter(x=>!x.id&&!x.fromLib&&x.prompt).forEach(x=>rlGenElement(x.tag)); RL.view=st.gen==="c"?"characters":"locations"; }
+  if(st.view) RL.view=st.view;
+  $("reels").dataset.view="board"; document.querySelectorAll("[data-rlview]").forEach(x=>x.setAttribute("aria-pressed",String(x.dataset.rlview==="board")));
+  rlSave(); rlRender(); if(st.scroll) setTimeout(()=>$(st.scroll)?.scrollIntoView({block:"start",behavior:"smooth"}),60);
+  return true;
+}
+/* autopilot: after each answer, take the next step by itself while it is free; anything that spends credits waits for the user */
+function uxAutoStep(){
+  if(!RL||!RL.auto||rlBusy) return; const last=RL.chat[RL.chat.length-1]; if(!last||last.err||RL.chatPending) return;
+  if(++UX.autoN>10){ RL.auto=false; uxRenderNext(); return; }
+  const st=uxNextStep(); if(!st||!(st.free||st.pick)) return;
+  uxDoNext(st,true);
+}
+
+/* ---------- prices before spending ---------- */
+async function uxCostArgs(c){
+  const set=rlSet();
+  if(c.k==="video"){ const sc=RL.scenes.find(x=>+x.n===+c.s); const m=await rlModel().catch(()=>null); if(!m?.id) return null;
+    return ["video_generate",{slug:m.id,prompt:"x",duration:Math.max(4,Math.min(120,+sc?.duration_s||8)),aspectRatio:set.aspect,resolution:set.res==="draft"?"Draft":/^4k$/i.test(set.res)?"4K":set.res}]; }
+  if(c.k==="image"){ const id=S.models?.nano?.id; return ["images_generate",{...(id?{mode:id}:{}),resolution:"2K",count:1,aspectRatio:set.aspect}]; }
+  if(c.k==="speak") return ["video_speak",{durationSeconds:+c.d||8,videoUrl:c.v}];
+  return null;
+}
+async function uxCost(c){
+  const key=JSON.stringify(c)+"|"+JSON.stringify(rlSet()); if(UX.costV.has(key)) return UX.costV.get(key);
+  if(!UX.costP.has(key)) UX.costP.set(key,(async()=>{ try{ if(!S.connected) return null; const a=await uxCostArgs(c); if(!a) return null;
+    const r=await callMag("simulate_cost",{tool:a[0],arguments:a[1]}); let o=r?.payload; if(typeof o==="string"){ try{ o=JSON.parse(o); }catch{} }
+    const v=o&&typeof o.credits==="number"?{credits:o.credits*(+c.n||1),unlimited:!!o.isUnlimited}:null; if(v) UX.costV.set(key,v); else UX.costP.delete(key); return v; }catch{ UX.costP.delete(key); return null; } })());
+  return UX.costP.get(key);
+}
+const uxCostText=v=>v?(v.unlimited?"Unlimited plan":`≈ ${Math.round(v.credits).toLocaleString("en")} credits`):"";
+function uxCostFill(root){ if(!root||!RL) return; root.querySelectorAll("[data-uxcost]").forEach(el=>{ let c; try{ c=JSON.parse(el.dataset.uxcost); }catch{ return; }
+  const key=JSON.stringify(c)+"|"+JSON.stringify(rlSet()); if(UX.costV.has(key)){ el.textContent=uxCostText(UX.costV.get(key)); return; }
+  uxCost(c).then(v=>{ if(v&&el.isConnected) el.textContent=uxCostText(v); }); }); }
+
+/* ---------- speak instead of typing ---------- */
+async function uxMicInit(){
+  const btn=$("uxMic"), inp=$("rlInput"); if(!btn||!inp) return;
+  let d=null; try{ d=await window.claude?.use?.("dictation"); }catch{} if(!d) return;
+  btn.hidden=false; let base="";
+  d.onPartial?.(({text})=>{ inp.value=base+(text||""); inp.dispatchEvent(new Event("input",{bubbles:true})); });
+  d.onFinal?.(({text})=>{ base=(base+(text||"")).trim()+" "; inp.value=base; inp.dispatchEvent(new Event("input",{bubbles:true})); });
+  d.onState?.(({state})=>btn.setAttribute("aria-pressed",String(state==="listening")));
+  btn.onclick=()=>{ if(btn.getAttribute("aria-pressed")==="true"){ d.stop().catch(()=>{}); return; }
+    base=inp.value.trim()?inp.value.trim()+" ":""; d.start().catch(e=>{ btn.setAttribute("aria-pressed","false"); if(e?.code==="not_granted") btn.hidden=true; }); };
+}
+
+/* ---------- ready-made starts ---------- */
+const UX_TPL=[
+  ["Product ad","Introduce one product and its main benefit",["I need a 30 second reel that introduces a product: [product name]. Main benefit: [benefit]. Audience: [who].","بدي ريل 30 ثانية يعرّف بمنتج: [اسم المنتج]. الفايدة الأساسية: [الفايدة]. الجمهور: [مين]."]],
+  ["Offer or campaign","A limited offer people should act on",["I need a reel for an offer: [the offer]. It ends on [date]. What people should do: [action].","بدي ريل عن عرض: [العرض]. بينتهي بتاريخ [التاريخ]. المطلوب من الناس: [شو يعملوا]."]],
+  ["Comedy situation","A relatable Jordanian moment, product as the hero",["I need a funny Jordanian everyday situation where [product] solves the problem. Tone: light, family friendly.","بدي موقف كوميدي أردني من الحياة اليومية، و[المنتج] هو اللي بحل المشكلة. الأسلوب خفيف ومناسب للعيلة."]],
+  ["Occasion","Ramadan, Eid, Mother's Day, national days",["I need a reel for [occasion] from Bank al Etihad. Feeling: [warm / proud / playful]. Product or message: [optional].","بدي ريل لمناسبة [المناسبة] من بنك الاتحاد. الإحساس: [دافي / فخر / مرح]. المنتج أو الرسالة: [اختياري]."]]];
+function uxHelloHTML(){ return `<div class="ux-hello"><h3>What are we filming today?</h3><p>Tell me the idea in your own words, or drop your images. I take it from there, step by step.</p>
+  <div><p class="t12 muted" style="margin-bottom:8px">Or start from a ready-made template</p><div class="ux-tpl">${UX_TPL.map((t,i)=>`<button type="button" data-ux="tpl" data-i="${i}">${t[0]}<span>${t[1]}</span></button>`).join("")}</div></div></div>`; }
+
+/* ---------- free preview: storyboard frames + voices on the real timing, before any video credit is spent ---------- */
+let UX_GET=null;
+async function uxAudioUrl(a){
+  if(!a) return null; if(a.url) return a.url; if(/^https?:/i.test(String(a.id))) return a.id;
+  try{ if(!S.connected) await connect(true);
+    if(!UX_GET){ try{ UX_GET=(await buildArgs("creations_get","Get this one creation's details by its identifier.",{identifier:"__ID__"},"quick")).args; }catch{ UX_GET={identifier:"__ID__"}; } }
+    const r=await callMag("creations_get",replaceDeep(UX_GET,"__ID__",a.id)); const rr=readResult(r); const all=[...(rr.urls||[]),...(rr.links||[])];
+    a.url=all.find(u=>/\.(mp3|wav|m4a|ogg|aac|flac)(\?|#|$)/i.test(u))||all.find(u=>/audio|tts|voice/i.test(u)&&!/magnific\.com\/app\//i.test(u))||null; return a.url; }catch{ return null; }
+}
+const uxSecs=t=>{ const m=String(t||"").match(/(\d+(?:\.\d+)?)(?::(\d{1,2}))?/); if(!m) return null; return m[2]!=null?+m[1]*60+ +m[2]:+m[1]; };
+function uxTimeline(){
+  const beats=(RL.script?.scenes||[]), total=+RL.script?.duration_s||rlSet().length||30; const F=[];
+  beats.forEach((s,i)=>{ const parts=String(s.time||"").split(/[-–—]/); let a=uxSecs(parts[0]), b=uxSecs(parts[1]);
+    if(a==null||b==null||b<=a){ a=i*total/beats.length; b=(i+1)*total/beats.length; }
+    F.push({a,b,img:s.board?.id?rlTGet(s.board.id):null,id:s.board?.id||null,title:s.title||"",text:(s.dialogue||[]).map(d=>d.line).filter(Boolean).join(" · ")||s.on_screen_text||s.action||""}); });
+  if(!F.length){ let t=0; for(const sc of RL.scenes){ const d=+sc.duration_s||8; F.push({a:t,b:t+d,img:rlTGet(sc.frame?.id)||rlTGet(sc.clip)||null,title:sc.title||"",text:sc.logline||""}); t+=d; } }
+  const V=[]; let off=0; for(const sc of RL.scenes){ for(const d of sc.dialogue||[]) if(d.audio?.id){ const st=uxSecs(String(d.at||"").split(/[-–—]/)[0]); V.push({t:off+(st??0),a:d.audio,line:d.line}); } off+=+sc.duration_s||8; }
+  const end=Math.max(F.length?F[F.length-1].b:0,off,1); return {F,V,end};
+}
+async function uxAnimatic(){
+  if(!RL) return; document.querySelector(".ux-anim")?.remove();
+  const T=uxTimeline(); if(!T.F.length){ return; }
+  T.F.forEach(f=>{ if(f.id&&!f.img) rlNeed(f.id); });
+  const ar=rlSet().aspect.replace(":","/");
+  const box=document.createElement("div"); box.className="ux-anim"; box.setAttribute("role","dialog"); box.setAttribute("aria-label","Free preview"); box.dir=$("reels").dir;
+  box.innerHTML=`<div class="stage" style="aspect-ratio:${ar}"><div class="ph"></div><div class="cap" data-noi18n dir="auto"></div></div><div class="bar"><i></i></div>
+    <div class="ctl"><button type="button" class="p" data-a="play">Play</button><button type="button" data-a="close">Close</button></div>
+    <p class="t12"><span>${T.V.length?"Free preview: storyboard frames with your generated voices on the real timing.":"Free preview: storyboard frames on the real timing. Generate voices to hear the dialogue too."}</span> <span>No credits are spent.</span></p>`;
+  document.body.appendChild(box); uxT(box);
+  const stage=box.querySelector(".stage"), ph=stage.querySelector(".ph"), cap=stage.querySelector(".cap"), bar=box.querySelector(".bar i"), pb=box.querySelector('[data-a="play"]');
+  let t=0, playing=false, last=0, raf=0, curF=-1; const players=new Map(); const fired=new Set();
+  Promise.all(T.V.map(async v=>{ const u=await uxAudioUrl(v.a); if(u){ const au=new Audio(u); au.preload="auto"; players.set(v,au); } }));
+  const show=()=>{ const i=T.F.findIndex(f=>t>=f.a&&t<f.b), f=T.F[i<0?T.F.length-1:i]; if(i!==curF){ curF=i; const img=f.img||(f.id?rlTGet(f.id):null);
+      stage.querySelector("img")?.remove(); if(img){ const im=new Image(); im.src=img; im.alt=""; stage.insertBefore(im,cap); ph.textContent=""; } else ph.textContent=f.title||""; cap.textContent=f.text||""; }
+    bar.style.width=Math.min(100,t/T.end*100)+"%"; };
+  const stopAll=()=>players.forEach(a=>{ try{ a.pause(); }catch{} });
+  const tick=now=>{ if(!playing) return; t+=(now-last)/1000; last=now;
+    for(const v of T.V) if(!fired.has(v)&&t>=v.t){ fired.add(v); const a=players.get(v); if(a){ try{ a.currentTime=0; a.play().catch(()=>{}); }catch{} } }
+    if(t>=T.end){ playing=false; t=T.end; show(); pb.textContent=uxL("Play again"); return; }
+    show(); raf=requestAnimationFrame(tick); };
+  const play=()=>{ if(t>=T.end){ t=0; fired.clear(); curF=-1; } playing=true; last=performance.now(); pb.textContent=uxL("Pause"); raf=requestAnimationFrame(tick); };
+  const pause=()=>{ playing=false; cancelAnimationFrame(raf); stopAll(); pb.textContent=uxL("Play"); };
+  const close=()=>{ pause(); box.remove(); document.removeEventListener("keydown",onKey); };
+  const onKey=e=>{ if(e.key==="Escape") close(); };
+  document.addEventListener("keydown",onKey);
+  box.addEventListener("click",e=>{ const b=e.target.closest("[data-a]"); if(!b){ if(e.target===box) close(); return; } if(b.dataset.a==="close") close(); else playing?pause():play(); });
+  show(); pb.focus();
+}
+
+/* ---------- exact voice with lip-sync (beta): builds one dialogue track on the scene's timing, then Magnific fits the lips to it ---------- */
+function uxWav(buf){ const n=buf.length, ch=buf.numberOfChannels, sr=buf.sampleRate, out=new DataView(new ArrayBuffer(44+n*ch*2)); const w=(o,s)=>{ for(let i=0;i<s.length;i++) out.setUint8(o+i,s.charCodeAt(i)); };
+  w(0,"RIFF"); out.setUint32(4,36+n*ch*2,true); w(8,"WAVEfmt "); out.setUint32(16,16,true); out.setUint16(20,1,true); out.setUint16(22,ch,true); out.setUint32(24,sr,true); out.setUint32(28,sr*ch*2,true); out.setUint16(32,ch*2,true); out.setUint16(34,16,true); w(36,"data"); out.setUint32(40,n*ch*2,true);
+  const C=[...Array(ch)].map((_,c)=>buf.getChannelData(c)); let o=44; for(let i=0;i<n;i++) for(let c=0;c<ch;c++){ const v=Math.max(-1,Math.min(1,C[c][i])); out.setInt16(o,v<0?v*0x8000:v*0x7fff,true); o+=2; }
+  return new Blob([out.buffer],{type:"audio/wav"}); }
+async function uxDialogueTrack(sc){
+  const L=(sc.dialogue||[]).filter(d=>d.audio?.id); if(!L.length) throw {message:"Generate the voices first."};
+  if(L.length===1&&!(uxSecs(String(L[0].at||"").split(/[-–—]/)[0])>0.3)) return L[0].audio.id; /* one line from the start: the clip itself */
+  const dur=Math.max(4,+sc.duration_s||8), sr=44100, ctx=new OfflineAudioContext(1,Math.ceil(dur*sr),sr);
+  for(const d of L){ const u=await uxAudioUrl(d.audio); if(!u) throw {message:"Couldn't read a voice clip from Magnific."};
+    const ab=await (await fetch(u)).arrayBuffer(); const b=await ctx.decodeAudioData(ab); const s=ctx.createBufferSource(); s.buffer=b; s.connect(ctx.destination); s.start(Math.max(0,Math.min(dur-0.2,uxSecs(String(d.at||"").split(/[-–—]/)[0])||0))); }
+  const wav=uxWav(await ctx.startRendering()); return await rlHostFile(new File([wav],`scene${sc.n}_dialogue.wav`,{type:"audio/wav"}),"audio/wav",`scene${sc.n}_dialogue.wav`);
+}
+async function uxSpeak(n,btn){
+  const sc=RL.scenes.find(x=>+x.n===+n); if(!sc||!sc.clip||sc._speaking) return;
+  if(btn&&btn.dataset.armed!=="1"){ btn.dataset.armed="1"; const v=await uxCost({k:"speak",d:+sc.duration_s||8,v:sc.clip}); btn.textContent=`${uxL("Confirm")}${v?` · ${uxCostText(v)}`:""}`; return; }
+  sc._speaking=true; sc.note="Building the dialogue track…"; rlBoard();
+  try{ if(!S.connected) await connect(true);
+    const audio=await uxDialogueTrack(sc); sc.note="Fitting the voice and the lips in Magnific… a few minutes."; rlBoard();
+    const r=await callMag("video_speak",{videoUrl:sc.clip,audioUrl:audio}); let rr=readResult(r); if(!rr.ids.length) rr=await extractWithClaude(r,"the creation identifier of the video being generated");
+    const id=rr.ids[0]; if(!id) throw {message:"Magnific returned no video."};
+    if(!DONE.test(rr.status)) rr=await waitFor([id],"lip-sync video",30,true);
+    sc.clipOrig=sc.clipOrig||{clip:sc.clip,url:sc.url||null,web:sc.web||null}; delete sc._src; await rlFinishVideo(sc,rr,id);
+    sc.note="The exact voices are now on the video. The original is kept — press “Back to the original video” to return."; rlEvent(`Scene ${sc.n}: the generated voices were fitted to the video with lip-sync.`);
+  }catch(e){ sc.note=`Lip-sync didn't run: ${String(e?.message||e?.code||e).slice(0,240)} Nothing was changed.`; }
+  finally{ delete sc._speaking; rlSave(); rlBoard(); }
+}
+function uxSpeakHTML(sc){
+  if(sc.status!=="done"||!sc.clip||!(sc.dialogue||[]).some(d=>d.audio?.id)) return "";
+  return `<div class="rl-btns ux-keep" style="margin-top:8px"><button class="btn small" type="button" data-ux="speak" data-n="${sc.n}" ${sc._speaking?"disabled":""}>${sc._speaking?"Fitting the voice…":"Fit the exact voices · lip-sync (beta)"}</button>${sc.clipOrig?`<button class="btn small" type="button" data-ux="unspeak" data-n="${sc.n}">Back to the original video</button>`:""}</div>${sc._speaking||/lip|voices are now/i.test(sc.note||"")?`<p class="rl-status ux-keep">${esc(sc.note||"")}</p>`:`<p class="t12 muted ux-keep" style="margin:6px 0 0">Replaces the video's sound with your generated voices and matches the lips. Background sound from Seedance is not kept.</p>`}`;
+}
+
+/* ---------- other sizes: a copy of the reel in another format, same cast, places, script and voices ---------- */
+async function uxResize(aspect){
+  if(!RL) return; await rlFlush(); const old=rlSet().aspect; const c=rlClean(RL); c.id=rlNew().id; c.title=`${RL.title||"Reel"} · ${aspect}`; c.createdAt=c.updatedAt=Date.now(); c.space=null; c.final=null;
+  c.settings={...c.settings,aspect}; const sw=s=>typeof s==="string"?s.split(old).join(aspect).replace(/\bvertical\b/gi,aspect==="16:9"?"widescreen":aspect==="1:1"?"square":"vertical"):s;
+  c.look=sw(c.look);
+  for(const s of c.scenes||[]){ s.prompt=sw(s.prompt); s.frame_prompt=sw(s.frame_prompt); for(const k of ["clip","url","web","review","reviewErr","lastCall","pending","pendingAt","frame","map","clipOrig"]) delete s[k]; s.status=null; s.note=null; s.stale=false; if(s.check) s.check.dirty=true; }
+  for(const b of c.script?.scenes||[]) delete b.board;
+  c.events=[]; c.chat=[...(c.chat||[]),{role:"sys",text:`Copy of this reel in ${aspect}. Cast, places, script, dialogue and voices are kept; scenes need to be generated again in the new format.`}];
+  const keep=RL; RL=c; await rlFlush(); RL=keep; await rlOpen(c.id);
+}
+function uxSizesHTML(){ const cur=rlSet().aspect; return `<section class="rl-card" style="padding:16px"><b>Other sizes</b><p class="muted" style="margin:6px 0 12px">Makes a copy of this reel in another format. Cast, places, script and voices come along; the scenes are generated again in the new size.</p><div class="rl-btns">${["9:16","1:1","4:5","16:9"].filter(a=>a!==cur).map(a=>`<button class="btn small" type="button" data-ux="resize" data-a="${a}">${a}</button>`).join("")}</div></section>`; }
+
+/* ---------- wiring ---------- */
+function uxInit(){
+  const R=$("reels"); if(!R) return;
+  document.querySelectorAll("[data-uxlevel]").forEach(b=>b.onclick=()=>{ UX.level=b.dataset.uxlevel; try{ localStorage.setItem("bae_ui_level",UX.level); }catch{} uxApply(); });
+  const sel=$("uxLang"); if(sel) sel.onchange=()=>{ UX.lang=sel.value; try{ localStorage.setItem("bae_ui_lang",UX.lang); }catch{} uxApply(); if(RL) rlRender(); };
+  R.addEventListener("change",e=>{ if(e.target.id==="uxAuto"&&RL){ RL.auto=e.target.checked; UX.autoN=0; rlSave(); uxRenderNext(); if(RL.auto) uxAutoStep(); } });
+  R.addEventListener("click",e=>{ const b=e.target.closest("[data-ux]"); if(!b||!RL) return; const a=b.dataset.ux;
+    if(a==="next"){ UX.autoN=0; uxDoNext(uxNextStep(),false); }
+    else if(a==="tpl"){ const t=UX_TPL[+b.dataset.i]; const i=$("rlInput"); i.value=t[2][UX.lang==="ar"?1:0]; i.dispatchEvent(new Event("input",{bubbles:true})); i.focus(); const m=i.value.indexOf("["); if(m>=0) i.setSelectionRange(m,i.value.indexOf("]",m)+1); }
+    else if(a==="animatic") uxAnimatic();
+    else if(a==="speak") uxSpeak(b.dataset.n,b);
+    else if(a==="unspeak"){ const sc=RL.scenes.find(x=>+x.n===+b.dataset.n); if(sc?.clipOrig){ Object.assign(sc,sc.clipOrig); delete sc.clipOrig; delete sc._src; sc.note=null; rlLoadVideo(sc,sc.clip).finally(()=>{ rlSave(); rlBoard(); }); } }
+    else if(a==="resize"){ b.disabled=true; uxResize(b.dataset.a); }
+  });
+  uxApply(); uxObserve(); uxMicInit();
+}
+
 /* ---------- wiring ---------- */
 (function(){
   if(!$("reels")) return;
@@ -4019,6 +4307,7 @@ async function rlBible(){
     if(before!=null&&before!==t.value){ const p=t.dataset.rlEdit.split(":"), kind=p[0]==="b"?"script":p[0]==="s"||p[0]==="f"?"shot":p[0]==="c"?"character":"location";
       rlEvent(`The user edited by hand: ${p[0]==="look"?"the film look":p[0]==="b"?`script scene ${+p[1]+1} ${p[2]}`:p[0]==="s"?`scene ${p[1]} Seedance prompt`:p[0]==="f"?`scene ${p[1]} first-frame prompt`:`${p[1]} ${p[2]||"prompt"}`}. New text: ${String(t.value).slice(0,260)}`);
       brSignal(kind,"edited_by_user",0,{note:`The user rewrote ${p[0]==="b"?"script "+p[2]:p[0]==="s"?"the Seedance prompt":p[0]==="f"?"the first-frame prompt":(p[2]||"prompt")} by hand — learn from the difference.`,before,after:t.value,key:t.dataset.rlEdit}); } });
+  uxInit();
 })();
 function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span class="th vid" title="${esc(a.name||"")}"><video src="${a.url}" muted playsinline preload="metadata"></video><span class="vb" aria-hidden="true">▶</span><button type="button" data-i="${i}" aria-label="Remove">×</button></span>`:`<span class="th"><img src="${a.url}" alt="${esc(a.name||"")}"><button type="button" data-i="${i}" aria-label="Remove">×</button></span>`).join(""); }
 

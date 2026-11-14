@@ -1,10 +1,3 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-</head>
-<body>
 <title>BAE Studio</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -260,6 +253,49 @@ details.acc[open]>summary::after{content:"–"}
 .rl-vprog.err .rl-vprog-t i{background:var(--burgundy)}.rl-vprog.err b{color:#ffb4b4}
 @keyframes rlVrun{from{background-position:200% 0}to{background-position:0 0}}
 @media (prefers-reduced-motion:reduce){.rl-vprog-t i.run{animation:none}}
+.rl-send.stop svg{display:none}.rl-send.stop::before{content:"";width:12px;height:12px;border-radius:3px;background:currentColor;display:block}
+.rl-intake,.rl-kit{margin:6px 0 4px;max-width:min(560px,96%);border:1px solid var(--stone-light);border-radius:16px;background:var(--white);padding:12px 14px}
+.rl-intake .h,.rl-kit .h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
+.rl-intake .h b,.rl-kit .h b{font-weight:500;font-size:14px}
+.rl-intake ul,.rl-kit ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.rl-intake li,.rl-kit li{display:flex;align-items:center;gap:10px;min-width:0}
+.rl-intake li img,.rl-kit li img,.rl-intake .ph,.rl-kit .ph{width:44px;height:44px;border-radius:10px;object-fit:cover;flex:none;background:var(--stone-light);display:flex;align-items:center;justify-content:center;color:var(--muted,#6b6b6b);font-size:16px}
+.rl-intake .tx,.rl-kit .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.rl-intake .tx b,.rl-kit .tx b{font-weight:500;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rl-intake .n{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;border-radius:9px;background:var(--ink);color:var(--white);font-size:11px;margin-inline-end:6px;padding:0 4px}
+.rl-intake .k{font-weight:400;font-size:11.5px;color:var(--muted,#6b6b6b);margin-inline-start:4px}
+.rl-intake .st,.rl-kit .st{font-size:12px;color:var(--muted,#6b6b6b)}
+.rl-intake .st.ok,.rl-kit .st.ok{color:#2e6b4a}.rl-intake .st.bad{color:#a23a2a}
+.rl-intake .st.run,.rl-kit .st.run{color:var(--ink)}.rl-intake .st.run::before,.rl-kit .st.run::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;border:2px solid currentColor;border-top-color:transparent;margin-inline-end:6px;vertical-align:-1px;animation:rlspin .8s linear infinite}
+@keyframes rlspin{to{transform:rotate(360deg)}}
+.rl-intake select{flex:none;max-width:38%;font:inherit;font-size:12px;padding:6px 8px;border-radius:10px;border:1px solid var(--stone-light);background:var(--white);color:inherit}
+.rl-kit .g{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted,#6b6b6b);margin:10px 0 6px}
+.rl-kit li .btn{flex:none;cursor:pointer}
+.rl-kit .f{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.rl-kit .f .btn{cursor:pointer}
+.rl-kit p{margin:8px 0 0}
+.rl-typing-m.live .rl-steps{display:none}
+.rl-live{margin-top:8px}
+.rl-caret{display:inline-block;width:7px;height:1em;background:currentColor;opacity:.55;margin-inline-start:2px;vertical-align:-2px;animation:rlcar 1s steps(2) infinite}
+@keyframes rlcar{50%{opacity:0}}
+@media (max-width:700px){.rl-intake li{flex-wrap:wrap}.rl-intake select{max-width:none;width:calc(100% - 54px);margin-inline-start:54px}.rl-intake,.rl-kit{max-width:100%}}
+@media (prefers-reduced-motion:reduce){.rl-caret,.rl-intake .st.run::before,.rl-kit .st.run::before{animation:none}}
+.rl-dlg ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:12px}
+.rl-dlg li{border:1px solid var(--stone-light);border-radius:12px;padding:10px 12px;background:var(--white)}
+.rl-dlg .dl-top{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px}
+.rl-dlg .dl-top b{font-weight:500;font-size:13.5px}
+.rl-dlg .ln{font-size:19px;line-height:2;margin:6px 0 8px;user-select:all}
+.rl-dlg .tts{font-size:14px;line-height:1.9;margin:0 0 8px;padding:6px 10px;border-radius:8px;background:var(--cream,#f7f3ec);user-select:all}
+.rl-dlg .acts,.rl-dlg .pick{display:flex;flex-wrap:wrap;gap:8px}
+.rl-dlg .pick{margin-top:10px;padding-top:10px;border-top:1px dashed var(--stone-light)}
+.rl-dlg .paste{display:flex;gap:8px;flex:1 1 100%}
+.rl-dlg .paste input{flex:1;min-width:0;font:inherit;font-size:13px;padding:8px 10px;border-radius:10px;border:1px solid var(--stone-light);background:var(--white);color:inherit}
+.rl-chg{margin:6px 0 4px;max-width:92%;border:1px solid var(--stone-light);border-radius:14px;background:var(--white);padding:10px 12px;font-size:13px}
+.rl-chg .h{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px}
+.rl-chg .h b{font-weight:500;color:var(--ink)}
+.rl-chg ul{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:6px}
+.rl-chg li{background:var(--cream,#f7f3ec);border-radius:999px;padding:3px 10px;font-size:12px;line-height:1.5}
+.rl-chg.undone{opacity:.55}
 .rl-vsaw{margin-top:8px;font-size:13px}.rl-vsaw summary{cursor:pointer;opacity:.85}.rl-vsaw div{white-space:pre-wrap;margin-top:6px;max-height:260px;overflow:auto;opacity:.9;line-height:1.5}
 .rl-att .th button{position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:0;background:var(--ink);color:var(--white);font-size:12px;cursor:pointer;line-height:20px;padding:0}
 .rl-board{min-width:0;display:flex;flex-direction:column;gap:16px}
@@ -541,6 +577,14 @@ details.acc[open]>summary::after{content:"–"}
 .rl-revt[disabled]{cursor:default;opacity:.6}
 .rl-status{font-size:12px;color:var(--ink-med)}
 .rl-status.bad{color:var(--warn)}
+.rl-beat.has-sb{grid-template-columns:86px 1fr minmax(160px,220px)}
+.rl-sbcell{display:flex;flex-direction:column;gap:6px;min-width:0}
+.rl-sbcell img{width:100%;border-radius:12px;display:block;cursor:zoom-in;background:var(--stone-light)}
+.rl-sbcell .ph{aspect-ratio:9/16;max-height:260px;border-radius:12px;border:1px dashed var(--stone-light);display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;font-size:12px;color:var(--muted,#6b6b6b)}
+.rl-sbcell.busy .ph{background:linear-gradient(90deg,var(--stone-light) 0%,transparent 50%,var(--stone-light) 100%);background-size:200% 100%;animation:rlsb 1.6s linear infinite}
+@keyframes rlsb{to{background-position:-200% 0}}
+.rl-sbcell .cap{display:flex;align-items:center;justify-content:space-between;gap:8px}
+@media (max-width:700px){.rl-beat.has-sb{grid-template-columns:1fr}.rl-beat.has-sb .tc{order:-1}.rl-sbcell{max-width:260px}}
 .rl-beat{display:grid;grid-template-columns:86px 1fr;gap:10px;padding:10px 0;border-top:1px solid var(--stone-light)}
 .rl-beat:first-of-type{border-top:0}
 .rl-beat .tc{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--orange-dark)}
@@ -852,6 +896,173 @@ details.log summary{cursor:pointer}
 .lightbox{position:fixed;inset:0;z-index:120;background:rgba(25,24,30,.88);display:grid;place-items:center;padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
 .lightbox img{max-width:100%;max-height:100%;border-radius:12px;object-fit:contain}
 .lightbox button{position:absolute;top:calc(16px + env(safe-area-inset-top,0px));inset-inline-end:calc(16px + env(safe-area-inset-right,0px));background:var(--white);border:0;border-radius:999px;min-height:44px;padding:0 18px;cursor:pointer}
+
+/* ===== Reels v2 — chat, scenes and mobile (Apple clarity · Google system status · Meta/WhatsApp chat patterns · Uber one-thumb flows) ===== */
+.rl-chathead{gap:10px}
+.rl-chatwho{display:flex;flex-direction:column;line-height:1.2}
+.rl-msgs{gap:10px;padding:18px 18px 8px;scroll-behavior:smooth}
+.rl-hello{display:flex;gap:12px;align-items:flex-start;background:var(--orange-light);border-radius:20px;padding:16px;line-height:1.5}
+.rl-hello p{margin:6px 0 0}
+.rl-hello .av,.rl-who .av,.rl-room2-c .av{width:28px;height:28px;flex:none;border-radius:50%;display:grid;place-items:center;background:var(--orange-dark);color:#fff;font-size:13px}
+.rl-who{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-med);margin:8px 0 -4px}
+.rl-who .av{width:22px;height:22px;font-size:11px}
+.rl-m{white-space:normal}
+.rl-m.u{white-space:pre-wrap}
+.rl-fmt p{margin:0 0 8px}.rl-fmt p:last-child{margin-bottom:0}
+.rl-fmt ul,.rl-fmt ol{margin:4px 0 8px;padding-inline-start:20px}
+.rl-fmt li{margin:3px 0}
+.rl-fmt b{font-weight:500}
+.rl-sent{font-size:11px;opacity:.7;margin-top:6px;text-align:end}
+.rl-typing-m{min-width:min(320px,88%)}
+.rl-typhead{display:flex;align-items:center;gap:10px;font-size:14px}
+.rl-steps{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--ink-med)}
+.rl-steps li{display:flex;align-items:center;gap:8px}
+.rl-steps .d{width:16px;height:16px;flex:none;border-radius:50%;display:grid;place-items:center;font-size:10px;border:1.5px solid var(--stone)}
+.rl-steps li.ok .d{background:var(--orange-dark);border-color:var(--orange-dark);color:#fff}
+.rl-steps li.run .d{border-color:var(--orange-dark);border-top-color:transparent;animation:spin .9s linear infinite}
+.rl-steps li.run{color:var(--ink)}
+.rl-room2{align-self:stretch;max-width:100%;display:flex;flex-direction:column;gap:8px;margin:2px 0 6px}
+.rl-room2-h{display:flex;align-items:baseline;gap:8px;font-size:13px;font-weight:500;padding:0 4px}
+.rl-room2-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
+.rl-room2-c{display:flex;gap:10px;align-items:flex-start;background:var(--white);border:1px solid var(--stone-light);border-radius:16px;padding:12px;transition:border-color .2s,opacity .2s}
+.rl-room2-c:hover{border-color:var(--stone)}
+.rl-room2-c .av{background:var(--ink)}
+.rl-room2-c .tx{min-width:0;display:flex;flex-direction:column;gap:6px}
+.rl-room2-c .who{display:flex;flex-direction:column;line-height:1.2}
+.rl-room2-c .who b{font-weight:500;font-size:13px}
+.rl-room2-c .who span{font-size:11px;color:var(--ink-light)}
+.rl-room2-c p{margin:0;font-size:13px;line-height:1.5;color:var(--ink)}
+.rl-room2-c .ac{display:flex;gap:6px;align-items:center}
+.rl-room2-c .st{font-size:12px;color:var(--ink-light)}
+.rl-room2-c.used{border-color:color-mix(in srgb,var(--orange-dark) 40%,transparent)}
+.rl-room2-c.skipped{opacity:.55}
+.rl-compose{gap:6px;padding:10px 12px 12px}
+.rl-crow{display:flex;align-items:flex-end;gap:8px}
+.rl-crow textarea{flex:1;min-height:24px;max-height:180px;padding:10px 14px;border:1px solid var(--stone-light);border-radius:22px;background:var(--orange-light);line-height:1.4}
+.rl-crow textarea:focus{border-color:var(--orange-dark);background:var(--white)}
+.rl-clip,.rl-send{all:unset;cursor:pointer;flex:none;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;box-sizing:border-box}
+.rl-clip{border:1px solid var(--stone);font-size:20px;color:var(--ink)}
+.rl-clip:hover{border-color:var(--orange-dark)}
+.rl-send{background:var(--orange-dark);color:#fff}
+.rl-send:disabled{opacity:.4;cursor:default}
+.rl-clip:focus-visible,.rl-send:focus-visible{outline:2px solid var(--orange-dark);outline-offset:2px}
+#rlHint{padding:0 4px}
+/* scenes: a calm summary first, everything else one tap away */
+.rl-scn{display:grid;grid-template-columns:minmax(0,200px) minmax(0,1fr);gap:16px;border:1px solid var(--stone-light);border-radius:20px;padding:14px;background:var(--white);scroll-margin-top:16px}
+.rl-scn-body{min-width:0;display:flex;flex-direction:column;gap:8px}
+.rl-scn-head{display:flex;align-items:center;gap:8px}
+.rl-scn-head .sub{font-size:12px;color:var(--ink-light)}
+.rl-scn-title{margin:0;font-size:20px;font-weight:400;line-height:1.25}
+.rl-scn-log{margin:0;font-size:14px;line-height:1.5;color:var(--ink-med)}
+.rl-chips{padding:0}
+.rl-changes summary .a-btn{font-size:12px;padding:4px 12px;min-height:0;margin-left:6px}
+.rl-scn .rl-chips{display:flex;flex-wrap:wrap;gap:6px}
+.rl-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;border-radius:999px;background:var(--orange-light);color:var(--ink-med)}
+.rl-chip.ok{background:color-mix(in srgb,var(--teal-dark) 14%,var(--white));color:var(--teal-dark)}
+.rl-chip.warn{background:color-mix(in srgb,var(--orange) 18%,var(--white));color:var(--orange-dark)}
+.rl-chip .spin{width:12px;height:12px}
+.rl-scn .rl-refs{display:flex;flex-wrap:wrap;gap:6px}
+.rl-scn-cta{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
+.rl-scn-edit{display:flex;flex-direction:column;gap:8px}
+.rl-scn-more>summary,.rl-sec>summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:12px;background:var(--orange-light);font-size:14px}
+.rl-scn-more>summary::-webkit-details-marker,.rl-sec>summary::-webkit-details-marker{display:none}
+.rl-scn-more>summary::after,.rl-sec>summary::after{content:"＋";font-size:14px;color:var(--ink-med);flex:none}
+.rl-scn-more[open]>summary::after,.rl-sec[open]>summary::after{content:"－"}
+.rl-scn-more>summary:focus-visible,.rl-sec>summary:focus-visible{outline:2px solid var(--orange-dark);outline-offset:2px}
+.rl-scn-inner{display:flex;flex-direction:column;gap:10px;padding-top:10px}
+.rl-sec{border:1px solid var(--stone-light);border-radius:14px}
+.rl-sec>summary{background:transparent}
+.rl-sec[open]{padding:0 10px 10px}
+.rl-sec[open]>summary{padding:10px 2px}
+.rl-sec .rl-prompt{width:100%;box-sizing:border-box}
+details.rl-changes>summary{cursor:pointer;list-style:none}
+details.rl-changes>summary::-webkit-details-marker{display:none}
+@media (max-width:980px){
+  .rl-top{padding:12px 16px 8px;gap:10px}
+  .rl-body{padding:0 12px 12px;gap:12px}
+  .rl-stages{margin:0 12px 8px}
+  .rl-chat{height:calc(100dvh - 170px);border-radius:20px}
+}
+@media (max-width:700px){
+  .rl-scn{grid-template-columns:minmax(0,1fr);padding:12px;gap:12px}
+  .rl-scn-media{max-width:min(220px,62vw);width:100%;margin:0 auto}
+  .rl-scn-media img,.rl-scn-media video{max-height:46vh;object-fit:cover}
+  .rl-room2-list{grid-template-columns:minmax(0,1fr)}
+  .rl-m{max-width:94%}
+  .rl-stages button{padding:8px 10px;font-size:13px;flex:0 0 auto}
+  .rl-stages button:not([aria-selected="true"]) .lb{display:none}
+  .rl-title{flex:1 1 140px;min-width:0}
+  .rl-tools{width:100%;display:flex;justify-content:space-between}
+  #rlHint{display:none}
+  .rl-scn-cta .btn{flex:1 1 auto}
+  .rl-msgs{padding:14px 12px 6px}
+}
+
+/* ===== New look (v84): 4 steps, chat first, Arabic, Simple / Pro ===== */
+.reels[dir="rtl"]{font-family:"IBM Plex Sans Arabic",var(--font)}
+.rl-stages.ux4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:12px 14px 10px;overflow:visible;border-radius:20px}
+.rl-stages.ux4 button{all:unset;cursor:pointer;display:flex;flex-direction:column;gap:6px;padding:2px 0 4px;min-height:40px;font-size:14px;color:var(--ink-med);background:none;border-radius:8px;white-space:nowrap}
+.rl-stages.ux4 button:hover{background:none;color:var(--ink)}
+.rl-stages.ux4 button .bar{height:4px;border-radius:2px;background:var(--stone-light);display:block}
+.rl-stages.ux4 button.done{color:var(--teal-dark)} .rl-stages.ux4 button.done .bar{background:var(--teal-dark)}
+.rl-stages.ux4 button[aria-selected="true"]{background:none;color:var(--orange-dark)} .rl-stages.ux4 button[aria-selected="true"] .bar{background:var(--orange-dark)}
+.rl-stages.ux4 button:focus-visible{outline:2px solid var(--orange-dark);outline-offset:3px}
+.rl-stages.ux4 .ux-sub{grid-column:1/-1;display:flex;gap:6px;padding-top:6px;border-top:1px solid var(--stone-light)}
+.rl-stages.ux4 .ux-sub button{flex:0 0 auto;flex-direction:row;align-items:center;min-height:36px;padding:0 14px;border-radius:18px;border:1px solid var(--stone);color:var(--ink);font-size:14px}
+.rl-stages.ux4 .ux-sub button[aria-selected="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.ux-nextbar{display:flex;flex-direction:column;gap:6px;padding:10px 14px 0}
+.ux-nextbar:empty{display:none}
+.ux-nextbar .go{all:unset;box-sizing:border-box;cursor:pointer;min-height:50px;border-radius:25px;background:var(--orange-dark);color:#fff;font-size:17px;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 20px;text-align:center}
+.ux-nextbar .go:hover{background:var(--ink)} .ux-nextbar .go:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.ux-nextbar .go[disabled]{opacity:.55;cursor:default}
+.ux-nextbar .go .cost{font-size:12px;opacity:.9;border:1px solid rgba(255,255,255,.5);border-radius:10px;padding:2px 8px;white-space:nowrap}
+.ux-nextbar .row{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px;color:var(--ink-med)}
+.ux-auto{display:inline-flex;align-items:center;gap:8px;cursor:pointer;min-height:32px}
+.ux-auto input{width:18px;height:18px;accent-color:var(--orange-dark)}
+.ux-mic{all:unset;box-sizing:border-box;cursor:pointer;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:var(--ink);background:var(--orange-light);flex:0 0 auto}
+.ux-mic[hidden]{display:none}
+.ux-mic[aria-pressed="true"]{background:var(--orange-dark);color:#fff;animation:uxpulse 1.2s infinite}
+.ux-mic:focus-visible{outline:2px solid var(--orange-dark);outline-offset:2px}
+@keyframes uxpulse{50%{box-shadow:0 0 0 8px rgba(193,58,35,.15)}}
+@media (prefers-reduced-motion:reduce){.ux-mic[aria-pressed="true"]{animation:none}}
+.ux-hello{display:flex;flex-direction:column;gap:16px;padding:18px 6px}
+.ux-hello h3{margin:0;font-size:28px;line-height:1.25;font-weight:400}
+.ux-hello p{margin:0;color:var(--ink-med);line-height:1.5}
+.ux-tpl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ux-tpl button{all:unset;box-sizing:border-box;cursor:pointer;min-height:64px;padding:12px 14px;border-radius:16px;border:1px solid var(--stone-light);background:var(--white);font-size:15px;line-height:1.35;display:flex;flex-direction:column;gap:4px}
+.ux-tpl button span{font-size:12px;color:var(--ink-med)}
+.ux-tpl button:hover{border-color:var(--orange-dark)} .ux-tpl button:focus-visible{outline:2px solid var(--orange-dark)}
+.ux-cost{font-size:12px;color:var(--ink-med);white-space:nowrap}
+.rl-m{font-size:16px;line-height:1.55;border-radius:20px;padding:12px 16px}
+.rl-m.a{background:none;padding:2px 2px 4px;max-width:100%}
+.ux-level button{min-height:36px}
+/* Simple mode hides the workshop: prompts, blocking, the room, memory, ratings */
+.reels[data-level="simple"] :is(.rl-memchip,.rl-room2,.rl-rateline,.rl-rate,.rl-jury,.rl-notes,.rl-vsaw,.ux-pro,#rlHint){display:none!important}
+.reels[data-level="simple"] .rl-scn-inner>:not(.rl-dlg):not(.ux-keep){display:none}
+.reels[data-level="simple"] .rl-scn-more>summary .t12{display:none}
+/* animatic player */
+.ux-anim{position:fixed;inset:0;z-index:100000;background:rgba(25,24,30,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:16px;color:#fff}
+.ux-anim .stage{position:relative;height:min(70vh,640px);aspect-ratio:9/16;max-width:92vw;border-radius:18px;overflow:hidden;background:#000;display:grid;place-items:center}
+.ux-anim .stage img{width:100%;height:100%;object-fit:cover}
+.ux-anim .stage .ph{padding:20px;text-align:center;font-size:18px;line-height:1.5}
+.ux-anim .cap{position:absolute;inset:auto 0 0 0;padding:28px 14px 14px;background:linear-gradient(transparent,rgba(0,0,0,.75));font-size:17px;line-height:1.5;text-align:center}
+.ux-anim .bar{width:min(420px,92vw);height:4px;border-radius:2px;background:rgba(255,255,255,.25);overflow:hidden}
+.ux-anim .bar i{display:block;height:100%;width:0;background:var(--orange)}
+.ux-anim .ctl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.ux-anim .ctl button{all:unset;cursor:pointer;min-height:44px;padding:0 20px;border-radius:22px;border:1px solid rgba(255,255,255,.6);font-size:15px}
+.ux-anim .ctl button.p{background:#fff;color:var(--ink);border-color:#fff}
+.ux-anim .ctl button:focus-visible{outline:2px solid var(--orange)}
+.ux-anim .t12{color:rgba(255,255,255,.8);text-align:center;max-width:420px}
+.reels[dir="rtl"] .rl-m.u{border-bottom-right-radius:20px;border-bottom-left-radius:6px}
+.reels[dir="rtl"] .g-back i{display:inline-block;transform:scaleX(-1)}
+.rl-stages.ux4 .lb{display:block!important}
+.ux-nextbar .go .cost:empty{display:none}
+.ux-cost:empty{display:none}
+@media (max-width:980px){ .rl-stages.ux4{margin:0 12px 10px;padding:10px 12px 8px} .ux-hello h3{font-size:24px}
+  .rl-top{flex-wrap:wrap;row-gap:8px} .rl-tools{width:100%;display:flex;flex-wrap:nowrap;gap:8px;align-items:center}
+  .rl-tools .a-seg{padding:3px} .rl-tools .a-seg button{padding:7px 14px;font-size:14px;min-height:0}
+  .rl-tools #rlSettingsBtn{margin-inline-start:auto;padding:8px 14px;font-size:14px}
+  .rl-stages.ux4 .ux-sub button{min-height:34px;font-size:13px;padding:0 12px} }
 </style>
 
 <div class="intro" id="intro" aria-hidden="true"><div class="i-glow"></div><div class="i-mark"><svg class="i-emblem" viewBox="0 0 84.53 82.12" aria-hidden="true"><path style="--i:0" fill-rule="nonzero" d="M38.66 27.30C40.80 28.18 42.45 28.19 43.68 27.49C44.94 26.78 45.89 25.48 46.48 24.01C41.22 25.01 40.02 20.74 36.37 21.08C35.25 21.19 33.42 21.99 32.89 24.04C32.45 25.69 32.76 27.54 33.30 28.84C34.53 27.04 36.67 26.47 38.66 27.29"/><path style="--i:1" fill-rule="nonzero" d="M37.97 11.05C35.57 10.99 33.41 12.69 32.43 15.23C31.59 17.39 31.48 19.70 31.46 20.54C33.57 17.07 37.75 17.05 40.73 19.40C42.29 20.63 44.36 21.67 46.58 21.31C48.83 20.94 50.39 19.39 51.64 18.02C47.71 17.88 45.34 16.32 43.09 13.84C41.69 12.31 40.22 11.09 37.97 11.04"/><path style="--i:2" fill-rule="nonzero" d="M45.28 11.59C47.73 14.57 50.36 15.65 53.52 15.26C55.76 14.98 57.59 14.18 58.85 13.36C56.03 12.54 53.52 10.83 51.74 8.40L48.73 4.31C45.56 0.00 39.60 0.16 36.07 3.94C34.23 5.93 33.39 7.89 32.96 9.97C36.81 6.56 41.99 7.59 45.28 11.59"/><path style="--i:3" fill-rule="nonzero" d="M28.12 35.91C30.15 34.80 31.19 33.52 31.40 32.13C31.63 30.70 31.19 29.16 30.41 27.79C27.92 32.50 23.81 30.77 21.81 33.81C21.19 34.75 20.68 36.67 21.96 38.36C22.99 39.73 24.64 40.65 26.00 41.04C25.34 38.96 26.24 36.94 28.12 35.91"/><path style="--i:4" fill-rule="nonzero" d="M14.90 26.32C13.37 28.15 13.36 30.88 14.74 33.23C15.92 35.22 17.66 36.75 18.31 37.29C16.90 33.49 19.49 30.23 23.20 29.38C25.14 28.94 27.25 27.98 28.34 26.03C29.46 24.05 29.22 21.87 28.92 20.05C26.35 23.01 23.65 23.88 20.29 24.09C18.22 24.21 16.34 24.59 14.90 26.32"/><path style="--i:5" fill-rule="nonzero" d="M19.89 20.97C23.76 20.93 26.25 19.56 27.91 16.86C29.09 14.95 29.60 13.03 29.74 11.53C27.34 13.21 24.42 14.10 21.41 13.97L16.31 13.76C10.94 13.53 7.35 18.26 8.13 23.36C8.54 26.03 9.56 27.90 10.92 29.53C10.64 24.41 14.69 21.03 19.89 20.97"/><path style="--i:6" fill-rule="nonzero" d="M28.33 49.47C28.72 47.20 28.36 45.60 27.40 44.56C26.42 43.50 24.93 42.87 23.36 42.62C25.51 47.50 21.59 49.61 22.74 53.07C23.09 54.13 24.28 55.72 26.42 55.79C28.13 55.84 29.88 55.13 31.04 54.32C29.00 53.53 27.96 51.57 28.33 49.47"/><path style="--i:7" fill-rule="nonzero" d="M12.53 53.76C13.02 56.09 15.16 57.81 17.87 58.19C20.18 58.52 22.47 58.12 23.30 57.95C19.43 56.68 18.48 52.63 20.12 49.22C20.98 47.44 21.54 45.20 20.69 43.13C19.83 41.03 17.96 39.87 16.34 38.96C17.07 42.80 16.08 45.44 14.15 48.18C12.96 49.87 12.08 51.57 12.54 53.76"/><path style="--i:8" fill-rule="nonzero" d="M11.44 46.55C13.81 43.52 14.29 40.73 13.20 37.75C12.44 35.64 11.24 34.05 10.16 33.01C9.98 35.92 8.85 38.74 6.87 41.00L3.52 44.83C0.00 48.85 1.48 54.59 5.98 57.17C8.34 58.52 10.44 58.89 12.58 58.85C8.38 55.87 8.24 50.62 11.43 46.55"/><path style="--i:9" fill-rule="nonzero" d="M39.12 57.76C37.58 56.04 36.09 55.33 34.68 55.42C33.23 55.52 31.82 56.29 30.64 57.35C35.82 58.72 35.04 63.08 38.47 64.35C39.52 64.74 41.53 64.81 42.90 63.19C44.01 61.89 44.55 60.09 44.63 58.68C42.73 59.78 40.55 59.36 39.12 57.76"/><path style="--i:10" fill-rule="nonzero" d="M32.65 72.71C34.79 73.78 37.47 73.19 39.46 71.33C41.16 69.74 42.28 67.71 42.66 66.96C39.24 69.17 35.47 67.39 33.81 63.98C32.94 62.20 31.53 60.37 29.37 59.74C27.19 59.11 25.10 59.82 23.38 60.52C26.86 62.34 28.31 64.77 29.26 67.97C29.85 69.95 30.64 71.69 32.65 72.70"/><path style="--i:11" fill-rule="nonzero" d="M26.29 69.06C25.39 65.33 23.49 63.22 20.47 62.20C18.34 61.49 16.34 61.43 14.84 61.61C17.02 63.57 18.54 66.20 19.09 69.15L20.01 74.14C20.99 79.38 26.42 81.81 31.26 79.92C33.79 78.93 35.39 77.53 36.69 75.84C31.73 77.25 27.51 74.09 26.30 69.06"/><path style="--i:12" fill-rule="nonzero" d="M52.38 54.55C50.06 54.67 48.57 55.38 47.77 56.53C46.94 57.72 46.66 59.30 46.76 60.88C51.07 57.71 54.01 61.04 57.15 59.16C58.11 58.58 59.42 57.07 59.00 54.99C58.67 53.32 57.59 51.78 56.53 50.84C56.21 52.99 54.52 54.43 52.38 54.54"/><path style="--i:13" fill-rule="nonzero" d="M60.10 68.89C62.28 67.90 63.49 65.44 63.26 62.74C63.07 60.43 62.17 58.30 61.82 57.53C61.43 61.57 57.67 63.39 53.96 62.55C52.02 62.12 49.70 62.07 47.86 63.36C45.99 64.66 45.26 66.73 44.73 68.50C48.34 66.94 51.15 67.31 54.26 68.58C56.18 69.36 58.05 69.83 60.10 68.89"/><path style="--i:14" fill-rule="nonzero" d="M53.27 71.56C49.77 69.93 46.92 70.09 44.25 71.80C42.35 73.02 41.05 74.53 40.27 75.81C43.17 75.33 46.19 75.80 48.85 77.21L53.35 79.60C58.08 82.12 63.38 79.41 64.90 74.47C65.71 71.89 65.60 69.76 65.09 67.70C63.10 72.44 57.98 73.74 53.27 71.55"/><path style="--i:15" fill-rule="nonzero" d="M58.11 42.24C56.77 44.12 56.39 45.72 56.80 47.07C57.22 48.45 58.29 49.65 59.59 50.55C59.79 45.23 64.24 45.02 64.72 41.41C64.86 40.30 64.49 38.35 62.60 37.37C61.07 36.59 59.19 36.47 57.79 36.70C59.29 38.29 59.36 40.50 58.12 42.24"/><path style="--i:16" fill-rule="nonzero" d="M74.21 45.19C74.80 42.88 73.61 40.41 71.34 38.89C69.40 37.60 67.17 36.97 66.34 36.77C69.27 39.59 68.37 43.64 65.39 46.01C63.84 47.24 62.36 49.02 62.22 51.24C62.08 53.51 63.25 55.37 64.32 56.88C65.34 53.10 67.39 51.15 70.32 49.52C72.13 48.51 73.66 47.36 74.21 45.19"/><path style="--i:17" fill-rule="nonzero" d="M72.05 52.15C68.59 53.86 66.94 56.17 66.62 59.32C66.39 61.55 66.77 63.50 67.29 64.91C68.72 62.36 70.97 60.30 73.74 59.12L78.43 57.11C83.36 55.01 84.53 49.20 81.60 44.94C80.07 42.71 78.33 41.46 76.39 40.58C78.88 45.07 76.71 49.87 72.05 52.16"/><path style="--i:18" fill-rule="nonzero" d="M52.01 30.12C52.65 32.34 53.67 33.62 54.98 34.14C56.33 34.67 57.95 34.59 59.47 34.15C55.40 30.68 58.01 27.09 55.47 24.47C54.69 23.67 52.91 22.74 50.97 23.60C49.40 24.30 48.13 25.69 47.44 26.92C49.63 26.74 51.42 28.06 52.01 30.12"/><path style="--i:19" fill-rule="nonzero" d="M64.36 19.44C62.91 17.55 60.22 16.93 57.62 17.75C55.39 18.45 53.51 19.80 52.84 20.31C56.88 19.79 59.50 23.02 59.51 26.81C59.51 28.78 59.99 31.04 61.66 32.54C63.35 34.06 65.54 34.31 67.40 34.42C65.06 31.28 64.81 28.47 65.36 25.17C65.69 23.13 65.74 21.23 64.37 19.45"/><path style="--i:20" fill-rule="nonzero" d="M68.49 25.46C67.68 29.22 68.47 31.94 70.75 34.15C72.36 35.72 74.13 36.64 75.56 37.11C74.45 34.41 74.23 31.39 75.02 28.49L76.37 23.60C77.79 18.45 73.95 13.92 68.77 13.54C66.06 13.34 63.99 13.92 62.09 14.88C67.17 15.75 69.59 20.42 68.49 25.46"/></svg><div class="i-word"><span>Studio</span></div></div></div>
@@ -862,7 +1073,7 @@ details.log summary{cursor:pointer}
     <div class="l-mid">
       <h1>On-brand images,<br><span>in minutes.</span></h1>
       <div class="l-choices">
-        <button class="l-choice" type="button" data-enter="photo"><span class="row"><b>Photography</b><span class="l-arrow" aria-hidden="true">→</span></span><small>4K · Nano Banana 2.1</small></button>
+        <button class="l-choice" type="button" data-enter="photo"><span class="row"><b>Photography</b><span class="l-arrow" aria-hidden="true">→</span></span><small>2K · Seedream 5.5</small></button>
         <button class="l-choice" type="button" data-enter="icon"><span class="row"><b>Icons</b><span class="l-arrow" aria-hidden="true">→</span></span><small>Glassmorphism · GPT 2.5</small></button>
         <button class="l-choice" type="button" id="openReels"><span class="row"><b>Reels production</b><span class="l-arrow" aria-hidden="true">→</span></span><small>Idea to film · Seedance 2.5</small></button>
         <button class="l-choice" type="button" id="openGallery"><span class="row"><b>Gradient elements</b><span class="l-arrow" aria-hidden="true">→</span></span><small>6 shapes · high-res PNG</small></button>
@@ -893,10 +1104,12 @@ details.log summary{cursor:pointer}
       <div class="rl-title"><input id="rlTitle" class="rl-titlein" type="text" aria-label="Reel title" dir="auto" maxlength="80"><span class="t12 rl-saved" id="rlSaved" aria-live="polite"></span></div>
       <div class="rl-tools">
         <div class="a-seg rl-tabs" role="group" aria-label="View"><button type="button" data-rlview="chat" aria-pressed="true">Chat</button><button type="button" data-rlview="board" aria-pressed="false">Board</button></div>
+        <div class="a-seg ux-level" role="group" aria-label="Mode"><button type="button" data-uxlevel="simple" aria-pressed="true">Simple</button><button type="button" data-uxlevel="pro" aria-pressed="false">Pro</button></div>
         <button class="a-btn" type="button" id="rlSettingsBtn" aria-expanded="false" aria-controls="rlSettings">Settings</button>
       </div>
     </div>
     <div class="rl-settings" id="rlSettings" hidden>
+    <div><label class="lbl" for="uxLang">Interface</label><select id="uxLang"><option value="ar">العربية</option><option value="en">English</option></select></div>
     <div><label class="lbl" for="rlLen">Length</label><select id="rlLen"><option value="15">15 s</option><option value="30">30 s</option><option value="45">45 s</option><option value="60">60 s</option></select></div>
     <div><label class="lbl" for="rlAspect">Format</label><select id="rlAspect"><option value="9:16">9:16 · Reels / TikTok</option><option value="4:5">4:5 · Feed</option><option value="16:9">16:9 · Widescreen</option><option value="1:1">1:1 · Square</option></select></div>
     <div><label class="lbl" for="rlLang">Dialogue</label><select id="rlLang"><option value="Jordanian Arabic">Jordanian Arabic</option><option value="Modern Standard Arabic">Modern Standard Arabic</option><option value="English">English</option><option value="none">No dialogue</option></select></div>
@@ -905,17 +1118,19 @@ details.log summary{cursor:pointer}
     <nav class="rl-stages" id="rlStages" role="tablist" aria-label="Production stages"></nav>
     <div class="rl-body">
       <div class="rl-chat" id="rlChatPane">
-        <div class="rl-chathead"><span class="rl-avatar" aria-hidden="true">✦</span><b>Director</b><span class="t12 muted">Claude</span></div>
+        <div class="rl-chathead"><span class="rl-avatar" aria-hidden="true">✦</span><div class="rl-chatwho"><b>Director</b><span class="t12 muted">with 5 assistant directors · Gemini Eye</span></div></div>
         <div class="rl-msgs" id="rlMsgs" aria-live="polite"></div>
+        <div class="ux-nextbar" id="uxNext"></div>
         <div class="rl-chips" id="rlChips"></div>
         <form class="rl-compose" id="rlForm">
           <div class="rl-att" id="rlAtt"></div>
-          <textarea id="rlInput" rows="2" dir="auto" placeholder="Describe the reel, ask for a change, or attach a storyboard or a video…"></textarea>
           <div class="rl-crow">
-            <label class="a-btn rl-clip" for="rlFile" title="Attach images or videos (Gemini watches videos)"><span aria-hidden="true">＋</span> Attach</label><input type="file" id="rlFile" accept="image/*,video/*" multiple class="sr">
-            <span class="t12 muted" id="rlHint">Enter to send · Shift+Enter for a new line</span>
-            <button class="btn primary small" type="submit" id="rlSend">Send</button>
+            <label class="rl-clip" for="rlFile" title="Attach images or videos — Gemini watches videos"><span aria-hidden="true">＋</span><span class="sr">Attach images or videos</span></label><input type="file" id="rlFile" accept="image/*,video/*" multiple class="sr">
+            <textarea id="rlInput" rows="1" dir="auto" placeholder="Message the Director…" aria-label="Message the Director"></textarea>
+            <button class="ux-mic" type="button" id="uxMic" aria-label="Speak" aria-pressed="false" hidden><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+            <button class="rl-send" type="submit" id="rlSend" aria-label="Send"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           </div>
+          <span class="t12 muted" id="rlHint">Images, videos (Gemini watches them), sheets or a script · Enter to send · Shift+Enter for a new line</span>
         </form>
       </div>
       <div class="rl-board" id="rlBoardPane"><div id="rlBoard"></div></div>
@@ -983,9 +1198,9 @@ details.log summary{cursor:pointer}
   <div class="hero-in">
     <div class="hero-copy">
       <div class="seg modeseg" id="modeSeg" role="group" aria-label="What to create"><button type="button" data-mode="photo" aria-pressed="true">Photography</button><button type="button" data-mode="icon" aria-pressed="false">Icons</button></div>
-      <h1 class="t40" id="heroTitle">Turn a brief into an on-brand 4K photograph.</h1>
-      <p class="t16 muted" id="heroLede">Write what the photo should show. Claude reads it against the BAE photography rules and your references, writes the prompt, and Nano Banana 2.1 renders it in 4K.</p>
-      <span class="t12 muted" id="heroSub">Nano Banana 2.1 · native 4K · via Magnific</span>
+      <h1 class="t40" id="heroTitle">Turn a brief into an on-brand 2K photograph.</h1>
+      <p class="t16 muted" id="heroLede">Write what the photo should show. Claude reads it against the BAE photography rules and your references, writes the prompt, and Seedream 5.5 renders it in 2K.</p>
+      <span class="t12 muted" id="heroSub">Seedream 5.5 · 2K · via Magnific</span>
     </div>
     <div class="brief-card" id="briefCard">
       <div class="brief-meta"><label class="t18" for="brief" id="briefLbl">Brief</label><span class="count" id="briefCount"></span></div>
@@ -1049,7 +1264,7 @@ details.log summary{cursor:pointer}
           <div class="only-photo"><label class="lbl" for="channel">Where it's used</label>
             <select id="channel"><option>Social</option><option>Website</option><option>OOH</option><option>Print</option><option>App</option></select></div>
           <div class="only-photo"><label class="lbl" for="modeNano">Quality mode</label><select id="modeNano"><option value="">Default (loads when Magnific connects)</option></select></div>
-          <div class="only-photo"><label class="lbl" for="selNano">Model</label><select id="selNano"><option value="">Nano Banana 2.1 (locked)</option></select></div>
+          <div class="only-photo"><label class="lbl" for="selNano">Model</label><select id="selNano"><option value="">Seedream 5.5 (locked)</option></select></div>
           <div class="only-icon"><label class="lbl" for="modeIcon">Quality mode</label><select id="modeIcon"><option value="">Default (loads when Magnific connects)</option></select></div>
           <div class="only-icon"><label class="lbl" for="selIcon">Model</label><select id="selIcon"><option value="">GPT 2.5 (locked)</option></select></div>
           <label class="check-l only-photo"><input type="checkbox" id="copySpace" checked> Leave clean space around the subject for copy</label>
@@ -1061,13 +1276,13 @@ details.log summary{cursor:pointer}
   <!-- ============ result ============ -->
   <article class="card" id="s3">
     <div class="card-h">
-      <div class="ttl"><h2 class="t24" id="s3ttl">Your image</h2><span class="state" id="s3state">Native 4K at the highest quality, ready to download</span></div>
+      <div class="ttl"><h2 class="t24" id="s3ttl">Your image</h2><span class="state" id="s3state">Native 2K at the highest quality, ready to download</span></div>
       <button class="btn small" type="button" id="btnGen" disabled title="Render again from the prompt under Advanced">Render again</button>
     </div>
     <div class="genbar">
       <span class="pill" id="aspectPill">16:9</span>
-      <span class="pill strong">4K</span>
-      <span class="pill" id="mNanoName">Nano Banana 2.1 · via Magnific</span>
+      <span class="pill strong">2K</span>
+      <span class="pill" id="mNanoName">Seedream 5.5 · via Magnific</span>
     </div>
     <div class="results one" id="results"><div class="result" id="rNano"></div><div class="result" id="rNano2" hidden></div></div>
     <p class="note-ai">AI imagery is for tactical campaigns, rapid content and concepts (BAE guidelines p.117). Check every image before use.</p>
@@ -1121,8 +1336,8 @@ details.log summary{cursor:pointer}
       <summary><span class="acc-t"><b class="t18">Prompt</b><span class="t12 muted" id="s2state">Edit it, then press Render again</span></span></summary>
       <div class="acc-in" id="s2">
         <div class="locked only-icon"><span class="lbl">Always included</span><code>BAE illustration style</code><code>glassmorphism + BAE gradient</code><code>GPT 2.5</code><code>16:9</code><code>Light Stone #ECE8DF</code><code>no floor or shadow</code><code>illustration palette only</code><code>one focal point</code><code>no text or logo</code><code>light mode</code></div>
-        <div class="locked only-photo"><span class="lbl">Always included</span><code>professional photography</code><code>clean natural light</code><code>4K</code><code>no logos or text</code><code id="lookChip">bold &amp; colourful</code><code>old-money minimal wardrobe</code><code>complete story</code><code>no hijab / traditional dress</code><code>no orange clothing</code><code>retouched skin tone</code><code>iPhone 18</code><code>IKEA-style decor</code><code>centred subject</code><code id="setChip">on-location</code></div>
-        <div><div class="mtag"><label for="pNano" id="promptLbl">Nano Banana 2.1 prompt</label></div><textarea class="prompt" id="pNano" placeholder="Written after the scene is described. You can edit it before generating." spellcheck="false"></textarea></div>
+        <div class="locked only-photo"><span class="lbl">Always included</span><code>professional photography</code><code>clean natural light</code><code>2K</code><code>no logos or text</code><code id="lookChip">bold &amp; colourful</code><code>old-money minimal wardrobe</code><code>complete story</code><code>no hijab / traditional dress</code><code>no orange clothing</code><code>retouched skin tone</code><code>iPhone 18</code><code>IKEA-style decor</code><code>centred subject</code><code id="setChip">on-location</code></div>
+        <div><div class="mtag"><label for="pNano" id="promptLbl">Seedream 5.5 prompt</label></div><textarea class="prompt" id="pNano" placeholder="Written after the scene is described. You can edit it before generating." spellcheck="false"></textarea></div>
         <div class="btns"><button class="btn small" type="button" id="btnPrompt" disabled>Rewrite prompt</button></div>
         <div class="checks" id="checks"></div>
       </div>
@@ -1132,7 +1347,7 @@ details.log summary{cursor:pointer}
       <summary><span class="acc-t"><b class="t18">Locked rules</b><span class="t12 muted">Applied to every image automatically</span></span></summary>
       <div class="acc-in">
         <div class="only-photo dna"><ul>
-          <li><b>Locked style.</b> Professional photography, clean natural light, native 4K.</li>
+          <li><b>Locked style.</b> Professional photography, clean natural light, native 2K.</li>
           <li><b>Look.</b> Refined, old-money minimal wardrobe for every age (tailored trousers, crisp shirts, fine knits, clean blazers, loafers), never streetwear. Colours only from the BAE palette, never teal, never orange. Bold &amp; colourful: crisp white or black layers over one fresh colour piece (blush, raspberry, burgundy or sky blue). Elegant &amp; calm: warm, tonal ink, slate, burgundy, dusty rose, stone and ecru.</li>
           <li><b>Story.</b> Everyone the action needs is in the frame: a cashier or sales associate when paying, with neatly displayed products. Studio builds a minimal staged version of the place.</li>
           <li><b>Wardrobe.</b> Modern and contemporary. No hijab, no headscarf, no traditional Arab clothing. No orange clothing on anyone.</li>
@@ -1195,6 +1410,3 @@ details.log summary{cursor:pointer}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="app.js"></script>
-
-</body>
-</html>
