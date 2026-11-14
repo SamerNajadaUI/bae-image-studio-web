@@ -2811,7 +2811,12 @@ function rlBoard(){
       out.push(RL.scenes.map(rlShotCard).join("")); }
   }
   if(v==="render") out.push(rlDeliver());
+  /* keep the page exactly where the user is: a re-render must never jump the scroll */
+  const scr=[$("reels"),B,B.parentElement,document.scrollingElement].filter(Boolean).map(el=>[el,el.scrollTop,el.scrollLeft]); const viewWas=RL._viewShown; RL._viewShown=v;
+  B.style.minHeight=B.offsetHeight+"px";
   B.innerHTML=out.join("");
+  if(viewWas===v) for(const [el,t,l] of scr){ if(el.scrollTop!==t) el.scrollTop=t; if(el.scrollLeft!==l) el.scrollLeft=l; }
+  B.style.minHeight="";
   if(editing){ const t=B.querySelector(`[data-rl-edit="${editing.key}"]`); if(t){ t.focus({preventScroll:true}); try{ t.setSelectionRange(editing.s,editing.e); }catch{} t.scrollTop=editing.top; } }
   B.querySelectorAll("video[data-rl-vid]").forEach(vd=>vd.addEventListener("error",()=>{ const sc=vd.dataset.rlVid==="final"?RL.final:RL.scenes.find(x=>String(x.n)===vd.dataset.rlVid); if(!sc) return;
     const src=vd.getAttribute("src"); if(sc._src&&src===sc._src){ sc._src=null; if(!sc.url) sc._blocked=true; } else sc._blocked=true; rlBoard(); },{once:true}));
@@ -3330,7 +3335,7 @@ function rlDialogueHTML(sc){
   <p class="t12 muted">Pick a voice for each character once, then generate each line (ElevenLabs, Arabic with tashkeel and audio tags). Each clip goes to Seedance as ${V.length?V.map(v=>v.tag).join(", "):"@audio1…"} with the line written in the prompt. Voice clips cost Magnific credits.</p>
   ${L.some(d=>!d.audio?.id&&rlVoiceOf(d))&&L.length>1?`<div class="acts" style="margin-bottom:8px"><button type="button" class="btn small" data-rl="dlggenall" data-n="${sc.n}">Generate all missing voices</button></div>`:""}
   <ul>${L.map((d,i)=>{ const e=rlElByTag(d.who); const v=V.find(x=>x.d===d);
-    return `<li><div class="top"><b>${esc(e?.name||d.who||"Speaker")}</b><span class="t12 muted">${esc(d.at||"")}${d.delivery?` · ${esc(d.delivery)}`:""}</span>${v?`<span class="rl-chip ok">${v.tag} · ${esc(d.audio.name||"voice")}</span>`:""}</div>
+    return `<li><div class="dl-top"><b>${esc(e?.name||d.who||"Speaker")}</b><span class="t12 muted">${esc(d.at||"")}${d.delivery?` · ${esc(d.delivery)}`:""}</span>${v?`<span class="rl-chip ok">${v.tag} · ${esc(d.audio.name||"voice")}</span>`:""}</div>
       <div class="ln" dir="rtl" lang="ar">${esc(d.line)}</div>
       ${d.tts?`<div class="tts" dir="rtl" lang="ar"><span class="t12 muted" dir="ltr">Voice script</span> ${esc(d.tts)}</div>`:""}
       <div class="acts"><button type="button" class="btn small primary" data-rl="dlggen" data-n="${sc.n}" data-i="${i}"${d._gen||d._vpick==="load"?" disabled":""}>${d._gen?"Generating the voice…":d._vpick==="load"?"Loading voices…":!rlVoiceOf(d)?"Choose a voice":v?"Regenerate voice":"Generate voice"}</button>${rlVoiceOf(d)?`<button type="button" class="btn small" data-rl="dlgvoice" data-n="${sc.n}" data-i="${i}" title="Change this character's voice">🎙 ${esc(String(rlVoiceOf(d).name).slice(0,22))}</button>`:""}<button type="button" class="btn small" data-rl="dlgcopy" data-n="${sc.n}" data-i="${i}">Copy line</button><button type="button" class="btn small" data-rl="dlgpick" data-n="${sc.n}" data-i="${i}"${d._pick==="load"?" disabled":""}>${d._pick==="load"?"Loading your audio…":v?"Change voice":"Attach voice"}</button>${v?`<button type="button" class="btn small" data-rl="dlgclear" data-n="${sc.n}" data-i="${i}">Remove</button>`:""}</div>
