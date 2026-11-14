@@ -3655,6 +3655,7 @@ function rlSceneRefs(sc,field="prompt",{compose=true}={}){
   }
   return {prompt:body, refs:refs.map(({el,...r})=>r), missing:els.filter(el=>!el.id).map(el=>el.tag)};
 }
+const RL_PH="<<SCENE_PROMPT>>";
 async function rlRenderScene(n){
   const sc=RL.scenes.find(x=>+x.n===+n); if(!sc||!mcp||!sample||sc.status==="run") return;
   if(!S.connected) await connect(true);
@@ -3676,11 +3677,11 @@ async function rlRenderScene(n){
     const m=await rlModel(); const set=rlSet(); const dur=Math.max(4,Math.min(120,+sc.duration_s||8)); /* Seedance 2.5 takes 4–30 s; longer is sent as asked */
     sc.note=start?"Sending the first frame to Seedance 2.5…":"Sending to Seedance 2.5…"; rlBoard();
     const plan=await buildArgs("video_generate",`Generate ONE video with the Seedance 2.5 model${m.id?` (model id "${m.id}")`:""}. Use the prompt verbatim. Duration ${dur} seconds. Aspect ratio ${set.aspect}. ${set.res==="draft"?"Draft mode (480p preview) if the tool offers it.":`Resolution ${set.res}.`} Audio on (the prompt writes the sound). ${start?"IMAGE-TO-VIDEO: put Data.start_image.identifier in the tool's start image / first frame / init image field so the video starts on that frame. ":""}Attach EVERY item of Data.references as image references, in exactly this order, so the first is @img1, the second @img2 and so on; use each item's identifier.${start?" Do not add the start image to the references list unless the tool has no separate start image field; if it has none, put it FIRST in the references with role start/first frame and keep the others after it.":""} If the model id is not in Data, pick the Seedance 2.5 entry from Data.models.`,
-      {model:m.id, model_name:m.name, models:m.id?null:m.raw, prompt, duration_seconds:dur, aspect_ratio:set.aspect, resolution:set.res==="draft"?"480p":set.res, mode:set.res==="draft"?"draft":"standard", start_image:start?{identifier:start,type:"image"}:undefined, references:refs.map(r=>({identifier:r.id,type:"image"}))},"default");
+      {model:m.id, model_name:m.name, models:m.id?null:m.raw, prompt:RL_PH, duration_seconds:dur, aspect_ratio:set.aspect, resolution:set.res==="draft"?"480p":set.res, mode:set.res==="draft"?"draft":"standard", start_image:start?{identifier:start,type:"image"}:undefined, references:refs.map(r=>({identifier:r.id,type:"image"}))},"default");
     let args=fixRefs(plan.args,refs.map(r=>({id:r.id})));
     const lost=()=>refs.filter(r=>!JSON.stringify(args).includes(r.id));
     if(lost().length){ /* the arguments dropped some reference images: rebuild once, insisting on them */
-      const p2=await buildArgs("video_generate",`Generate ONE video with Seedance 2.5. EVERY ONE of the ${refs.length} items in Data.references MUST be attached as image references (media / references / reference images field), in this exact order, each by its identifier — the previous attempt left out ${lost().map(r=>r.tag).join(", ")}. No start image. Prompt verbatim, ${dur} seconds, aspect ${set.aspect}, audio on.`,{model:m.id,model_name:m.name,models:m.id?null:m.raw,prompt,duration_seconds:dur,aspect_ratio:set.aspect,resolution:set.res==="draft"?"480p":set.res,references:refs.map(r=>({identifier:r.id,type:"image"}))},"default");
+      const p2=await buildArgs("video_generate",`Generate ONE video with Seedance 2.5. EVERY ONE of the ${refs.length} items in Data.references MUST be attached as image references (media / references / reference images field), in this exact order, each by its identifier — the previous attempt left out ${lost().map(r=>r.tag).join(", ")}. No start image. Prompt verbatim, ${dur} seconds, aspect ${set.aspect}, audio on.`,{model:m.id,model_name:m.name,models:m.id?null:m.raw,prompt:RL_PH,duration_seconds:dur,aspect_ratio:set.aspect,resolution:set.res==="draft"?"480p":set.res,references:refs.map(r=>({identifier:r.id,type:"image"}))},"default");
       args=fixRefs(p2.args,refs.map(r=>({id:r.id})));
       if(lost().length) throw {code:"refs_missing",message:`Couldn't attach ${lost().map(r=>r.tag+" ("+r.name+")").join(", ")} to Seedance, so I stopped before spending credits. Try again; if it repeats, tell Claude.`}; }
     /* ROOT FIX: the reference list is written by the page from the tool's real schema — never left to a guess.
@@ -3692,10 +3693,14 @@ async function rlRenderScene(n){
       if("resolution" in VP||!Object.keys(VP).length) args.resolution=resWant; else for(const k of Object.keys(args)) if(/resolution/i.test(k)&&!args[k]) args[k]=resWant;
       if("duration" in VP) args.duration=dur;
       if("aspectRatio" in VP) args.aspectRatio=set.aspect;
-      if("prompt" in VP&&!args.multi_prompt) args.prompt=prompt;
+      /* the prompt is written by the page, whole and exactly as composed (voices already swapped to @audioN) — never retyped by a model */
+      delete args.multi_prompt;
+      const putP=o=>{ for(const k of Object.keys(o)){ const v=o[k]; if(typeof v==="string"&&v.includes(RL_PH)) o[k]=v.split(RL_PH).join(prompt); else if(v&&typeof v==="object") putP(v); } }; putP(args);
+      if("prompt" in VP||!Object.keys(VP).length||!JSON.stringify(args).includes(prompt.slice(0,60))) args.prompt=prompt;
       if("withSoundEffects" in VP) args.withSoundEffects=true;
       if("promptMode" in VP) args.promptMode="manual";
       for(const k of Object.keys(args)) if(args[k]===""||args[k]==null) delete args[k]; }
+    if(/@voice\d/i.test(JSON.stringify(args))) throw {code:"voice_tag",message:"The prompt still names @voice instead of @audio, so I stopped before spending credits. Tell Claude."};
     { const sent=JSON.stringify(args); const missing=[...refs,...voices].filter(r=>!sent.includes(r.id));
       sc.lastCall={at:Date.now(),schema:RL_LASTREFSCHEMA,args:JSON.parse(JSON.stringify(args,(k,v)=>k==="prompt"&&typeof v==="string"?v.slice(0,300)+"…":v))};
       if(missing.length){ rlSave(); throw {code:"refs_missing",message:`${missing.length} reference image${missing.length>1?"s":""} (${missing.map(r=>r.tag).join(", ")}) couldn't be attached, so I stopped before spending credits. Send me a screenshot.`}; } }
@@ -3998,7 +4003,7 @@ async function rlBible(){
     else if(a==="join") rlJoin();
     else if(a==="space") rlBuildSpace();
     else if(a==="bible") rlBible();
-    else if(a==="copyall"||a==="copys"){ const txt=a==="copyall"?rlBibleText():rlSceneRefs(RL.scenes.find(x=>+x.n===+b.dataset.n)).prompt; try{ await navigator.clipboard.writeText(txt||""); const t=b.textContent; b.textContent="Copied"; setTimeout(()=>b.textContent=t,1400); }catch{} }
+    else if(a==="copyall"||a==="copys"){ const txt=a==="copyall"?rlBibleText():(sc0=>rlVoiceCompose(sc0,rlSceneRefs(sc0).prompt).prompt)(RL.scenes.find(x=>+x.n===+b.dataset.n)); try{ await navigator.clipboard.writeText(txt||""); const t=b.textContent; b.textContent="Copied"; setTimeout(()=>b.textContent=t,1400); }catch{} }
   });
   B.addEventListener("submit",e=>{
     const f=e.target.closest("[data-addform]"); if(f){ e.preventDefault(); const fd=new FormData(f); rlAddElement(f.dataset.addform,String(fd.get("name")||"").trim(),String(fd.get("desc")||"").trim(),null); return; }
