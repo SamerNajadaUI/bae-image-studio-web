@@ -134,6 +134,17 @@ const JO_FACE = `JORDANIAN FACES — CASTING LOCK (applies to every person in ev
 - Real people, not influencers: visible skin texture, slight asymmetry, a faint darker tone under the eyes, now and then a mole or freckles; no filter look, no lip-filler look, no contact-lens eyes, no heavy contour, unless the brief asks for a glam look. Where a retouching rule applies, keep it; the features still follow this lock.
 - Wardrobe follows the wardrobe rules (modern, casual or smart; no head covering or traditional dress unless the brief asks for it).
 - Never copy the face of a real person.`;
+/* ---------------- Jordanian places: one location lock for every image and video prompt in the studio ---------------- */
+const JO_PLACE = `JORDANIAN PLACES — LOCATION LOCK (applies to every exterior and street in every image or video prompt):
+- Never write only "a Middle Eastern city" or "an Arab street": models answer with desert, domes and old souks. Name the place type below and its concrete materials.
+- The one constant of Amman: pale limestone. Almost every building, old or new, is clad in cream to light-beige stone blocks; it turns warm gold and pink at sunset. The city is built on hills, so streets slope and other hills full of buildings close the background.
+- MODERN AMMAN (default; Abdali Boulevard and the new downtown): 6 to 10 storey blocks in smooth cream limestone combined with large glass curtain walls; horizontal metal louvres and sun-shade screens; perforated geometric metal panels on recessed balconies; warm-lit shopfronts and colonnades at street level; a few glass towers behind (dark blue glass, one cylindrical). Pedestrian boulevards paved in grey stone setts with small inlaid ground lights; rows of palm trees and clipped round-crowned trees in planters; large black square planters with topiary; white tensile fabric canopies stretched between buildings on steel masts and cables; wide stairs with stainless-steel handrails beside limestone-block retaining walls and clipped hedges; café A-frame boards and terraces.
+- STREET DETAILS THAT READ JORDANIAN: green street-name signs in Arabic and English; black bollards, zebra crossings, yellow kerb lines; Jordanian flags on poles; white and black saloon cars (Hyundai, Kia, Toyota), yellow taxis, white number plates; a small glass security kiosk at mall and tower entrances.
+- RESIDENTIAL AND HILLSIDE AMMAN (only when the story needs an ordinary neighbourhood): 3 to 5 storey cubic limestone apartment buildings stacked up steep hills, flat roofs crowded with white plastic water tanks, satellite dishes and solar heaters; dark cypress and pine trees between buildings; a minaret or dome on the skyline; soft haze over the far hills.
+- OLD DOWNTOWN (only when the brief asks for it): a busy street lined with tall palms, older 4 to 6 storey stone buildings, Arabic shop signs, yellow taxis and dense traffic, pavements full of people, overhead cables, a big mural on a blank wall.
+- LIGHT: very clear deep-blue sky and crisp sun for most of the year; blue hour with warm interior light glowing from shopfronts; winter days can be grey with rain and wet, reflective asphalt; at night LED outlines on towers and a carpet of city lights over the hills.
+- Avoid unless asked: desert, camels, mud-brick, onion domes, souk alleys, Gulf-style skyscraper skylines, ornate arches everywhere.
+- Never show a real brand's sign or logo unless the user names it; invent neutral shop signs.`;
 /* ---------------- BAE guideline digest given to Claude ---------------- */
 const BAE_RULES = `BANK AL ETIHAD (BAE) PHOTOGRAPHY GUIDELINES — "Deep Clarity" direction
 1. Depth over flatness: compose in distinct layers (foreground, subject, background). Nothing sits on a single flat plane.
@@ -154,6 +165,8 @@ B. People: NO hijab, NO headscarf, NO head covering of any kind; NO traditional 
 C. Skin: high-end professional retouching — even, refined skin tone, smooth healthy complexion, soft glow, minimised blemishes and pores, while keeping a subtle real texture (never plastic, waxy or airbrushed-flat).
 D. Faces: every person follows the casting lock below.
 ${JO_FACE}
+E. Places: every exterior follows the location lock below; rule A still decides which kind of place (modern and upscale by default).
+${JO_PLACE}
 D. Phones: any phone is a modern iPhone 18 (latest flagship, ultra-thin uniform bezels, Dynamic Island, slim metal frame), with no visible logo. Never an old or generic phone.
 E. Decor and furniture: modern Scandinavian IKEA-style interiors — light oak/birch wood, white and warm-neutral walls, clean lines, functional minimal furniture, soft textiles, a few plants. No clutter, no ornate or traditional decor, no brand names.`;
 /* LOOK: bold colourful youth streetwear (from the 9 campaign references) or elegant and calm */
@@ -1739,7 +1752,8 @@ const RL_JO=`JORDAN, FROM THE INSIDE (you are the best creative director in Jord
 - Humour that lands: understatement and self-irony, the mother who knows everything, the auntie's questions (إيمتى بدنا نفرح فيك؟), the dad who negotiates every price, cousins in the family WhatsApp group, "ولا يهمك" that hides a sacrifice, "على راسي", "تكرم عينك", "يا زلمة", "والله غير…" (the host's oath). Warm teasing, never mockery of anyone's origin, tribe, accent, religion or region.
 - Respect lines: modest wardrobe for families; no alcohol, no romance clichés, no mocking elders, no showing money flaunted vulgarly, no Gulf/Egyptian/Levantine-generic dialect (use Jordanian: شو، هسا، بدي، منيح، يا زلمة، ليش، كيفك، والله). Faces, names and skin tones look Jordanian. Arabic on screen is correct and Jordanian in tone.
 - Making ideas EXCLUSIVE: each idea starts from a real Jordanian truth (a small habit everyone recognises but nobody filmed), turns on one human value (nakhwa, karam, ghira, sharaf…), and lets the BAE product be the quiet enabler of that value, not the hero. Never repeat an idea, setting or twist already in memory or this chat; if it smells like a generic bank ad (smiling family + phone + city skyline), throw it away and dig deeper.
-${JO_FACE}`;
+${JO_FACE}
+${JO_PLACE}`;
 const RL_BAE=`BANK AL ETIHAD HOUSE STYLE (non-negotiable in every image and video prompt):
 - Cinematic, warm, premium, human. Clean natural light (golden hour, window light, soft daylight), warm neutral grade with orange and burgundy accents, fine grain, gentle halation. Never cold, never neon.
 - Modern Jordan only: today's Amman (Abdali, new towers, sleek cafés, modern homes and offices, modern malls). Modern Scandinavian IKEA-style interiors: light oak, white walls, clean lines.
@@ -2649,7 +2663,7 @@ Reel so far: ${trimJSON({title:RL.title,idea:RL.picked,notes:RL.notes,script:RL.
 Current element (JSON): ${trimJSON(base,4000)}
 User request: ${instruction||"Write it well from the name and description."}
 
-${kind==="character"?JO_FACE+"\n":""}Reply with only JSON: {"name":"","role":"","description":"one or two lines","wardrobe":"${kind==="character"?"the outfit":""}","prompt":"the full image prompt"}`,{modelTier:"default"});
+${kind==="character"?JO_FACE+"\n":kind==="location"?JO_PLACE+"\n":""}Reply with only JSON: {"name":"","role":"","description":"one or two lines","wardrobe":"${kind==="character"?"the outfit":""}","prompt":"the full image prompt"}`,{modelTier:"default"});
   if(!o||!o.prompt) throw {code:"invalid_json",message:"Claude didn't return a prompt."};
   return o;
 }
@@ -4241,7 +4255,7 @@ async function uxPGRun(){
 ${kind==="character"?"Write a CHARACTER sheet prompt.":kind==="prop"?"Write a PROP / PRODUCT sheet prompt.":"Write a LOCATION prompt (an empty establishing image of the place)."} The prompt MUST follow this house template exactly, keeping every fixed sentence and replacing every [bracket] with specific, vivid, concrete detail:
 ${tpl}
 ${RL_BAE}
-${kind==="character"?JO_FACE:kind==="location"?"PLACES: today's Jordan, modern Amman unless the request says otherwise — real local materials (pale limestone facades, glass, terrazzo or stone floors), believable details a Jordanian would recognise, clean and contemporary; say where the walls, doors, windows and main furniture are. No people in the image, no clichés (no desert, camels or old souks unless asked).":"PROPS: one object, exact material, colour, size and markings; any text on it spelled exactly; real brand logos only when the user names them."}
+${kind==="character"?JO_FACE:kind==="location"?JO_PLACE+"\nFor an interior, keep the same world: stone or terrazzo floors, large windows with that clear light, contemporary furniture; say where the walls, doors, windows and main furniture are. No people in the image.":"PROPS: one object, exact material, colour, size and markings; any text on it spelled exactly; real brand logos only when the user names them."}
 USER REQUEST (any language; the prompt itself is in English): ${UXPG.text||"(nothing written — invent a good, typical one)"}
 ${who?`MUST BE: ${who}.`:""}
 Fill every choice the user left open with one specific, believable value. Never copy a real person's face.
