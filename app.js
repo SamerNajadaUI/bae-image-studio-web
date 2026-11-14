@@ -3686,6 +3686,16 @@ async function rlRenderScene(n){
     /* ROOT FIX: the reference list is written by the page from the tool's real schema — never left to a guess.
        Each item carries the real creation identifier; labels like "@img1" never go in an id field. */
     args=await rlPutRefs(args,refs,start,"video_generate",voices);
+    /* the settings Magnific must receive are written by the page from the tool's own schema, never left to a guess */
+    { const VP=(await schemaOf("video_generate"))?.inputSchema?.properties||{};
+      const resWant=set.res==="draft"?"Draft":/^4k$/i.test(set.res)?"4K":set.res;
+      if("resolution" in VP||!Object.keys(VP).length) args.resolution=resWant; else for(const k of Object.keys(args)) if(/resolution/i.test(k)&&!args[k]) args[k]=resWant;
+      if("duration" in VP) args.duration=dur;
+      if("aspectRatio" in VP) args.aspectRatio=set.aspect;
+      if("prompt" in VP&&!args.multi_prompt) args.prompt=prompt;
+      if("withSoundEffects" in VP) args.withSoundEffects=true;
+      if("promptMode" in VP) args.promptMode="manual";
+      for(const k of Object.keys(args)) if(args[k]===""||args[k]==null) delete args[k]; }
     { const sent=JSON.stringify(args); const missing=[...refs,...voices].filter(r=>!sent.includes(r.id));
       sc.lastCall={at:Date.now(),schema:RL_LASTREFSCHEMA,args:JSON.parse(JSON.stringify(args,(k,v)=>k==="prompt"&&typeof v==="string"?v.slice(0,300)+"…":v))};
       if(missing.length){ rlSave(); throw {code:"refs_missing",message:`${missing.length} reference image${missing.length>1?"s":""} (${missing.map(r=>r.tag).join(", ")}) couldn't be attached, so I stopped before spending credits. Send me a screenshot.`}; } }
