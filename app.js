@@ -2060,6 +2060,101 @@ async function rlWake(on){ rlWakeN=Math.max(0,rlWakeN+(on?1:-1));
     else if(rlWakeN===0&&rlWakeLock){ const l=rlWakeLock; rlWakeLock=null; await l.release(); } }catch{} }
 const rlJob=async(fn)=>{ rlWake(true); try{ return await fn(); } finally{ rlWake(false); } };
 
+/* ---------- Asset intake: images dropped in the chat are sorted into Cast / Locations / Props, uploaded at original quality ---------- */
+const RL_BLOBS=new Map();   /* intake key -> original File (this session only) */
+const rlNoImg=e=>!e.id&&!(e.lib&&e.fromLib)&&e.status!=="run";
+const rlMissing=()=>rlEls().filter(rlNoImg);
+async function rlIntake(imgs,text,small){
+  const els=rlEls().map(e=>({handle:e.handle,kind:rlKind(e),name:e.name||"",has_image:!rlNoImg(e),description:String(e.description||"").slice(0,160)}));
+  const out=await rlAsk(`You sort the images a user just dropped into the chat of a video-production studio (Bank al Etihad reels, Jordan). ${imgs.length} image${imgs.length>1?"s are":" is"} attached, numbered 1…${imgs.length} in order.
+USER'S MESSAGE: ${text||"(no text — images only)"}
+PRODUCTION ELEMENTS SO FAR (handle · kind · name · has_image · description): ${trimJSON(els,6000)}
+For EACH image decide:
+- "use": "asset" when it is a production asset = a CHARACTER (a person / character sheet / actor photo), a LOCATION (a place, interior or exterior, usually empty or wide) or a PROP (one object, product, document, vehicle, phone/app screen meant to appear in the film). "reference" when it is something to look at or discuss, not an element: a storyboard, a screenshot of this studio or an error, a mood board, a frame of a finished video, a brief, text.
+- "kind": character | location | prop (for assets).
+- "target": the handle of the EXISTING element this image is for, or null to create a new element. Rules, in this order: (1) an explicit mapping in the user's message always wins — "image 1 = Omar", "الأولى عمر والثانية الصالون", "1 char 2 location", names in the file order they describe; (2) otherwise match by what the image shows against the elements' names and descriptions, preferring elements with has_image=false; (3) if the user sends the images in the same order as the elements without an image of the right kind, use that order to break ties; (4) no good match → null (new element). Never give two images the same target.
+- "name": a short natural name for a NEW element, in the user's language (e.g. "عمر — أبو يزن", "صالة الدفع", "ملف الفواتير"); for an existing target repeat its name.
+- "slug": for a NEW element, 1–2 lowercase English words joined by "_" for its handle (e.g. "omar", "service_hall", "bills_folder").
+- "note": one short line saying what the image shows.
+Also "only_assets": true when the message only hands over assets (or has no text) and asks nothing else; false when the user also asks or instructs something the Director must answer.
+Reply with ONLY JSON: {"items":[{"i":1,"use":"asset","kind":"character","target":"@char_x"|null,"name":"…","slug":"…","note":"…"}],"only_assets":true}`,{modelTier:"quick",cache:false,images:small});
+  const items=(Array.isArray(out?.items)?out.items:[]).filter(x=>x&&imgs[+x.i-1]).map(x=>({i:+x.i,use:x.use==="asset"&&/^(character|location|prop)$/.test(x.kind)?"asset":"reference",kind:x.kind,target:x.target?String(x.target):null,name:String(x.name||"").slice(0,60),slug:String(x.slug||"").slice(0,24),note:String(x.note||"").slice(0,200)}));
+  return {items,only:!!out?.only_assets};
+}
+function rlNewElement(kind,name,note,slug){
+  const base=String(slug||name||"").normalize("NFKD").replace(/[^\x00-\x7F]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"").slice(0,20);
+  const pre={character:"char",location:"loc",prop:"prop"}[kind]; const taken=h=>rlEls().some(e=>String(e.handle).toLowerCase()===h);
+  let h=`@${pre}_${base||(rlEls().filter(e=>rlKind(e)===kind).length+1)}`; for(let k=2;taken(h);k++) h=`@${pre}_${base||"item"}${k}`;
+  const e={tag:"@img"+(RL.nextTag++),handle:h,name:name||`${{character:"Character",location:"Location",prop:"Prop"}[kind]} ${rlEls().filter(x=>rlKind(x)===kind).length+1}`,role:"",description:note||"",prompt:"",lib:null};
+  if(kind==="character") RL.characters.push(e); else { e.kind=kind==="prop"?"prop":"location"; RL.locations.push(e); }
+  return e;
+}
+/* file the sorted images: each goes to its element and is uploaded untouched; returns the rows of the chat card */
+function rlFileIntake(imgs,items,thumbs){
+  const rows=[], jobs=[], used=new Set();
+  for(const it of items){ const a=imgs[it.i-1]; const row={i:it.i,thumb:thumbs[it.i-1]||null,note:it.note,key:"k"+Date.now().toString(36)+it.i,w:a.w||0,h:a.h||0,bytes:a.blob.size};
+    if(it.use!=="asset"){ row.ref=true; rows.push(row); continue; }
+    let e=it.target&&rlElByTag(it.target); if(e&&(rlKind(e)!==it.kind||used.has(e.tag))) e=null;
+    if(!e){ e=rlNewElement(it.kind,it.name,it.note,it.slug); row.isNew=true; }
+    used.add(e.tag); row.tag=e.tag; row.prev=row.isNew?null:{id:e.id||null,fromUser:!!e.fromUser,lib:e.lib||null,fromLib:!!e.fromLib};
+    RL_BLOBS.set(row.key,a.blob); rows.push(row); jobs.push([e.tag,a.blob]); }
+  rlEnsureHandles(RL);
+  /* uploads run in the background, two at a time, while the Director answers */
+  const q=[...jobs]; const worker=async()=>{ while(q.length){ const [tag,blob]=q.shift(); await rlUseImage(tag,blob,{quiet:true}); rlRenderChat(); } };
+  if(jobs.length){ if(!S.connected) connect(true).catch(()=>{}).finally(()=>{ worker(); worker(); }); else { worker(); worker(); } }
+  for(const r of rows) if(r.tag) rlEvent(`The user gave their own image for ${rlElByTag(r.tag)?.handle} (${rlElByTag(r.tag)?.name||""})${r.isNew?" — a new element the studio created from it":""}.`);
+  return rows;
+}
+const rlMP=r=>r.w&&r.h?`${r.w}×${r.h}`:"";
+const rlSize=b=>b>1048576?(b/1048576).toFixed(1)+" MB":Math.max(1,Math.round(b/1024))+" KB";
+function rlIntakeHTML(m,mi){
+  if(!m.intake?.length) return "";
+  const kinds={character:"Character",location:"Location",prop:"Prop"};
+  const rows=m.intake.map((r,ri)=>{ const e=r.tag&&rlElByTag(r.tag);
+    const st=r.ref?`<span class="st">Reference only — not filed</span>`:!e?`<span class="st">Removed</span>`:e.status==="run"?`<span class="st run">${esc(e._note||"Uploading…")}</span>`:e.status==="err"?`<span class="st bad">${esc(e.err||"Failed")}</span>`:e.id?`<span class="st ok">✓ Original quality${rlMP(r)?` · ${rlMP(r)}`:""}${r.bytes?` · ${rlSize(r.bytes)}`:""}</span>`:`<span class="st">Waiting…</span>`;
+    const opts=[...rlEls().map(x=>`<option value="${esc(x.tag)}"${e&&x.tag===e.tag?" selected":""}>${esc(x.name||x.handle)} · ${kinds[rlKind(x)]}</option>`),`<option value="+character">＋ New character</option>`,`<option value="+location">＋ New location</option>`,`<option value="+prop">＋ New prop</option>`,`<option value="-"${r.ref||!e?" selected":""}>Don't use (reference only)</option>`].join("");
+    return `<li>${r.thumb?`<img src="${r.thumb}" alt="">`:`<span class="ph"></span>`}<div class="tx"><b dir="auto"><span class="n">${r.i}</span>${e?`${esc(e.name||e.handle)} <span class="k">${kinds[rlKind(e)]}${r.isNew?" · new":""}</span>`:esc(r.note||"Image")}</b>${st}</div><select aria-label="Move image ${r.i}" data-intake="${mi}:${ri}"${e&&e.status==="run"?" disabled":""}>${opts}</select></li>`; }).join("");
+  return `<div class="rl-intake"><div class="h"><b>Your images, sorted</b><span class="t12 muted">wrong place? move it</span></div><ul>${rows}</ul></div>`;
+}
+/* move an already-uploaded image to another element (no re-upload) */
+async function rlIntakeMove(mi,ri,val){
+  const m=RL.chat[mi], r=m?.intake?.[ri]; if(!r) return;
+  const from=r.tag&&rlElByTag(r.tag); const id=from?.id||null; const blob=RL_BLOBS.get(r.key);
+  if(from){ if(r.isNew){ RL.characters=RL.characters.filter(x=>x!==from); RL.locations=RL.locations.filter(x=>x!==from); }
+    else Object.assign(from,{id:r.prev?.id||null,fromUser:!!r.prev?.fromUser,lib:r.prev?.lib||null,fromLib:!!r.prev?.fromLib,status:r.prev?.id?"ok":null,seen:null}); }
+  r.tag=null; r.isNew=false; r.ref=false; r.prev=null;
+  if(val==="-"){ r.ref=true; }
+  else { let to=val.startsWith("+")?rlNewElement(val.slice(1),"",r.note):rlElByTag(val); if(!to) return;
+    if(val.startsWith("+")){ r.isNew=true; rlEnsureHandles(RL); } else r.prev={id:to.id||null,fromUser:!!to.fromUser,lib:to.lib||null,fromLib:!!to.fromLib};
+    r.tag=to.tag;
+    if(id){ Object.assign(to,{id,status:"ok",stale:false,fromUser:true,lib:null,fromLib:false}); rlEvent(`The user moved their image to ${to.handle} (${to.name||""}).`);
+      if(blob){ to.status="run"; to._live=true; to._note="Studying your image…"; rlRenderChat(); rlBoard(); try{ if(await rlStudyImage(to,blob)) to.seen=`${to.description}${to.wardrobe?` Wardrobe: ${to.wardrobe}`:""}${to.details?` Details: ${to.details}`:""}`; }catch{} to.status="ok"; delete to._live; delete to._note; } }
+    else if(blob){ rlSave(); rlRenderChat(); await rlUseImage(to.tag,blob,{quiet:true}); } }
+  rlSave(); rlRenderChat(); rlBoard();
+}
+/* "What do you already have?" — the checklist under the Director's reply when elements still need an image */
+function rlKitHTML(m,mi){
+  if(!m.kit||mi!==RL.chat.reduce((a,x,k)=>x.kit?k:a,-1)) return "";
+  const all=rlEls(); if(!all.length) return "";
+  const miss=all.filter(rlNoImg); const G=[["character","Characters"],["location","Locations"],["prop","Props"]];
+  const cnt=G.map(([k,l])=>{ const n=all.filter(e=>rlKind(e)===k).length; return n?`${n} ${n>1?l.toLowerCase():l.toLowerCase().replace(/s$/,"")}`:""; }).filter(Boolean).join(" · ");
+  const row=e=>{ const th=e.id?rlTGet(e.id):e.lib?rlTGet("lib:ch_"+String(e.lib).toLowerCase()):null; const busy=e.status==="run";
+    return `<li>${th?`<img src="${th}" alt="">`:`<span class="ph" aria-hidden="true">${rlKind(e)==="character"?"☺":rlKind(e)==="prop"?"◆":"▦"}</span>`}<div class="tx"><b dir="auto">${esc(e.name||e.handle)}</b><span class="st${busy?" run":e.id?" ok":""}">${busy?esc(e._note||"Working…"):e.fromUser?"✓ Your image":e.fromLib?"✓ BAE library":e.id?"✓ Generated":"No image yet"}</span></div>${busy?"":`<label class="btn small">${e.id?"Replace":"Upload"}<input type="file" accept="image/*" hidden data-rl-own="${esc(e.tag)}"></label>`}</li>`; };
+  return `<div class="rl-kit"><div class="h"><b>${miss.length?"Do you already have any of these?":"All set — every element has an image"}</b><span class="t12 muted">${cnt}</span></div>
+    ${G.map(([k,l])=>{ const L=all.filter(e=>rlKind(e)===k); return L.length?`<div class="g">${l}</div><ul>${L.map(row).join("")}</ul>`:""; }).join("")}
+    <div class="f"><label class="btn small primary">＋ Upload several — I'll sort them<input type="file" accept="image/*" multiple hidden data-rl-many="1"></label>${miss.filter(e=>e.prompt).length?`<button type="button" class="btn small" data-rl-genmiss="1">Generate the other ${miss.filter(e=>e.prompt).length} · Seedream 5.5</button>`:""}</div>
+    <p class="t12 muted">Uploads keep their original quality. Drop them in any order, or write “image 1 = Omar, image 2 = the hall”.</p></div>`;
+}
+/* the reply appears while it is being written */
+let RL_LIVE_T=0, RL_LIVE_TXT="";
+function rlLive(raw){
+  const m=String(raw||"").match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)/); if(!m) return;
+  let t; try{ t=JSON.parse('"'+m[1].replace(/\\u[0-9a-fA-F]{0,3}$/,"").replace(/\\$/,"")+'"'); }catch{ return; }
+  if(t.length<3) return; RL_LIVE_TXT=t; const now=Date.now(); if(now-RL_LIVE_T<70) return; RL_LIVE_T=now;
+  const box=$("rlMsgs"); let d=box.querySelector(".rl-typing-m"); if(!d){ rlTyping(true); d=box.querySelector(".rl-typing-m"); }
+  let live=d.querySelector(".rl-live"); if(!live){ d.classList.add("live"); live=document.createElement("div"); live.className="rl-live rl-fmt"; live.dir="auto"; d.appendChild(live); }
+  const stick=box.scrollHeight-box.scrollTop-box.clientHeight<80; live.innerHTML=rlFmt(t)+'<span class="rl-caret" aria-hidden="true"></span>'; if(stick) box.scrollTop=box.scrollHeight;
+}
 /* ---------- Claude: the director in the chat ---------- */
 function rlState(){
   const set=rlSet();
@@ -2249,7 +2344,7 @@ Brief it was made from (may differ — the image wins): ${String(brief||"").slic
 Reply with only JSON: {"seen":"3–5 precise sentences","mismatch":"what differs from the brief, or empty"}`,{modelTier:"default",images:[blob],cache:false});
     if(r?.seen){ o.seen=String(r.seen)+(r.mismatch?` MISMATCH vs brief: ${r.mismatch}`:""); rlEvent(`The Director looked at ${label}: ${String(r.seen).slice(0,200)}${r.mismatch?` — differs: ${String(r.mismatch).slice(0,160)}`:""}`); rlSave(); } }catch{}
 }
-function rlPromptFor(text,memText,canSearch,agent){
+function rlPromptFor(text,memText,canSearch,agent,filed){
   const set=rlSet();
   const hist=RL.chat.filter(m=>m.role!=="sys").slice(-14).map(m=>`${m.role==="u"?"USER":"YOU"}: ${m.text}${m.n?` [attached ${m.n} image(s)]`:""}${m.videos?.length?` [attached ${m.videos.length} video(s): ${m.videos.map(v=>v.name).join(", ")}]`:""}`).join("\n");
   const vids=RL.chat.filter(m=>m.role==="u"&&m.videos?.some(v=>v.analysis)).slice(-2).flatMap(m=>m.videos.filter(v=>v.analysis));
@@ -2294,9 +2389,13 @@ ${hist||"(none)"}
 ${vids.length?`VIDEOS THE USER ATTACHED — Gemini watched them (picture and sound) for you; treat this as what is in the video, and record the useful facts in "notes":
 ${vids.map(v=>`### ${v.name}${v.dur?` (${Math.round(v.dur)} s)`:""}\n${String(v.analysis).slice(0,9000)}`).join("\n\n")}
 
-`:""}USER NOW: ${text||"(attachments only)"}
+`:""}${filed?`IMAGES THE USER JUST ATTACHED — ALREADY FILED BY THE STUDIO (uploading at original quality, each is being studied and its description/prompt updated automatically). Do NOT create these elements again, do NOT use "from_attachment", do NOT rewrite their description or prompt; just build on them:
+${filed.rows.map(r=>r.tag?`- image ${r.i} → ${rlElByTag(r.tag)?.handle} "${rlElByTag(r.tag)?.name||""}" (${rlKind(rlElByTag(r.tag))}${r.isNew?", NEW element created from the image":""}) — ${r.note}`:`- image ${r.i} → reference only, not filed — ${r.note}`).join("\n")}
+The studio shows the user a card with this sorting (they can move an image). In your reply confirm it in one short line and continue with what they asked.
+`:""}ASSETS — HOW YOU ASK FOR THEM: whenever you propose or change the cast, locations or props, finish the reply by telling the user the count in one line ("٣ شخصيات، ٤ أماكن، ٥ أغراض") and asking whether they already have any of them — they can upload some, all, or none, in any order, and you will sort them; whatever they don't have you generate. The studio shows an upload checklist under your reply automatically (set "ask_assets":true to show it at any other moment, e.g. when the user says they have images). Never invent that an image was uploaded.
+USER NOW: ${text||"(attachments only)"}
 
-Reply with ONLY one JSON object. Always include "reply" (the chat message, no markdown tables) and "stage" (the furthest stage the production has reached after this turn). Include a key ONLY when you create or change it. "characters", "locations" and "scenes" ADD or UPDATE the items you list (matched by tag/handle/number); items you leave out are kept (delete only with studio_delete). Other keys replace their value:
+Reply with ONLY one JSON object whose FIRST key is "reply" (the user watches it appear as you write, so write it before anything else; keep it short and direct). Always include "reply" (the chat message, no markdown tables) and "stage" (the furthest stage the production has reached after this turn). Include a key ONLY when you create or change it. "characters", "locations" and "scenes" ADD or UPDATE the items you list (matched by tag/handle/number); items you leave out are kept (delete only with studio_delete). Other keys replace their value:
 - "title": short reel title
 - "notes": everything learned from attachments and decisions (append to existing notes)
 - "ideas": [{"title","hook","logline","beats","why_viral","product_moment","jury"}]  (3 per request). Before answering, silently generate at least 8 directions through different lenses of the masters, score each with THE JURY in the brain, and return only the best 3; "jury" = one line on why it wins (score /35)
@@ -2327,7 +2426,10 @@ async function rlSend(text,{retry}={}){
   RL.chatPending={text,at:Date.now()}; rlFlush(); rlRenderChat(); RL_STEPS.length=0;
   rlStep(imgs.length?`Reading your ${imgs.length} image${imgs.length>1?"s":""}`:vids.length?"Getting your video ready":"Reading your message");
   await rlJob(async()=>{ try{
-    const opts={modelTier:"complex",cache:false,signal:ctl.signal};
+    /* everyday requests use the fast model; ideas, scripts and scene writing get the deep one */
+    const deep=["idea","script"].includes(RL.stage)||text.length>240||/idea|script|concept|scene|shot|write|rewrite|storyboard|فكر|أفكار|افكار|سكر[يـ]?بت|مشهد|مشاهد|اكتب|إكتب|ابن[يِ]|ستوري/i.test(text);
+    const opts={modelTier:deep?"complex":"default",cache:false,signal:ctl.signal,onText:({text:t})=>rlLive(t)};
+    const turn0={snap:null};
     for(let i=0;i<vids.length&&um;i++){ const a=vids[i], v=um.videos[i];
       if(a.blob.size>RL_VMAX){ v.err="too large"; v._stage="err"; rlVProgUpdate(v); rlSys(`${v.name} is larger than 200 MB, so Gemini can't watch it here. Trim it and attach it again.`,true); continue; }
       try{ rlStep(`Uploading ${v.name} · 0%`,{id:"up"+i});
@@ -2338,29 +2440,49 @@ async function rlSend(text,{retry}={}){
       }catch(e){ v.err=String(e?.code||"error"); v._stage="err"; rlVProgUpdate(v); const c=e?.code||"";
         rlSys(/not available on this connector/i.test(String(e?.message||""))?"Claude still has the old tool list of the “BAE Gemini Eye” connector. In claude.ai open Settings → Connectors → BAE Gemini Eye, press Disconnect, then connect it again (it should show 4 tools), and resend. Your text was sent without the video.":c==="server_not_connected"||c==="not_granted"||/not.?connected|manifest/i.test(String(e?.message||""))?"To let Gemini watch videos, add the “BAE Gemini Eye” connector in claude.ai (Settings → Connectors). Your text was sent without the video.":`Gemini couldn't watch ${v.name}: ${String(e?.message||c).slice(0,200)}. Your text was sent without it.`,true); rlTyping(true); }
     }
-    if(imgs.length){ if(sampleImages){ opts.images=[]; for(const a of imgs.slice(0,10)) opts.images.push(a.blob.size>4e6?await toJpeg(a.blob,2000).catch(()=>a.blob):a.blob); } else rlSys("This view can't send images to Claude, so only your text was used.",true); }
+    if(imgs.length){ if(sampleImages){ opts.images=[]; for(const a of imgs.slice(0,10)){ opts.images.push(a.blob.size>1.5e6?await toJpeg(a.blob,1600).catch(()=>a.blob):a.blob); try{ const bm=await createImageBitmap(a.blob); a.w=bm.width; a.h=bm.height; bm.close?.(); }catch{} } } else rlSys("This view can't send images to Claude, so only your text was used.",true); }
+    let filed=null;
+    if(imgs.length&&opts.images&&mcp&&!retry){
+      rlStep(`Sorting your ${imgs.length} image${imgs.length>1?"s":""} into cast, locations and props`,{id:"sort"});
+      try{ const it=await rlIntake(imgs.slice(0,10),text,opts.images);
+        if(it.items.some(x=>x.use==="asset")){ if(!turn0.snap) turn0.snap=rlSnap();
+          const rows=rlFileIntake(imgs.slice(0,10),it.items,um?.thumbs||[]); filed={rows,only:it.only};
+          rlStep(`Filed ${rows.filter(r=>r.tag).length} image${rows.filter(r=>r.tag).length>1?"s":""} · uploading at original quality`,{id:"sort",done:true}); rlBoard(); }
+        else rlStep("Images are references, nothing to file",{id:"sort",done:true});
+      }catch(e){ if(e?.code==="cancelled") throw e; rlStep("Couldn't sort the images — the Director will look at them",{id:"sort",done:true}); }
+    }
+    if(filed?.only){ /* fast path: the message only handed over assets — no need to wake the whole room */
+      const n=filed.rows.filter(r=>r.tag).length, miss=rlMissing().filter(e=>!filed.rows.some(r=>r.tag===e.tag));
+      RL.chatPending=null;
+      RL.chat.push({role:"a",text:rlAr()?`وزّعت ${n===1?"الصورة":`الـ ${n} صور`} على أماكنها، وعم يرتفعوا بجودتهم الأصلية. بدرس كل وحدة وبحدّث وصفها وبرومبتها لحالي.${miss.length?`\nضايل ${miss.length} بدون صورة — ارفعهم أو خلّيني أولّدهم.`:""}`:`I filed ${n===1?"your image":`your ${n} images`}; they're uploading at original quality. I'll study each one and update its description and prompt.${miss.length?`\n${miss.length} still ${miss.length>1?"have":"has"} no image — upload or let me generate ${miss.length>1?"them":"it"}.`:""}`,intake:filed.rows,kit:miss.length>0,chips:miss.length?(rlAr()?["ولّد الباقي","عندي صور ثانية"]:["Generate the rest","I have more images"]):[]});
+      { const id="u"+Date.now().toString(36); RL_UNDO.clear(); RL.chat.forEach(x=>{ delete x.undo; }); RL_UNDO.set(id,turn0.snap); const last=RL.chat[RL.chat.length-1]; last.undo=id; last.changes=filed.rows.filter(r=>r.tag).map(r=>`${r.isNew?"＋":"⇪"} ${rlElByTag(r.tag)?.handle||""}`); }
+      RL.lastReplyAt=Date.now(); return; }
     rlStep("Reading the Director’s memory");
     await brLoad();
     const mem=await rlMemFor([text,RL.title,RL.picked?.title,RL.picked?.logline,RL.view!==RL.stage?RL.view:""].filter(Boolean).join(" "),RL.stage==="render"?"directing":RL.stage);
     const used=new Set(), searched=[];
     const lim=await sample.limits?.().catch(()=>null);
-    const turn={changes:[],scenes:[],moves:[],actions:[],writes:[],snap:null,dirty:false};
+    const turn={changes:[],scenes:[],moves:[],actions:[],writes:[],snap:turn0.snap,dirty:false};
+    const nEl0=rlEls().length;
     if(lim?.tools){ const st=rlStudioTools(turn), mt=MEM.cards.length?memTools((ids,q)=>{ ids.forEach(i=>used.add(i)); if(q&&!searched.includes(q)){ searched.push(q); rlStep(`Searching memory: “${q}”`); } }):[];
       const order=["studio_read","studio_upsert_element","studio_write_scenes","studio_upsert_scene","studio_delete","studio_set","search_memory","studio_action","studio_script","open_memory"];
       opts.tools=[...st,...mt].sort((x,y)=>order.indexOf(x.name)-order.indexOf(y.name)).slice(0,Math.max(1,+lim.tools.maxCount||9)); }
     rlStep(mem.count?`Recalled ${mem.ids.length} of ${mem.count} memories`:"Memory ready",{done:true});
     rlStep("The Director is thinking with the five assistant directors");
     const slow=setTimeout(()=>rlStep("Writing the answer"),9000);
-    const out=await rlAsk(rlPromptFor(text,mem.text,!!opts.tools?.some(t=>t.name==="search_memory"),!!opts.tools?.some(t=>t.name==="studio_upsert_element")),opts)
+    const out=await rlAsk(rlPromptFor(text,mem.text,!!opts.tools?.some(t=>t.name==="search_memory"),!!opts.tools?.some(t=>t.name==="studio_upsert_element"),filed),opts)
       .catch(e=>{ if(e?.code!=="invalid_json"&&e?.code!=="empty_completion") throw e; const o=rlLooseJSON(e.text);
         if(o) return o; if(turn.changes.length||turn.scenes.length) return {reply:rlAr()?"خلصت التغييرات اللي تحت. ردّي المكتوب انقطع، فاسألني إذا بدك تفاصيل.":"I made the changes below; my written reply got cut off — ask me for details."}; throw e; })
       .finally(()=>clearTimeout(slow));
     RL.chatPending=null;
-    const own=[...(Array.isArray(out?.characters)?out.characters:[]),...(Array.isArray(out?.locations)?out.locations:[])].filter(x=>x&&x.from_attachment!=null&&imgs[+x.from_attachment-1]).map(x=>({handle:x.handle,name:x.name,tag:x.tag,blob:imgs[+x.from_attachment-1].blob}));
+    const own=filed?[]:[...(Array.isArray(out?.characters)?out.characters:[]),...(Array.isArray(out?.locations)?out.locations:[])].filter(x=>x&&x.from_attachment!=null&&imgs[+x.from_attachment-1]).map(x=>({handle:x.handle,name:x.name,tag:x.tag,blob:imgs[+x.from_attachment-1].blob}));
     if(!turn.snap&&out&&["characters","locations","scenes","script","ideas","film_look","title"].some(k=>out[k]!=null)) turn.snap=rlSnap();
     rlApplyTurn(turn);
     rlApply(out||{});
-    { const last=RL.chat[RL.chat.length-1]; if(last?.role==="a"){ const ch=[...turn.changes];
+    { const last=RL.chat[RL.chat.length-1]; if(last?.role==="a"){ const ch=[...(filed?filed.rows.filter(r=>r.tag).map(r=>`${r.isNew?"＋":"⇪"} ${rlElByTag(r.tag)?.handle||""} (your image)`):[]),...turn.changes];
+        if(filed) last.intake=filed.rows;
+        /* the checklist appears when the Director proposed elements, or assets arrived, and something still has no image */
+        if(rlMissing().length&&(rlEls().length>nEl0||filed||(Array.isArray(out?.characters)&&out.characters.length)||(Array.isArray(out?.locations)&&out.locations.length)||out?.ask_assets)) last.kit=true;
         if(out){ if(Array.isArray(out.characters)&&out.characters.length) ch.push(`✎ characters (${out.characters.length})`); if(Array.isArray(out.locations)&&out.locations.length) ch.push(`✎ locations & props (${out.locations.length})`); if(Array.isArray(out.scenes)&&out.scenes.length) ch.push(`✎ scenes ${out.scenes.map(x=>x.n).join(", ")}`); if(out.script) ch.push("✎ script"); if(Array.isArray(out.ideas)&&out.ideas.length) ch.push("＋ new ideas"); if(out.film_look) ch.push("✎ film look"); }
         if(turn.actions.length) ch.push(...turn.actions.map(([x,t])=>`▶ ${x.replace("_"," ")} ${t}`));
         if(ch.length){ last.changes=ch.slice(0,24); if(turn.snap){ const id="u"+Date.now().toString(36); RL_UNDO.clear(); RL.chat.forEach(x=>{ delete x.undo; }); RL_UNDO.set(id,turn.snap); last.undo=id; } } } }
@@ -2401,9 +2523,10 @@ function rlApply(o){
 }
 function rlLinkLibrary(){ for(const c of RL.characters){ if(!c.lib){ if(c.fromLib){ c.fromLib=false; c.id=null; } continue; } const id="ch_"+String(c.lib).toLowerCase(); const mid=S.magIds?.[id]; if(refById(id)){ c.fromLib=true; if(mid) c.id=mid; } } }
 function rlSys(t,bad){ RL.chat.push({role:"sys",text:t,err:!!bad}); rlRenderChat(); }
-function rlTyping(on,note){ const b=$("rlMsgs"); b.querySelector(".rl-typing-m")?.remove(); if(!on){ RL_STEPS.length=0; return; }
+function rlTyping(on,note){ const b=$("rlMsgs"); b.querySelector(".rl-typing-m")?.remove(); if(!on){ RL_STEPS.length=0; RL_LIVE_TXT=""; return; }
   const d=document.createElement("div"); d.className="rl-m a rl-typing-m"; d.setAttribute("role","status"); d.setAttribute("aria-live","polite");
   d.innerHTML=`<div class="rl-typhead"><span class="rl-typing" aria-hidden="true"><i></i><i></i><i></i></span><span>${esc(note||RL_STEPS.filter(x=>!x.done).slice(-1)[0]?.label||"The Director is thinking…")}</span></div>${RL_STEPS.length?`<ul class="rl-steps">${rlStepsHTML()}</ul>`:""}`;
+  if(RL_LIVE_TXT){ d.classList.add("live"); d.insertAdjacentHTML("beforeend",`<div class="rl-live rl-fmt" dir="auto">${rlFmt(RL_LIVE_TXT)}<span class="rl-caret" aria-hidden="true"></span></div>`); }
   b.appendChild(d); b.scrollTop=b.scrollHeight; }
 /* ---------- videos in the chat: the page can't reach the web, so the video goes to Gemini through the BAE Gemini Eye connector in small pieces ---------- */
 const RL_VMAX=200*1024*1024;
@@ -2585,14 +2708,15 @@ function rlStep(label,{done,id}={}){
 const rlStepsHTML=()=>RL_STEPS.slice(-6).map(x=>`<li class="${x.done?"ok":"run"}"><span class="d" aria-hidden="true">${x.done?"✓":""}</span>${esc(x.label)}</li>`).join("");
 function rlRenderChat(){
   const b=$("rlMsgs");
-  if(!RL.chat.length) b.innerHTML=`<div class="rl-hello" dir="auto"><span class="av" aria-hidden="true">✦</span><div><b>Hi, I'm your Director.</b><p>Tell me the reel you need — the product, the message, who it's for. Attach a storyboard, character photos, places, a reference video or a script and I'll study them.</p><p class="muted">Five assistant directors listen in and add their ideas. Everything is saved — come back any time.</p></div></div>`;
+  if(!RL.chat.length) b.innerHTML=`<div class="rl-hello" dir="auto"><span class="av" aria-hidden="true">✦</span><div><b>Hi, I'm your Director.</b><p>Tell me the reel you need — the product, the message, who it's for. Already have character photos, places or props? Drop them all here in any order — I sort them into the right place and keep their original quality. A storyboard, reference video or script works too.</p><p class="muted">Five assistant directors listen in and add their ideas. Everything is saved — come back any time.</p></div></div>`;
   else b.innerHTML=RL.chat.map((m,mi)=>{
     const role=m.role==="u"?"u":m.role==="a"?"a":"sys";
     const media=`${m.thumbs?.length?`<div class="imgs">${m.thumbs.map(t=>`<img src="${t}" alt="">`).join("")}</div>`:m.n?`<div class="t12" style="opacity:.7;margin-top:6px">${m.n} image${m.n>1?"s":""} attached</div>`:""}${m.n&&role==="u"?`<div class="rl-sent">✓ ${m.n} image${m.n>1?"s":""} sent</div>`:""}${m.videos?.length?m.videos.map(v=>v.analysis&&!v._stage?`${rlVProgHTML({...v,_stage:"done"})}<details class="rl-vsaw"><summary>What Gemini saw</summary><div dir="auto">${esc(String(v.analysis).slice(0,6000))}</div></details>`:v._stage&&v._stage!=="done"&&v._stage!=="err"?rlVProgHTML(v):v.analysis?`${rlVProgHTML({...v,_stage:"done"})}<details class="rl-vsaw"><summary>What Gemini saw</summary><div dir="auto">${esc(String(v.analysis).slice(0,6000))}</div></details>`:rlVProgHTML({...v,_stage:"err"})).join(""):""}`;
     const body=role==="a"?`<div class="rl-fmt">${rlFmt(m.text)}</div>`:esc(m.text||"");
-    return `${role==="a"&&RL.chat[mi-1]?.role!=="a"?`<div class="rl-who"><span class="av" aria-hidden="true">✦</span>Director</div>`:""}<div class="rl-m ${role}${m.err?" err":""}" dir="auto">${body}${media}</div>${m.changes?.length?`<div class="rl-chg${m.undone?" undone":""}"><div class="h"><b>${m.undone?"Undone":"Done in the studio"}</b>${m.undo&&RL_UNDO.has(m.undo)?`<button type="button" class="btn small" data-rlundo="${m.undo}">Undo</button>`:""}</div><ul>${m.changes.map(c=>`<li dir="auto">${esc(c)}</li>`).join("")}</ul></div>`:""}${m.prompt?.text?`<details class="rl-vsaw"><summary>${esc(m.prompt.label||"Prompt")}</summary><div dir="auto">${esc(String(m.prompt.text).slice(0,6000))}</div></details>`:""}${rlAdvHTML(m,mi)}${m.mem?rlMemChip(m.mem):""}`;
+    return `${role==="a"&&RL.chat[mi-1]?.role!=="a"?`<div class="rl-who"><span class="av" aria-hidden="true">✦</span>Director</div>`:""}<div class="rl-m ${role}${m.err?" err":""}" dir="auto">${body}${media}</div>${m.changes?.length?`<div class="rl-chg${m.undone?" undone":""}"><div class="h"><b>${m.undone?"Undone":"Done in the studio"}</b>${m.undo&&RL_UNDO.has(m.undo)?`<button type="button" class="btn small" data-rlundo="${m.undo}">Undo</button>`:""}</div><ul>${m.changes.map(c=>`<li dir="auto">${esc(c)}</li>`).join("")}</ul></div>`:""}${rlIntakeHTML(m,mi)}${rlKitHTML(m,mi)}${m.prompt?.text?`<details class="rl-vsaw"><summary>${esc(m.prompt.label||"Prompt")}</summary><div dir="auto">${esc(String(m.prompt.text).slice(0,6000))}</div></details>`:""}${rlAdvHTML(m,mi)}${m.mem?rlMemChip(m.mem):""}`;
   }).join("");
   if(RL.chatPending&&!rlBusy) b.insertAdjacentHTML("beforeend",`<div class="rl-m sys rl-retry" dir="auto">The connection dropped before Claude answered. Your message is saved. <button type="button" class="a-btn" id="rlRetry">Answer it now</button></div>`);
+  if(rlBusy&&RL_STEPS.length) rlTyping(true);
   b.scrollTop=b.scrollHeight;
   const last=[...RL.chat].reverse().find(m=>m.role==="a");
   const chips=last?.chips?.length?last.chips:(RL.chat.length?rlChipsFor():["بدي ريلز عن Quick Pay: ادفع كل فواتيرك بكبسة زر","Give me 3 viral ideas for a BAE savings reel"]);
@@ -3297,7 +3421,7 @@ Reply with ONLY JSON: {"description":"2–3 sentences, concrete","${isChar?"ward
   e.studied=Date.now(); e._summary=String(o.summary_ar||"");
   return true;
 }
-async function rlUseImage(tag,blob){
+async function rlUseImage(tag,blob,{quiet}={}){
   const e=rlElByTag(tag); if(!e||!blob||!mcp) return;
   e.status="run"; e.err=null; e._live=true; e._note="Uploading your image…"; rlBoard();
   try{
@@ -3312,7 +3436,7 @@ async function rlUseImage(tag,blob){
       /* carry the new look into every scene that uses this element */
       const hs=[e.handle,e.tag].filter(Boolean).map(x=>String(x).toLowerCase());
       const ns=RL.scenes.filter(sc=>hs.some(h=>String(sc.prompt||"").toLowerCase().includes(h)||String(sc.frame_prompt||"").toLowerCase().includes(h)||(sc.refs||[]).map(x=>String(x).toLowerCase()).includes(h))).map(sc=>sc.n);
-      RL.chat.push({role:"a",text:`👁 ${e._summary||`I studied your image of ${e.name}.`}\n${e.description}${e.wardrobe?`\nWardrobe: ${e.wardrobe}`:""}${e.details?`\nDetails: ${e.details}`:""}${ns.length?`\nI'm updating scene${ns.length>1?"s":""} ${ns.join(", ")} to match.`:""}`,changes:[`✎ ${e.handle}: description${e.wardrobe?", wardrobe":""}, prompt (from your image)`,...ns.map(n=>`↻ scene ${n} re-checked`)],prompt:{label:`New prompt for ${e.handle}`,text:e.prompt},t:Date.now()});
+      if(!quiet) RL.chat.push({role:"a",text:`👁 ${e._summary||`I studied your image of ${e.name}.`}\n${e.description}${e.wardrobe?`\nWardrobe: ${e.wardrobe}`:""}${e.details?`\nDetails: ${e.details}`:""}${ns.length?`\nI'm updating scene${ns.length>1?"s":""} ${ns.join(", ")} to match.`:""}`,changes:[`✎ ${e.handle}: description${e.wardrobe?", wardrobe":""}, prompt (from your image)`,...ns.map(n=>`↻ scene ${n} re-checked`)],prompt:{label:`New prompt for ${e.handle}`,text:e.prompt},t:Date.now()});
       rlRenderChat();
       if(ns.length) rlCheckScenes(ns,{quiet:true});
     }
@@ -3640,12 +3764,16 @@ async function rlBible(){
   $("rlInput").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing){ e.preventDefault(); rlSend($("rlInput").value); } });
   document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&RL&&!$("rlProjView").hidden){ setTimeout(rlResume,600); if(rlWakeN>0) rlWake(true).then(()=>rlWake(false)); } });
   $("rlMsgs").addEventListener("click",e=>{ if(e.target.closest("#rlRetry")&&RL?.chatPending) rlSend(RL.chatPending.text,{retry:true});
+    const gm=e.target.closest("[data-rl-genmiss]"); if(gm&&RL){ gm.disabled=true; (async()=>{ if(!S.connected) await connect(true); const L=rlMissing().filter(x=>x.prompt); const q=[...L]; const w=async()=>{ while(q.length){ await rlGenElement(q.shift().tag); rlRenderChat(); } }; rlRenderChat(); await Promise.all([w(),w()]); })(); return; }
     const un=e.target.closest("[data-rlundo]"); if(un&&RL){ rlUndoTurn(un.dataset.rlundo); return; }
     const sk=e.target.closest("[data-advskip]"); if(sk&&RL){ const [mi,ai]=sk.dataset.advskip.split(":").map(Number); const x=RL.chat[mi]?.advisors?.[ai]; if(x){ x.skipped=true; brSignal("chat","advisor_skipped",-1,{note:x.note,item:rlAdv(x.id).name,key:"skip"+x.note}); rlSave(); rlRenderChat(); } return; }
     const u=e.target.closest("[data-adv]"); if(u&&RL){ const [mi,ai]=u.dataset.adv.split(":").map(Number); const x=RL.chat[mi]?.advisors?.[ai]; if(x){ x.used=true; const A=rlAdv(x.id); brSignal("chat","advisor_used",1,{note:x.note,item:A.name,key:x.note}); rlSend(rlAr()?`طبّق اقتراح ${A.name}: ${x.note}`:`Apply the ${A.name}'s suggestion: ${x.note}`); } } });
   $("rlChips").onclick=e=>{ const b=e.target.closest("button"); if(b) rlSend(b.textContent); };
   $("reels").addEventListener("toggle",e=>{ const d=e.target, k=d?.dataset?.openKey; if(!k) return; if(d.open){ RL_OPEN.add(k); RL_OPEN.delete("!"+k); } else { RL_OPEN.delete(k); RL_OPEN.add("!"+k); } },true);
-  $("reels").addEventListener("change",e=>{ const t=e.target.closest?.("[data-rl-own]"); if(!t||!t.files?.[0]) return; const f=t.files[0]; t.value=""; rlUseImage(t.dataset.rlOwn,f); });
+  $("reels").addEventListener("change",e=>{
+    const mv=e.target.closest?.("[data-intake]"); if(mv){ const [mi,ri]=mv.dataset.intake.split(":").map(Number); rlIntakeMove(mi,ri,mv.value); return; }
+    const many=e.target.closest?.("[data-rl-many]"); if(many&&many.files?.length){ for(const f of [...many.files].slice(0,10)) rlPending.push({blob:f,url:URL.createObjectURL(f),name:f.name}); many.value=""; rlRenderAtt(); if(!rlBusy) rlSend(""); return; }
+    const t=e.target.closest?.("[data-rl-own]"); if(!t||!t.files?.[0]) return; const f=t.files[0]; t.value=""; rlUseImage(t.dataset.rlOwn,f); });
   const rlGrow=()=>{ const t=$("rlInput"); t.style.height="auto"; t.style.height=Math.min(180,t.scrollHeight)+"px"; };
   $("rlInput").addEventListener("input",rlGrow); new MutationObserver(()=>{}).observe($("rlInput"),{attributes:true});
   $("rlForm").addEventListener("submit",()=>setTimeout(rlGrow,0));
