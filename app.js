@@ -4,6 +4,67 @@ const SRV = "Magnafic";
 const STYLE = "professional photography, clean natural light";
 const $ = id => document.getElementById(id);
 
+/* ================= Rich fields: the brief and the Director chat hold small character pictures (chips) picked with @ =================
+   The textarea is swapped for an editable box that still answers .value (chips read as "@Name"), so the rest of the studio is unchanged. */
+const AT={fields:[],menu:null,open:null};
+function atChars(){ try{ return CHAR_REFS.map(r=>({name:charName(r.id),src:r.src||"",cat:r.lib?(CL_CATS.find(c=>c[0]===r.cat)||[])[1]||"":"Yours"})).filter(x=>x.name); }catch{ return []; } }
+function atChip(name,src){ const s=document.createElement("span"); s.className="at-chip"; s.contentEditable="false"; s.dataset.name=name; s.setAttribute("role","button"); s.setAttribute("aria-label",name+" — change character"); s.title=name;
+  if(src){ const im=document.createElement("img"); im.src=src; im.alt=""; im.draggable=false; s.appendChild(im); } else { s.textContent=(name.trim()[0]||"?").toUpperCase(); s.classList.add("noimg"); } return s; }
+function atRead(el){ let out=""; for(const n of el.childNodes){ if(n.nodeType===3) out+=n.nodeValue.replace(/​/g,""); else if(n.nodeType!==1) continue; else if(n.classList.contains("at-chip")) out+="@"+n.dataset.name; else if(n.tagName==="BR") out+="\n"; else { const t=atRead(n); out+=(out&&!out.endsWith("\n")?"\n":"")+t; } } return out; }
+function atVal(el){ const v=atRead(el); return el.lastChild?.tagName==="BR"?v.replace(/\n$/,""):v; }
+function atWrite(el,text){ text=String(text??""); el.textContent=""; if(!text) return;
+  const cs=atChars().sort((x,y)=>y.name.length-x.name.length), by=new Map(cs.map(c=>[c.name.toLowerCase(),c]));
+  const re=cs.length?new RegExp("@("+cs.map(c=>c.name.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")+")","gi"):null;
+  const put=t=>{ t.split("\n").forEach((ln,k)=>{ if(k) el.appendChild(document.createElement("br")); if(ln) el.appendChild(document.createTextNode(ln)); }); };
+  let last=0,m; if(re) while((m=re.exec(text))){ put(text.slice(last,m.index)); const c=by.get(m[1].toLowerCase()); el.appendChild(atChip(c.name,c.src)); last=m.index+m[0].length; }
+  put(text.slice(last)); if(el.lastChild?.classList?.contains("at-chip")) el.appendChild(document.createTextNode(" ")); if(text.endsWith("\n")) el.appendChild(document.createElement("br")); }
+function atEnd(el){ try{ const r=document.createRange(); r.selectNodeContents(el); r.collapse(false); const s=getSelection(); s.removeAllRanges(); s.addRange(r); }catch{} }
+function atMake(id,enterSends){ const ta=$(id); if(!ta||ta.tagName!=="TEXTAREA") return;
+  const el=document.createElement("div"); el.id=id; el.className=(ta.className+" at-field").trim(); el.contentEditable="true"; el.setAttribute("role","textbox"); el.setAttribute("aria-multiline","true"); el.spellcheck=false;
+  for(const k of ["dir","aria-label","aria-describedby"]) if(ta.hasAttribute(k)) el.setAttribute(k,ta.getAttribute(k)); el.dataset.ph=ta.getAttribute("placeholder")||"";
+  Object.defineProperty(el,"value",{get:()=>atVal(el),set:v=>{ atWrite(el,v); if(document.activeElement===el) atEnd(el); }});
+  Object.defineProperty(el,"placeholder",{get:()=>el.dataset.ph,set:v=>{ el.dataset.ph=v; }});
+  Object.defineProperty(el,"selectionStart",{get:()=>atVal(el).length}); el.setSelectionRange=()=>atEnd(el); el.select=()=>atEnd(el);
+  ta.replaceWith(el); AT.fields.push(el);
+  el.addEventListener("paste",e=>{ e.preventDefault(); const t=(e.clipboardData||window.clipboardData)?.getData("text/plain")||""; if(t) document.execCommand("insertText",false,t); });
+  el.addEventListener("drop",e=>{ if(e.dataTransfer?.types?.includes("Files")) return; e.preventDefault(); });
+  el.addEventListener("keydown",e=>{ if(AT.open&&AT.open.el===el){ const O=AT.open;
+      if(e.key==="Escape"){ e.preventDefault(); e.stopImmediatePropagation(); atHide(); return; }
+      if(O.items.length&&(e.key==="ArrowDown"||e.key==="ArrowUp")){ e.preventDefault(); e.stopImmediatePropagation(); O.i=(O.i+(e.key==="ArrowDown"?1:-1)+O.items.length)%O.items.length; atDraw(); return; }
+      if(O.items.length&&(e.key==="Enter"||e.key==="Tab")&&!e.isComposing){ e.preventDefault(); e.stopImmediatePropagation(); atPick(O.i); return; } }
+    if(e.key==="Enter"&&!e.isComposing&&!(e.ctrlKey||e.metaKey)&&(e.shiftKey||!enterSends)){ e.preventDefault(); e.stopImmediatePropagation(); document.execCommand("insertLineBreak"); } },true);
+  el.addEventListener("input",()=>{ if(!el.querySelector(".at-chip")&&!atRead(el).trim()&&el.childNodes.length) el.textContent=""; atCheck(el); });
+  el.addEventListener("keyup",e=>{ if(/^Arrow|Home|End/.test(e.key)&&!(AT.open&&AT.open.chip)) atCheck(el); });
+  el.addEventListener("click",e=>{ const c=e.target.closest?.(".at-chip"); if(c){ e.preventDefault(); atOpen({el,chip:c,q:""}); } else atCheck(el); });
+  el.addEventListener("blur",()=>setTimeout(()=>{ if(document.activeElement!==el&&!AT.menu?.matches(":hover")) atHide(); },150));
+}
+function atMenu(){ if(AT.menu) return AT.menu; const d=document.createElement("div"); d.className="at-menu"; d.hidden=true; d.setAttribute("role","listbox"); d.setAttribute("aria-label","Characters"); document.body.appendChild(d);
+  d.addEventListener("mousedown",e=>{ e.preventDefault(); const b=e.target.closest("[data-ati]"); if(b) atPick(+b.dataset.ati); else if(e.target.closest("[data-atrm]")){ const O=AT.open; if(O?.chip){ O.chip.remove(); const el=O.el; atHide(); el.dispatchEvent(new Event("input",{bubbles:true})); } } });
+  addEventListener("resize",atHide); addEventListener("scroll",e=>{ if(AT.open&&!d.contains(e.target)) atHide(); },true); return AT.menu=d; }
+function atHide(){ if(AT.menu) AT.menu.hidden=true; AT.open=null; }
+function atList(q){ q=String(q||"").toLowerCase(); return atChars().filter(x=>!q||x.name.toLowerCase().includes(q)).sort((x,y)=>x.name.localeCompare(y.name)).slice(0,40); }
+function atOpen(o){ AT.open={i:0,...o,items:atList(o.q)}; if(o.chip){ const k=AT.open.items.findIndex(x=>x.name===o.chip.dataset.name); if(k>=0) AT.open.i=k; } atDraw();
+  try{ if(!CL.loaded) clLoad().then(()=>{ if(AT.open&&AT.open.el===o.el){ AT.open.items=atList(AT.open.q); atDraw(); } }); }catch{} }
+function atDraw(){ const O=AT.open, d=atMenu(); if(!O) return; const r=(O.chip||O.el).getBoundingClientRect(), all=atChars().length;
+  d.innerHTML=`<div class="at-head">${O.chip?"Change character":"Characters"}</div>`+(O.items.length?O.items.map((x,i)=>`<button type="button" role="option" aria-selected="${i===O.i}" data-ati="${i}">${x.src?`<img src="${esc(x.src)}" alt="">`:`<span class="ph" aria-hidden="true">${esc((x.name.trim()[0]||"").toUpperCase())}</span>`}<span class="nm" dir="auto" data-noi18n>${esc(x.name)}</span><span class="t12 muted">${esc(x.cat)}</span></button>`).join(""):`<p class="t12 muted">${all?"No character with that name.":"No characters yet. Add them in the character library."}</p>`)+(O.chip?`<button type="button" class="rm" data-atrm>Remove from the brief</button>`:"");
+  d.hidden=false; d.style.width=Math.min(340,innerWidth-16)+"px"; d.style.left=Math.max(8,Math.min(r.left,innerWidth-d.offsetWidth-8))+"px";
+  const h=d.offsetHeight; d.style.top=(innerHeight-r.bottom>h+12||r.top<h+12?r.bottom+6:r.top-h-6)+"px"; d.querySelector('[aria-selected="true"]')?.scrollIntoView({block:"nearest"}); }
+function atCheck(el){ const s=getSelection(); if(!s.rangeCount||!s.isCollapsed){ atHide(); return; } const n=s.anchorNode; if(!n||n.nodeType!==3||!el.contains(n)){ atHide(); return; }
+  const v=n.nodeValue.slice(0,s.anchorOffset), m=v.match(/(^|[\s(،,.:])@([^\s@]{0,24})$/); if(!m){ atHide(); return; }
+  atOpen({el,node:n,start:v.length-m[2].length-1,end:s.anchorOffset,q:m[2]}); }
+function atPick(i){ const O=AT.open, x=O?.items[i]; if(!x) return; const el=O.el;
+  if(O.chip){ const c=atChip(x.name,x.src); O.chip.replaceWith(c); }
+  else { const r=document.createRange(); try{ r.setStart(O.node,O.start); r.setEnd(O.node,Math.min(O.end,O.node.nodeValue.length)); }catch{ atHide(); return; } r.deleteContents(); const sp=document.createTextNode(" "), c=atChip(x.name,x.src); r.insertNode(sp); r.insertNode(c);
+    el.focus(); const s=getSelection(), r2=document.createRange(); r2.setStart(sp,1); r2.collapse(true); s.removeAllRanges(); s.addRange(r2); }
+  atHide(); el.dispatchEvent(new Event("input",{bubbles:true})); }
+/* the library arrived or changed: turn typed @names into pictures, refresh pictures, and show a live example in an untouched brief */
+function atRefresh(){ const by=new Map(atChars().map(c=>[c.name,c]));
+  for(const el of AT.fields){ if(document.activeElement===el) continue; const v=atVal(el);
+    if(v.includes("@")&&[...by.keys()].some(n=>v.toLowerCase().includes("@"+n.toLowerCase()))) atWrite(el,v); }
+  const b=$("brief"); try{ if(b&&document.activeElement!==b&&S.mode!=="icon"&&by.size){ const v=atVal(b).trim(); if(!v||v===DEFAULT_BRIEF){ const c=CHAR_REFS.find(r=>r.lib)||CHAR_REFS[0]; if(c){ atWrite(b,`@${charName(c.id)} sitting by the window of a café in Jabal al-Weibdeh, soft morning light, phone in hand, smiling at the screen.`); b.dispatchEvent(new Event("input",{bubbles:true})); } } } }catch{} }
+atMake("brief",false); atMake("rlInput",true);
+setTimeout(()=>{ try{ clLoad().then(atRefresh).catch(()=>{}); }catch{} },1200);
+
 /* ---------------- reference catalog (Mari Juliano lifestyle) ---------------- */
 const REFS = [
  ["r007","Extreme close-up portrait, woman with curly hair and freckles tasting from a spoon, soft warm daylight, shallow depth"],
@@ -1317,7 +1378,7 @@ const CL_CATS=[["men","Men"],["women","Women"],["kids","Kids"],["elderly","Elder
 const clRefId=id=>"ch_l"+id;
 function clSync(){ for(const A of [ALL_REFS,CHAR_REFS]) for(let i=A.length-1;i>=0;i--) if(A[i].lib) A.splice(i,1);
   for(const c of CL.list){ const r={id:clRefId(c.id),docId:c.id,defName:c.name||"Character",d:"Character: "+(c.look||c.name||""),look:c.look||"exactly the person in this reference image",src:c.thumb||"",blob:null,set:"ch",studio:false,user:true,lib:true,cat:c.cat||"men"}; ALL_REFS.push(r); CHAR_REFS.push(r); }
-  S.picked=S.picked.filter(id=>refById(id)); }
+  S.picked=S.picked.filter(id=>refById(id)); try{ atRefresh(); }catch{} }
 async function clLoad(force){
   await rlStoreInit(); const db=RLS.db; if(!db){ CL.err="The library needs the page's database — open the studio in claude.ai."; return CL; }
   if(!force&&CL.loaded&&Date.now()-CL.loaded<60000) return CL;
@@ -4837,31 +4898,6 @@ function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span
   const open=()=>{ P.hidden=false; P.scrollTop=0; draw(); if(!BF.loaded) bfLoad().then(draw); };
   const close=()=>{ P.hidden=true; $("openBrand")?.focus(); };
   $("openBrand")?.addEventListener("click",open); $("closeBrand")?.addEventListener("click",close);
-})();
-
-/* ================= @ mentions: type @ in a brief or the Director chat and pick a character from the library ================= */
-(function(){
-  const M={ta:null,start:0,items:[],i:0,el:null};
-  const menu=()=>{ if(M.el) return M.el; const d=document.createElement("div"); d.className="at-menu"; d.hidden=true; d.setAttribute("role","listbox"); d.setAttribute("aria-label","Characters"); document.body.appendChild(d);
-    d.addEventListener("mousedown",e=>{ const b=e.target.closest("[data-ati]"); if(!b) return; e.preventDefault(); pick(+b.dataset.ati); }); return M.el=d; };
-  const hide=()=>{ if(M.el) M.el.hidden=true; M.ta=null; };
-  const list=q=>{ q=q.toLowerCase(); return CHAR_REFS.map(r=>({name:charName(r.id),src:r.src||"",cat:r.lib?(CL_CATS.find(c=>c[0]===r.cat)||[])[1]||"":"Yours"})).filter(x=>x.name&&(!q||x.name.toLowerCase().includes(q))).sort((x,y)=>x.name.localeCompare(y.name)).slice(0,30); };
-  function draw(){ const d=menu(), r=M.ta.getBoundingClientRect();
-    d.innerHTML=`<div class="at-head">Characters</div>`+(M.items.length?M.items.map((x,i)=>`<button type="button" role="option" aria-selected="${i===M.i}" data-ati="${i}">${x.src?`<img src="${esc(x.src)}" alt="">`:`<span class="ph" aria-hidden="true"></span>`}<span class="nm" dir="auto" data-noi18n>${esc(x.name)}</span><span class="t12 muted">${esc(x.cat)}</span></button>`).join(""):`<p class="t12 muted">${CHAR_REFS.length?"No character with that name.":"No characters yet. Add them in the character library."}</p>`);
-    d.hidden=false; d.style.left=Math.max(8,Math.min(r.left,innerWidth-d.offsetWidth-8))+"px"; d.style.width=Math.min(340,innerWidth-16)+"px";
-    const below=innerHeight-r.bottom, h=d.offsetHeight; d.style.top=(below>h+12||r.top<h+12?r.bottom+6:r.top-h-6)+"px";
-    d.querySelector('[aria-selected="true"]')?.scrollIntoView({block:"nearest"}); }
-  function check(ta){ const v=ta.value.slice(0,ta.selectionStart), m=v.match(/(^|[\s(،,.:])@([^\s@]{0,24})$/); if(!m){ hide(); return; }
-    M.ta=ta; M.start=v.length-m[2].length-1; M.items=list(m[2]); M.i=0; draw(); if(!CL.loaded) clLoad().then(()=>{ if(M.ta===ta){ M.items=list(m[2]); draw(); } }); }
-  function pick(i){ const x=M.items[i], ta=M.ta; if(!x||!ta) return; const end=ta.selectionStart, ins="@"+x.name+" "; ta.value=ta.value.slice(0,M.start)+ins+ta.value.slice(end); const p=M.start+ins.length; ta.focus(); ta.setSelectionRange(p,p); hide(); ta.dispatchEvent(new Event("input",{bubbles:true})); }
-  for(const id of ["brief","rlInput"]){ const ta=$(id); if(!ta) continue;
-    ta.addEventListener("input",()=>check(ta)); ta.addEventListener("click",()=>check(ta)); ta.addEventListener("blur",()=>setTimeout(()=>{ if(document.activeElement!==ta) hide(); },120));
-    ta.addEventListener("keydown",e=>{ if(M.ta!==ta||!M.el||M.el.hidden) return;
-      if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); hide(); }
-      else if(!M.items.length) return;
-      else if(e.key==="ArrowDown"||e.key==="ArrowUp"){ e.preventDefault(); e.stopImmediatePropagation(); M.i=(M.i+(e.key==="ArrowDown"?1:-1)+M.items.length)%M.items.length; draw(); }
-      else if((e.key==="Enter"||e.key==="Tab")&&!e.isComposing){ e.preventDefault(); e.stopImmediatePropagation(); pick(M.i); } },true); }
-  addEventListener("resize",hide); addEventListener("scroll",e=>{ if(M.el&&!M.el.hidden&&!M.el.contains(e.target)) hide(); },true);
 })();
 
 boot();
