@@ -7,16 +7,19 @@ const $ = id => document.getElementById(id);
 /* ================= Rich fields: the brief and the Director chat hold small character pictures (chips) picked with @ =================
    The textarea is swapped for an editable box that still answers .value (chips read as "@Name"), so the rest of the studio is unchanged. */
 const AT={fields:[],menu:null,open:null};
+const AT_SHOTS=[["Bird's Eye View","From directly above"],["High Angle","Camera above eye level, looking down"],["Eye Level","Camera at the subject's eye height"],["Low Angle","Camera below eye level, looking up"],["Worm's Eye View","Extreme low, camera near the ground"],["Dutch Angle","Camera tilted on a diagonal"],["Profile","Side view of the subject"],["3/4 View","Subject turned slightly away"],["Close-Up","Tight on the face or a detail"],["Medium Close-Up","Chest or shoulders up"],["Medium Shot","Waist up"],["Medium Full Shot","Head to mid-thigh"],["Full Body Shot","Whole body in frame"],["Long Shot","Subject small in the environment"],["Extreme Long Shot","Tiny subject, wide establishing scene"],["Over the Shoulder","From behind someone's shoulder"],["Point of View (POV)","Seen through the subject's eyes"],["Framing","Subject inside a natural or built frame"],["Leading Lines","Lines lead the eye to the subject"],["Silhouette","Backlit, dark outline of the subject"]];
+function atShotChip(name){ const s=document.createElement("span"); s.className="at-chip shot"; s.contentEditable="false"; s.dataset.shot=name; s.setAttribute("role","button"); s.setAttribute("aria-label","Camera: "+name+" — change"); s.textContent=name; return s; }
 function atChars(){ try{ return CHAR_REFS.map(r=>({name:charName(r.id),src:r.src||"",cat:r.lib?(CL_CATS.find(c=>c[0]===r.cat)||[])[1]||"":"Yours"})).filter(x=>x.name); }catch{ return []; } }
 function atChip(name,src){ const s=document.createElement("span"); s.className="at-chip"; s.contentEditable="false"; s.dataset.name=name; s.setAttribute("role","button"); s.setAttribute("aria-label",name+" — change character"); s.title=name;
   if(src){ const im=document.createElement("img"); im.src=src; im.alt=""; im.draggable=false; s.appendChild(im); } else { s.textContent=(name.trim()[0]||"?").toUpperCase(); s.classList.add("noimg"); } return s; }
-function atRead(el){ let out=""; for(const n of el.childNodes){ if(n.nodeType===3) out+=n.nodeValue.replace(/​/g,""); else if(n.nodeType!==1) continue; else if(n.classList.contains("at-chip")) out+="@"+n.dataset.name; else if(n.tagName==="BR") out+="\n"; else { const t=atRead(n); out+=(out&&!out.endsWith("\n")?"\n":"")+t; } } return out; }
+function atRead(el){ let out=""; for(const n of el.childNodes){ if(n.nodeType===3) out+=n.nodeValue.replace(/​/g,""); else if(n.nodeType!==1) continue; else if(n.classList.contains("at-chip")) out+=n.dataset.shot?"[shot: "+n.dataset.shot+"]":"@"+n.dataset.name; else if(n.tagName==="BR") out+="\n"; else { const t=atRead(n); out+=(out&&!out.endsWith("\n")?"\n":"")+t; } } return out; }
 function atVal(el){ const v=atRead(el); return el.lastChild?.tagName==="BR"?v.replace(/\n$/,""):v; }
 function atWrite(el,text){ text=String(text??""); el.textContent=""; if(!text) return;
   const cs=atChars().sort((x,y)=>y.name.length-x.name.length), by=new Map(cs.map(c=>[c.name.toLowerCase(),c]));
-  const re=cs.length?new RegExp("@("+cs.map(c=>c.name.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")+")","gi"):null;
+  const q=s=>s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"), shots=new Map(AT_SHOTS.map(x=>[x[0].toLowerCase(),x[0]]));
+  const re=new RegExp((cs.length?"@("+cs.map(c=>q(c.name)).join("|")+")|":"()")+"\\[shot: ("+AT_SHOTS.map(x=>q(x[0])).join("|")+")\\]","gi");
   const put=t=>{ t.split("\n").forEach((ln,k)=>{ if(k) el.appendChild(document.createElement("br")); if(ln) el.appendChild(document.createTextNode(ln)); }); };
-  let last=0,m; if(re) while((m=re.exec(text))){ put(text.slice(last,m.index)); const c=by.get(m[1].toLowerCase()); el.appendChild(atChip(c.name,c.src)); last=m.index+m[0].length; }
+  let last=0,m; while((m=re.exec(text))){ if(!m[0]){ re.lastIndex++; continue; } put(text.slice(last,m.index)); if(m[2]) el.appendChild(atShotChip(shots.get(m[2].toLowerCase()))); else { const c=by.get(m[1].toLowerCase()); el.appendChild(atChip(c.name,c.src)); } last=m.index+m[0].length; }
   put(text.slice(last)); if(el.lastChild?.classList?.contains("at-chip")) el.appendChild(document.createTextNode(" ")); if(text.endsWith("\n")) el.appendChild(document.createElement("br")); }
 function atEnd(el){ try{ const r=document.createRange(); r.selectNodeContents(el); r.collapse(false); const s=getSelection(); s.removeAllRanges(); s.addRange(r); }catch{} }
 function atMake(id,enterSends){ const ta=$(id); if(!ta||ta.tagName!=="TEXTAREA") return;
@@ -42,26 +45,30 @@ function atMenu(){ if(AT.menu) return AT.menu; const d=document.createElement("d
   d.addEventListener("mousedown",e=>{ e.preventDefault(); const b=e.target.closest("[data-ati]"); if(b) atPick(+b.dataset.ati); else if(e.target.closest("[data-atrm]")){ const O=AT.open; if(O?.chip){ O.chip.remove(); const el=O.el; atHide(); el.dispatchEvent(new Event("input",{bubbles:true})); } } });
   addEventListener("resize",atHide); addEventListener("scroll",e=>{ if(AT.open&&!d.contains(e.target)) atHide(); },true); return AT.menu=d; }
 function atHide(){ if(AT.menu) AT.menu.hidden=true; AT.open=null; }
-function atList(q){ q=String(q||"").toLowerCase(); return atChars().filter(x=>!q||x.name.toLowerCase().includes(q)).sort((x,y)=>x.name.localeCompare(y.name)).slice(0,40); }
-function atOpen(o){ AT.open={i:0,...o,items:atList(o.q)}; if(o.chip){ const k=AT.open.items.findIndex(x=>x.name===o.chip.dataset.name); if(k>=0) AT.open.i=k; } atDraw();
-  try{ if(!CL.loaded) clLoad().then(()=>{ if(AT.open&&AT.open.el===o.el){ AT.open.items=atList(AT.open.q); atDraw(); } }); }catch{} }
+function atList(q,only){ q=String(q||"").toLowerCase(); const cs=only==="shot"?[]:atChars().filter(x=>!q||x.name.toLowerCase().includes(q)).sort((x,y)=>x.name.localeCompare(y.name)).slice(0,40);
+  const sh=only==="char"?[]:AT_SHOTS.filter(x=>!q||x[0].toLowerCase().includes(q)||"camera angle shot".includes(q)).map(x=>({shot:true,name:x[0],cat:x[1]})); return [...cs,...sh]; }
+function atOpen(o){ const only=o.chip?(o.chip.dataset.shot?"shot":"char"):null; AT.open={i:0,...o,only,items:atList(o.q,only)}; if(o.chip){ const k=AT.open.items.findIndex(x=>x.name===(o.chip.dataset.shot||o.chip.dataset.name)); if(k>=0) AT.open.i=k; } atDraw();
+  try{ if(!CL.loaded) clLoad().then(()=>{ if(AT.open&&AT.open.el===o.el){ AT.open.items=atList(AT.open.q,AT.open.only); atDraw(); } }); }catch{} }
 function atDraw(){ const O=AT.open, d=atMenu(); if(!O) return; const r=(O.chip||O.el).getBoundingClientRect(), all=atChars().length;
-  d.innerHTML=`<div class="at-head">${O.chip?"Change character":"Characters"}</div>`+(O.items.length?O.items.map((x,i)=>`<button type="button" role="option" aria-selected="${i===O.i}" data-ati="${i}">${x.src?`<img src="${esc(x.src)}" alt="">`:`<span class="ph" aria-hidden="true">${esc((x.name.trim()[0]||"").toUpperCase())}</span>`}<span class="nm" dir="auto" data-noi18n>${esc(x.name)}</span><span class="t12 muted">${esc(x.cat)}</span></button>`).join(""):`<p class="t12 muted">${all?"No character with that name.":"No characters yet. Add them in the character library."}</p>`)+(O.chip?`<button type="button" class="rm" data-atrm>Remove from the brief</button>`:"");
+  const row=(x,i)=>`<button type="button" role="option" aria-selected="${i===O.i}" data-ati="${i}">${x.shot?`<span class="ph cam" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span><span class="nm two" data-noi18n><b>${esc(x.name)}</b><small>${esc(x.cat)}</small></span>`:`${x.src?`<img src="${esc(x.src)}" alt="">`:`<span class="ph" aria-hidden="true">${esc((x.name.trim()[0]||"").toUpperCase())}</span>`}<span class="nm" dir="auto" data-noi18n>${esc(x.name)}</span><span class="t12 muted">${esc(x.cat)}</span>`}</button>`;
+  const cs=O.items.map((x,i)=>[x,i]).filter(z=>!z[0].shot), sh=O.items.map((x,i)=>[x,i]).filter(z=>z[0].shot);
+  d.innerHTML=(O.only!=="shot"?`<div class="at-head">${O.chip?"Change character":"Characters"}</div>`+(cs.length?cs.map(z=>row(...z)).join(""):`<p class="t12 muted">${all?"No character with that name.":"No characters yet. Add them in the character library."}</p>`):"")+(sh.length?`<div class="at-head">${O.chip?"Change camera angle":"Camera angle"}</div>`+sh.map(z=>row(...z)).join(""):"")+(O.chip?`<button type="button" class="rm" data-atrm>Remove</button>`:"");
   d.hidden=false; d.style.width=Math.min(340,innerWidth-16)+"px"; d.style.left=Math.max(8,Math.min(r.left,innerWidth-d.offsetWidth-8))+"px";
-  const h=d.offsetHeight; d.style.top=(innerHeight-r.bottom>h+12||r.top<h+12?r.bottom+6:r.top-h-6)+"px"; d.querySelector('[aria-selected="true"]')?.scrollIntoView({block:"nearest"}); }
+  const h=d.offsetHeight; d.style.top=(innerHeight-r.bottom>h+12||r.top<h+12?r.bottom+6:r.top-h-6)+"px"; if(O.i===0) d.scrollTop=0; else d.querySelector('[aria-selected="true"]')?.scrollIntoView({block:"nearest"}); }
 function atCheck(el){ const s=getSelection(); if(!s.rangeCount||!s.isCollapsed){ atHide(); return; } const n=s.anchorNode; if(!n||n.nodeType!==3||!el.contains(n)){ atHide(); return; }
   const v=n.nodeValue.slice(0,s.anchorOffset), m=v.match(/(^|[\s(،,.:])@([^\s@]{0,24})$/); if(!m){ atHide(); return; }
   atOpen({el,node:n,start:v.length-m[2].length-1,end:s.anchorOffset,q:m[2]}); }
 function atPick(i){ const O=AT.open, x=O?.items[i]; if(!x) return; const el=O.el;
-  if(O.chip){ const c=atChip(x.name,x.src); O.chip.replaceWith(c); }
-  else { const r=document.createRange(); try{ r.setStart(O.node,O.start); r.setEnd(O.node,Math.min(O.end,O.node.nodeValue.length)); }catch{ atHide(); return; } r.deleteContents(); const sp=document.createTextNode(" "), c=atChip(x.name,x.src); r.insertNode(sp); r.insertNode(c);
+  const mk=()=>x.shot?atShotChip(x.name):atChip(x.name,x.src);
+  if(O.chip){ O.chip.replaceWith(mk()); }
+  else { const r=document.createRange(); try{ r.setStart(O.node,O.start); r.setEnd(O.node,Math.min(O.end,O.node.nodeValue.length)); }catch{ atHide(); return; } r.deleteContents(); const sp=document.createTextNode(" "), c=mk(); r.insertNode(sp); r.insertNode(c);
     el.focus(); const s=getSelection(), r2=document.createRange(); r2.setStart(sp,1); r2.collapse(true); s.removeAllRanges(); s.addRange(r2); }
   atHide(); el.dispatchEvent(new Event("input",{bubbles:true})); }
 /* the library arrived or changed: turn typed @names into pictures, refresh pictures, and show a live example in an untouched brief */
 function atRefresh(){ const by=new Map(atChars().map(c=>[c.name,c]));
   for(const el of AT.fields){ if(document.activeElement===el) continue; const v=atVal(el);
-    if(v.includes("@")&&[...by.keys()].some(n=>v.toLowerCase().includes("@"+n.toLowerCase()))) atWrite(el,v); }
-  const b=$("brief"); try{ if(b&&document.activeElement!==b&&S.mode!=="icon"&&by.size){ const v=atVal(b).trim(); if(!v||v===DEFAULT_BRIEF){ const c=CHAR_REFS.find(r=>r.lib)||CHAR_REFS[0]; if(c){ atWrite(b,`@${charName(c.id)} sitting by the window of a café in Jabal al-Weibdeh, soft morning light, phone in hand, smiling at the screen.`); b.dispatchEvent(new Event("input",{bubbles:true})); } } } }catch{} }
+    if((v.includes("@")&&[...by.keys()].some(n=>v.toLowerCase().includes("@"+n.toLowerCase())))||(v.includes("[shot: ")&&!el.querySelector(".at-chip.shot"))) atWrite(el,v); }
+  const b=$("brief"); try{ if(b&&document.activeElement!==b&&S.mode!=="icon"&&by.size){ const v=atVal(b).trim(); if(!v||v===DEFAULT_BRIEF){ const c=CHAR_REFS.find(r=>r.lib)||CHAR_REFS[0]; if(c){ atWrite(b,`@${charName(c.id)} sitting by the window of a café in Jabal al-Weibdeh, soft morning light, phone in hand, smiling at the screen. [shot: Medium Close-Up]`); b.dispatchEvent(new Event("input",{bubbles:true})); } } } }catch{} }
 atMake("brief",false); atMake("rlInput",true);
 setTimeout(()=>{ try{ clLoad().then(atRefresh).catch(()=>{}); }catch{} },1200);
 
@@ -622,7 +629,7 @@ $("btnAuto").onclick=async()=>{
   if(!sample) return flash($("s1state"),"Claude is unavailable in this view.",true);
   const b=$("btnAuto"); b.disabled=true; b.textContent="Picking…";
   try{
-    const o=await sample.json(`Pick 4 reference photos whose light, setting and energy best match this brief, for a Bank al Etihad photo. Brief: "${$("brief").value}". Setting: ${S.setting}. Shot: ${S.shot}.
+    const o=await sample.json(`Pick 4 reference photos whose light, setting and energy best match this brief, for a Bank al Etihad photo. Brief: "${$("brief").value}" (a [shot: …] tag in the brief is the camera angle/framing the user chose: build the composition on it, describe it in plain photographic words, never print the tag itself; it overrides the Shot option). Setting: ${S.setting}. Shot: ${S.shot}.
 Look: ${S.look==="Bold"?"BOLD & COLOURFUL — pick at least 2 Youth campaign photos (ids starting \"yt\") for wardrobe and camera angle, plus at least 1 BAE photo":"ELEGANT & CALM — pick at least 2 BAE guideline photos (ids starting \"bae_\")"}.
 Rules: ${S.setting==="Studio"?"Setting is STUDIO: pick only photos marked [studio], then fill with BAE close-up/selective-focus frames.":"Setting is on-location: prefer BAE depth, focus and movement frames plus Mari Juliano frames with clean natural light."} Prefer frames where the person is centred.
 Catalog:\n${ALL_REFS.filter(r=>r.set!=="ch"&&r.set!=="ic").map(r=>r.id+(r.studio?" [studio]":"")+": "+r.d).join("\n")}\nReply with only a JSON array of 4 ids, e.g. ["yt04","yt06","bae_b108_2","r061"].`,{modelTier:"quick"});
@@ -667,7 +674,7 @@ ${settingRule()}
 
 ${lookRule()}
 
-Brief (may be Arabic or English): "${$("brief").value}"
+Brief (may be Arabic or English; a [shot: …] tag is the camera angle/framing the user chose — it is mandatory and overrides the Shot option): "${$("brief").value}"
 ${castText()}
 Setting: ${S.setting}. Shot type: ${S.shot}. Aspect ratio: ${aspectText()}. Channel: ${$("channel").value}. Copy space for gradient shape: ${$("copySpace").checked?"yes":"no"}.
 ${imgNote}
@@ -712,7 +719,7 @@ ${settingRule()}
 ${lookRule()}
 
 Scene breakdown: ${JSON.stringify(S.analysis||{brief:$("brief").value})}
-Brief: "${$("brief").value}". Setting: ${S.setting}. Shot: ${S.shot}. Aspect ratio: ${aspectText()}. Output: native 2K, highest quality. Channel: ${$("channel").value}. Copy space for the gradient shape: ${$("copySpace").checked?"yes, keep calm, even space around the centred subject":"no"}.
+Brief: "${$("brief").value}" (a [shot: …] tag in the brief is the camera angle/framing the user chose: build the composition on it, describe it in plain photographic words, never print the tag itself; it overrides the Shot option). Setting: ${S.setting}. Shot: ${S.shot}. Aspect ratio: ${aspectText()}. Output: native 2K, highest quality. Channel: ${$("channel").value}. Copy space for the gradient shape: ${$("copySpace").checked?"yes, keep calm, even space around the centred subject":"no"}.
 Reference images (${S.picked.length}) will be attached. Character references carry identity (see CAST). The others are STYLE references; what they show is for YOUR understanding of the photography only — never describe or reuse that content in the prompt: ${S.picked.filter(id=>!isChar(id)).map(id=>`${refById(id)?.set==="bae"?"BAE guideline":refById(id)?.set==="yt"?"Youth campaign":"Mari Juliano"} — ${refById(id)?.d}`).join("; ")}
 ${castText()}${S.upload&&$("useUpAsRef").checked?"; plus the user's own image as the first reference for content":""}.
 
