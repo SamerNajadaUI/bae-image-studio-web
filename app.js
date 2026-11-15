@@ -9,17 +9,34 @@ const $ = id => document.getElementById(id);
 const AT={fields:[],menu:null,open:null};
 const AT_SHOTS=[["Bird's Eye View","From directly above"],["High Angle","Camera above eye level, looking down"],["Eye Level","Camera at the subject's eye height"],["Low Angle","Camera below eye level, looking up"],["Worm's Eye View","Extreme low, camera near the ground"],["Dutch Angle","Camera tilted on a diagonal"],["Profile","Side view of the subject"],["3/4 View","Subject turned slightly away"],["Close-Up","Tight on the face or a detail"],["Medium Close-Up","Chest or shoulders up"],["Medium Shot","Waist up"],["Medium Full Shot","Head to mid-thigh"],["Full Body Shot","Whole body in frame"],["Long Shot","Subject small in the environment"],["Extreme Long Shot","Tiny subject, wide establishing scene"],["Over the Shoulder","From behind someone's shoulder"],["Point of View (POV)","Seen through the subject's eyes"],["Framing","Subject inside a natural or built frame"],["Leading Lines","Lines lead the eye to the subject"],["Silhouette","Backlit, dark outline of the subject"]];
 function atShotChip(name){ const s=document.createElement("span"); s.className="at-chip shot"; s.contentEditable="false"; s.dataset.shot=name; s.setAttribute("role","button"); s.setAttribute("aria-label","Camera: "+name+" — change"); s.textContent=name; return s; }
+const AT_OUTFITS=[
+ ["of_01","Rust shirt, cream trousers","Women","rust-orange oversized linen shirt with rolled sleeves, tied at the waist; cream wide-leg pleated linen trousers; tan top-handle leather bag with gold clasp; gold-frame aviator sunglasses; stacked gold bangles and a small gold watch; gold hoop earrings"],
+ ["of_02","Beige trench, brown trousers","Women","long stone-beige cotton trench coat worn open; white fitted crew-neck T-shirt; dark chocolate-brown pleated wide-leg trousers; dark brown woven leather shoulder bag; cream suede low-top sneakers with gum soles; chunky gold hoop earrings"],
+ ["of_03","Orange shirt, brown trousers","Women","bright orange oversized linen shirt worn open with rolled sleeves; white ribbed tank top; dark brown high-waist pleated wide-leg trousers; small black leather shoulder bag; slim tortoiseshell sunglasses; one silver hoop earring"],
+ ["of_04","Cream jacket, brown trousers","Men","cream soft zip-up jacket with a shirt collar and ribbed hem; crisp white dress shirt; dark brown patterned silk tie; mid-brown tailored straight trousers"],
+ ["of_05","Orange knit, grey trousers","Men","burnt-orange brushed wool crew-neck sweater; white cotton dress shirt underneath; mid-grey wool flannel pleated trousers; steel bracelet watch with a cream dial"],
+ ["of_06","Cable vest, blue shirt","Women","cream cable-knit V-neck sleeveless vest over a light blue cotton shirt; cream high-waist wide-leg trousers; dark brown slim leather belt with a gold buckle; dark brown leather shoulder bag; dark brown leather penny loafers; gold hoop earrings; silver watch"],
+ ["of_07","Blue shirt, linen trousers","Women","light blue fine-striped oversized cotton shirt with turned-back cuffs; beige linen high-waist pleated wide-leg trousers; white canvas low-top sneakers; tan leather shoulder bag with a gold chain strap; gold hoop earrings; fine gold pendant necklace; gold bangles"],
+ ["of_08","Orange shirt, blue jeans","Women","orange oversized linen shirt with a chest pocket, worn open with rolled sleeves; white tank top; light-blue high-waist wide-leg jeans; cream top-handle leather bag with a gold clasp; white leather sneakers; fine gold necklace and chain bracelet"],
+ ["of_09","Brown jacket, cream trousers","Women","brown cotton cropped button jacket with a shirt collar and blue-striped turned-back cuffs; cream ribbed tank top; cream high-waist wide-leg trousers; dark brown leather belt with a gold buckle; dark brown leather shoulder bag; layered fine gold necklaces"],
+ ["of_10","Cream tweed jacket","Women","cream cropped collarless tweed jacket with gold buttons and two flap pockets; white tank top; beige linen-blend pleated wide-leg trousers; beige leather crossbody flap bag; metallic gold pointed flat shoes with a strap; fine gold necklace; gold ball stud earrings"],
+ ["of_11","Camel cable knit, chinos","Men","camel cable-knit half-zip sweater over a white dress shirt and a dark brown tie; khaki-beige slim pleated chinos; white leather low-top sneakers"]
+].map(([id,name,cat,d])=>({id,name,cat,d,src:`refs/${id}_t.jpg`}));
+const atOutfit=name=>AT_OUTFITS.find(o=>o.name.toLowerCase()===String(name||"").toLowerCase());
+const atOutfitsIn=text=>[...String(text||"").matchAll(/\[outfit: ([^\]]+)\]/gi)].map(m=>atOutfit(m[1])).filter(Boolean);
+function atOutfitChip(name){ const o=atOutfit(name); const s=document.createElement("span"); s.className="at-chip outfit"; s.contentEditable="false"; s.dataset.outfit=o?.name||name; s.setAttribute("role","button"); s.setAttribute("aria-label","Outfit: "+(o?.name||name)+" — change"); s.title=o?.name||name;
+  if(o){ const im=document.createElement("img"); im.src=o.src; im.alt=""; im.draggable=false; s.appendChild(im); } else s.textContent=name; return s; }
 function atChars(){ try{ return CHAR_REFS.map(r=>({name:charName(r.id),src:r.src||"",cat:r.lib?(CL_CATS.find(c=>c[0]===r.cat)||[])[1]||"":"Yours"})).filter(x=>x.name); }catch{ return []; } }
 function atChip(name,src){ const s=document.createElement("span"); s.className="at-chip"; s.contentEditable="false"; s.dataset.name=name; s.setAttribute("role","button"); s.setAttribute("aria-label",name+" — change character"); s.title=name;
   if(src){ const im=document.createElement("img"); im.src=src; im.alt=""; im.draggable=false; s.appendChild(im); } else { s.textContent=(name.trim()[0]||"?").toUpperCase(); s.classList.add("noimg"); } return s; }
-function atRead(el){ let out=""; for(const n of el.childNodes){ if(n.nodeType===3) out+=n.nodeValue.replace(/​/g,""); else if(n.nodeType!==1) continue; else if(n.classList.contains("at-chip")) out+=n.dataset.shot?"[shot: "+n.dataset.shot+"]":"@"+n.dataset.name; else if(n.tagName==="BR") out+="\n"; else { const t=atRead(n); out+=(out&&!out.endsWith("\n")?"\n":"")+t; } } return out; }
+function atRead(el){ let out=""; for(const n of el.childNodes){ if(n.nodeType===3) out+=n.nodeValue.replace(/​/g,""); else if(n.nodeType!==1) continue; else if(n.classList.contains("at-chip")) out+=n.dataset.shot?"[shot: "+n.dataset.shot+"]":n.dataset.outfit?"[outfit: "+n.dataset.outfit+"]":"@"+n.dataset.name; else if(n.tagName==="BR") out+="\n"; else { const t=atRead(n); out+=(out&&!out.endsWith("\n")?"\n":"")+t; } } return out; }
 function atVal(el){ const v=atRead(el); return el.lastChild?.tagName==="BR"?v.replace(/\n$/,""):v; }
 function atWrite(el,text){ text=String(text??""); el.textContent=""; if(!text) return;
   const cs=atChars().sort((x,y)=>y.name.length-x.name.length), by=new Map(cs.map(c=>[c.name.toLowerCase(),c]));
   const q=s=>s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"), shots=new Map(AT_SHOTS.map(x=>[x[0].toLowerCase(),x[0]]));
-  const re=new RegExp((cs.length?"@("+cs.map(c=>q(c.name)).join("|")+")|":"()")+"\\[shot: ("+AT_SHOTS.map(x=>q(x[0])).join("|")+")\\]","gi");
+  const re=new RegExp((cs.length?"@("+cs.map(c=>q(c.name)).join("|")+")|":"()")+"\\[shot: ("+AT_SHOTS.map(x=>q(x[0])).join("|")+")\\]|\\[outfit: ("+AT_OUTFITS.map(x=>q(x.name)).join("|")+")\\]","gi");
   const put=t=>{ t.split("\n").forEach((ln,k)=>{ if(k) el.appendChild(document.createElement("br")); if(ln) el.appendChild(document.createTextNode(ln)); }); };
-  let last=0,m; while((m=re.exec(text))){ if(!m[0]){ re.lastIndex++; continue; } put(text.slice(last,m.index)); if(m[2]) el.appendChild(atShotChip(shots.get(m[2].toLowerCase()))); else { const c=by.get(m[1].toLowerCase()); el.appendChild(atChip(c.name,c.src)); } last=m.index+m[0].length; }
+  let last=0,m; while((m=re.exec(text))){ if(!m[0]){ re.lastIndex++; continue; } put(text.slice(last,m.index)); if(m[3]) el.appendChild(atOutfitChip(m[3])); else if(m[2]) el.appendChild(atShotChip(shots.get(m[2].toLowerCase()))); else { const c=by.get(m[1].toLowerCase()); el.appendChild(atChip(c.name,c.src)); } last=m.index+m[0].length; }
   put(text.slice(last)); if(el.lastChild?.classList?.contains("at-chip")) el.appendChild(document.createTextNode(" ")); if(text.endsWith("\n")) el.appendChild(document.createElement("br")); }
 function atEnd(el){ try{ const r=document.createRange(); r.selectNodeContents(el); r.collapse(false); const s=getSelection(); s.removeAllRanges(); s.addRange(r); }catch{} }
 function atMake(id,enterSends){ const ta=$(id); if(!ta||ta.tagName!=="TEXTAREA") return;
@@ -28,7 +45,7 @@ function atMake(id,enterSends){ const ta=$(id); if(!ta||ta.tagName!=="TEXTAREA")
   Object.defineProperty(el,"value",{get:()=>atVal(el),set:v=>{ atWrite(el,v); if(document.activeElement===el) atEnd(el); }});
   Object.defineProperty(el,"placeholder",{get:()=>el.dataset.ph,set:v=>{ el.dataset.ph=v; }});
   Object.defineProperty(el,"selectionStart",{get:()=>atVal(el).length}); el.setSelectionRange=()=>atEnd(el); el.select=()=>atEnd(el);
-  ta.replaceWith(el); AT.fields.push(el);
+  if(ta.dataset.only) el.dataset.only=ta.dataset.only; const v0=ta.value; ta.replaceWith(el); if(v0) atWrite(el,v0); AT.fields=AT.fields.filter(x=>x.isConnected); AT.fields.push(el);
   el.addEventListener("paste",e=>{ const im=[...(e.clipboardData?.files||[])].find(f=>/^image\//.test(f.type)); if(im&&id==="brief"){ e.preventDefault(); lvRun(im); return; } if(im) return; e.preventDefault(); const t=(e.clipboardData||window.clipboardData)?.getData("text/plain")||""; if(t) document.execCommand("insertText",false,t); });
   el.addEventListener("drop",e=>{ if(e.dataTransfer?.types?.includes("Files")) return; e.preventDefault(); });
   el.addEventListener("keydown",e=>{ if(AT.open&&AT.open.el===el){ const O=AT.open;
@@ -45,21 +62,22 @@ function atMenu(){ if(AT.menu) return AT.menu; const d=document.createElement("d
   d.addEventListener("mousedown",e=>{ e.preventDefault(); const b=e.target.closest("[data-ati]"); if(b) atPick(+b.dataset.ati); else if(e.target.closest("[data-atrm]")){ const O=AT.open; if(O?.chip){ O.chip.remove(); const el=O.el; atHide(); el.dispatchEvent(new Event("input",{bubbles:true})); } } });
   addEventListener("resize",atHide); addEventListener("scroll",e=>{ if(AT.open&&!d.contains(e.target)) atHide(); },true); return AT.menu=d; }
 function atHide(){ if(AT.menu) AT.menu.hidden=true; AT.open=null; }
-function atList(q,only){ q=String(q||"").toLowerCase(); const cs=only==="shot"?[]:atChars().filter(x=>!q||x.name.toLowerCase().includes(q)).sort((x,y)=>x.name.localeCompare(y.name)).slice(0,40);
-  const sh=only==="char"?[]:AT_SHOTS.filter(x=>!q||x[0].toLowerCase().includes(q)||"camera angle shot".includes(q)).map(x=>({shot:true,name:x[0],cat:x[1]})); return [...cs,...sh]; }
-function atOpen(o){ const only=o.chip?(o.chip.dataset.shot?"shot":"char"):null; AT.open={i:0,...o,only,items:atList(o.q,only)}; if(o.chip){ const k=AT.open.items.findIndex(x=>x.name===(o.chip.dataset.shot||o.chip.dataset.name)); if(k>=0) AT.open.i=k; } atDraw();
+function atList(q,only){ q=String(q||"").toLowerCase(); const of=only&&only!=="outfit"?[]:AT_OUTFITS.filter(x=>!q||(x.name+" "+x.cat+" outfit").toLowerCase().includes(q)).map(x=>({outfit:true,name:x.name,cat:x.cat,src:x.src}));
+  if(only==="outfit") return of; const cs=only==="shot"?[]:atChars().filter(x=>!q||x.name.toLowerCase().includes(q)).sort((x,y)=>x.name.localeCompare(y.name)).slice(0,40);
+  const sh=only==="char"?[]:AT_SHOTS.filter(x=>!q||x[0].toLowerCase().includes(q)||"camera angle shot".includes(q)).map(x=>({shot:true,name:x[0],cat:x[1]})); return [...cs,...of,...sh]; }
+function atOpen(o){ const only=o.chip?(o.chip.dataset.shot?"shot":o.chip.dataset.outfit?"outfit":"char"):(o.el.dataset.only||null); AT.open={i:0,...o,only,items:atList(o.q,only)}; if(o.chip){ const k=AT.open.items.findIndex(x=>x.name===(o.chip.dataset.shot||o.chip.dataset.outfit||o.chip.dataset.name)); if(k>=0) AT.open.i=k; } atDraw();
   try{ if(!CL.loaded) clLoad().then(()=>{ if(AT.open&&AT.open.el===o.el){ AT.open.items=atList(AT.open.q,AT.open.only); atDraw(); } }); }catch{} }
 function atDraw(){ const O=AT.open, d=atMenu(); if(!O) return; const r=(O.chip||O.el).getBoundingClientRect(), all=atChars().length;
-  const row=(x,i)=>`<button type="button" role="option" aria-selected="${i===O.i}" data-ati="${i}">${x.shot?`<span class="ph cam" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span><span class="nm two" data-noi18n><b>${esc(x.name)}</b><small>${esc(x.cat)}</small></span>`:`${x.src?`<img src="${esc(x.src)}" alt="">`:`<span class="ph" aria-hidden="true">${esc((x.name.trim()[0]||"").toUpperCase())}</span>`}<span class="nm" dir="auto" data-noi18n>${esc(x.name)}</span><span class="t12 muted">${esc(x.cat)}</span>`}</button>`;
-  const cs=O.items.map((x,i)=>[x,i]).filter(z=>!z[0].shot), sh=O.items.map((x,i)=>[x,i]).filter(z=>z[0].shot);
-  d.innerHTML=(O.only!=="shot"?`<div class="at-head">${O.chip?"Change character":"Characters"}</div>`+(cs.length?cs.map(z=>row(...z)).join(""):`<p class="t12 muted">${all?"No character with that name.":"No characters yet. Add them in the character library."}</p>`):"")+(sh.length?`<div class="at-head">${O.chip?"Change camera angle":"Camera angle"}</div>`+sh.map(z=>row(...z)).join(""):"")+(O.chip?`<button type="button" class="rm" data-atrm>Remove</button>`:"");
+  const row=(x,i)=>`<button type="button" role="option" aria-selected="${i===O.i}" data-ati="${i}">${x.outfit?`<img class="of" src="${esc(x.src)}" alt=""><span class="nm" data-noi18n>${esc(x.name)}</span><span class="t12 muted">${esc(x.cat)}</span>`:x.shot?`<span class="ph cam" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span><span class="nm two" data-noi18n><b>${esc(x.name)}</b><small>${esc(x.cat)}</small></span>`:`${x.src?`<img src="${esc(x.src)}" alt="">`:`<span class="ph" aria-hidden="true">${esc((x.name.trim()[0]||"").toUpperCase())}</span>`}<span class="nm" dir="auto" data-noi18n>${esc(x.name)}</span><span class="t12 muted">${esc(x.cat)}</span>`}</button>`;
+  const cs=O.items.map((x,i)=>[x,i]).filter(z=>!z[0].shot&&!z[0].outfit), sh=O.items.map((x,i)=>[x,i]).filter(z=>z[0].shot), ofs=O.items.map((x,i)=>[x,i]).filter(z=>z[0].outfit);
+  d.innerHTML=(O.only!=="shot"&&O.only!=="outfit"?`<div class="at-head">${O.chip?"Change character":"Characters"}</div>`+(cs.length?cs.map(z=>row(...z)).join(""):`<p class="t12 muted">${all?"No character with that name.":"No characters yet. Add them in the character library."}</p>`):"")+(ofs.length?`<div class="at-head">${O.chip?"Change outfit":"Outfits"}</div>`+ofs.map(z=>row(...z)).join(""):O.only==="outfit"?`<p class="t12 muted">No outfit with that name.</p>`:"")+(sh.length?`<div class="at-head">${O.chip?"Change camera angle":"Camera angle"}</div>`+sh.map(z=>row(...z)).join(""):"")+(O.chip?`<button type="button" class="rm" data-atrm>Remove</button>`:"");
   d.hidden=false; d.style.width=Math.min(340,innerWidth-16)+"px"; d.style.left=Math.max(8,Math.min(r.left,innerWidth-d.offsetWidth-8))+"px";
   const h=d.offsetHeight; d.style.top=(innerHeight-r.bottom>h+12||r.top<h+12?r.bottom+6:r.top-h-6)+"px"; if(O.i===0) d.scrollTop=0; else d.querySelector('[aria-selected="true"]')?.scrollIntoView({block:"nearest"}); }
 function atCheck(el){ const s=getSelection(); if(!s.rangeCount||!s.isCollapsed){ atHide(); return; } const n=s.anchorNode; if(!n||n.nodeType!==3||!el.contains(n)){ atHide(); return; }
   const v=n.nodeValue.slice(0,s.anchorOffset), m=v.match(/(^|[\s(،,.:])@([^\s@]{0,24})$/); if(!m){ atHide(); return; }
   atOpen({el,node:n,start:v.length-m[2].length-1,end:s.anchorOffset,q:m[2]}); }
 function atPick(i){ const O=AT.open, x=O?.items[i]; if(!x) return; const el=O.el;
-  const mk=()=>x.shot?atShotChip(x.name):atChip(x.name,x.src);
+  const mk=()=>x.outfit?atOutfitChip(x.name):x.shot?atShotChip(x.name):atChip(x.name,x.src);
   if(O.chip){ O.chip.replaceWith(mk()); }
   else { const r=document.createRange(); try{ r.setStart(O.node,O.start); r.setEnd(O.node,Math.min(O.end,O.node.nodeValue.length)); }catch{ atHide(); return; } r.deleteContents(); const sp=document.createTextNode(" "), c=mk(); r.insertNode(sp); r.insertNode(c);
     el.focus(); const s=getSelection(), r2=document.createRange(); r2.setStart(sp,1); r2.collapse(true); s.removeAllRanges(); s.addRange(r2); }
@@ -67,7 +85,7 @@ function atPick(i){ const O=AT.open, x=O?.items[i]; if(!x) return; const el=O.el
 /* the library arrived or changed: turn typed @names into pictures, refresh pictures, and show a live example in an untouched brief */
 function atRefresh(){ const by=new Map(atChars().map(c=>[c.name,c]));
   for(const el of AT.fields){ if(document.activeElement===el) continue; const v=atVal(el);
-    if((v.includes("@")&&[...by.keys()].some(n=>v.toLowerCase().includes("@"+n.toLowerCase())))||(v.includes("[shot: ")&&!el.querySelector(".at-chip.shot"))) atWrite(el,v); }
+    if((v.includes("@")&&[...by.keys()].some(n=>v.toLowerCase().includes("@"+n.toLowerCase())))||(v.includes("[shot: ")&&!el.querySelector(".at-chip.shot"))||(v.includes("[outfit: ")&&!el.querySelector(".at-chip.outfit"))) atWrite(el,v); }
   const b=$("brief"); try{ if(b&&document.activeElement!==b&&S.mode!=="icon"&&by.size){ const v=atVal(b).trim(); if(!v||v===DEFAULT_BRIEF){ const c=CHAR_REFS.find(r=>r.lib)||CHAR_REFS[0]; if(c){ atWrite(b,`@${charName(c.id)} sitting by the window of a café in Jabal al-Weibdeh, soft morning light, phone in hand, smiling at the screen. [shot: Medium Close-Up]`); b.dispatchEvent(new Event("input",{bubbles:true})); } } } }catch{} }
 atMake("brief",false); atMake("rlInput",true);
 setTimeout(()=>{ try{ clLoad().then(atRefresh).catch(()=>{}); }catch{} },1200);
@@ -121,7 +139,9 @@ const BAE_REFS = [
  ["bae_b111_3","BAE movement: woman mid-stride in a motion-blurred urban scene",0]
 ].map(([id,d,st])=>({id,d,src:/^st_/.test(id)?`refs/${id}_t.jpg`:`refs/${id}.jpg`,set:"bae",studio:!!st,auto:/^st_/.test(id)}));
 const ALL_REFS=[...BAE_REFS,...REFS];
+AT_OUTFITS.forEach(o=>ALL_REFS.push({id:o.id,d:"Outfit sheet: "+o.name+" — "+o.d,src:o.src,set:"of",studio:false,auto:true,outfit:o.name}));
 const refById=id=>ALL_REFS.find(r=>r.id===id);
+const isOutfit=id=>/^of_\d/.test(String(id||""));
 const PICK_STUDIO=["st_minimal_01","st_minimal_02","bae_b113_0"];
 const PICK_LOCATION=["bae_b106_1","bae_b111_2","bae_b107_1","bae_b108_2"];
 /* Youth campaign references sent by the client (style, wardrobe and camera only) */
@@ -176,8 +196,11 @@ function syncCast(){ if(S.mode==="icon") return;
   S._autoCast=S._autoCast.filter(id=>named.includes(id));
   for(const id of named){ if(!S.picked.includes(id)){ S._autoCast.push(id); S.picked.unshift(id); } }
   /* characters first, in the order the brief names them, then any tapped ones */
+  const ofs=atOutfitsIn($("brief")?.value).map(o=>o.id); S.picked=S.picked.filter(id=>!isOutfit(id));
   const chars=[...named,...S.picked.filter(id=>isChar(id)&&!named.includes(id))], rest=S.picked.filter(id=>!isChar(id));
-  S.picked=[...chars,...rest].slice(0,MAX_REFS); }
+  S.picked=[...chars,...ofs,...rest].slice(0,MAX_REFS); }
+/* the outfit the user picked in the brief, spelled out for the prompt writers */
+function outfitNote(){ const L=atOutfitsIn($("brief")?.value); return L.length?` OUTFIT CHOSEN BY THE USER — mandatory, overrides every wardrobe rule of the look and the studio: ${L.map(o=>`[outfit: ${o.name}] = ${o.d}`).join(" | ")}. The person wears exactly these pieces (same colours, fabrics and cuts), worn naturally; the outfit sheet is attached as a wardrobe reference. Describe the clothes in words in the prompt and never print the tag.`:""; }
 function castText(){ const chars=refPlan().filter(r=>isChar(r.id)); if(!chars.length) return "";
   return "CAST — these people are fixed characters; keep each one's exact identity (face, facial features, hairline and hairstyle, eye colour, skin tone, build): "+chars.map(r=>`${charLabel(r.id)} = ${r.tag} (${refById(r.id).look})`).join("; ")+". When the brief names a character, or describes a person of the same gender and age who is not otherwise named, that person IS the character. Characters keep their own look even where the generic people description would differ. Their clothing, pose and background in the reference are NOT used: dress them by the look rules for this scene."; }
 const MAX_REFS=6;
@@ -638,10 +661,10 @@ $("btnAuto").onclick=async()=>{
   if(!sample) return flash($("s1state"),"Claude is unavailable in this view.",true);
   const b=$("btnAuto"); b.disabled=true; b.textContent="Picking…";
   try{
-    const o=await sample.json(`Pick 4 reference photos whose light, setting and energy best match this brief, for a Bank al Etihad photo. Brief: "${$("brief").value}" (a [shot: …] tag in the brief is the camera angle/framing the user chose: build the composition on it, describe it in plain photographic words, never print the tag itself; it overrides the Shot option). Setting: ${S.setting}. Shot: ${S.shot}.
+    const o=await sample.json(`Pick 4 reference photos whose light, setting and energy best match this brief, for a Bank al Etihad photo. Brief: "${$("brief").value}" (a [shot: …] tag in the brief is the camera angle/framing the user chose: build the composition on it, describe it in plain photographic words, never print the tag itself; it overrides the Shot option).${outfitNote()} Setting: ${S.setting}. Shot: ${S.shot}.
 Look: ${S.look==="Bold"?"BOLD & COLOURFUL — pick at least 2 Youth campaign photos (ids starting \"yt\") for wardrobe and camera angle, plus at least 1 BAE photo":"ELEGANT & CALM — pick at least 2 BAE guideline photos (ids starting \"bae_\")"}.
 Rules: ${S.setting==="Studio"?"Setting is STUDIO: pick only photos marked [studio], then fill with BAE close-up/selective-focus frames.":"Setting is on-location: prefer BAE depth, focus and movement frames plus Mari Juliano frames with clean natural light."} Prefer frames where the person is centred.
-Catalog:\n${ALL_REFS.filter(r=>r.set!=="ch"&&r.set!=="ic").map(r=>r.id+(r.studio?" [studio]":"")+": "+r.d).join("\n")}\nReply with only a JSON array of 4 ids, e.g. ["yt04","yt06","bae_b108_2","r061"].`,{modelTier:"quick"});
+Catalog:\n${ALL_REFS.filter(r=>r.set!=="ch"&&r.set!=="ic"&&r.set!=="of").map(r=>r.id+(r.studio?" [studio]":"")+": "+r.d).join("\n")}\nReply with only a JSON array of 4 ids, e.g. ["yt04","yt06","bae_b108_2","r061"].`,{modelTier:"quick"});
     if(Array.isArray(o)){ const cast=S.picked.filter(isChar); S.picked=[...cast,...o.map(String).filter(id=>refById(id)&&!isChar(id)&&!/^ic_/.test(id))].slice(0,MAX_REFS); renderRefs(); }
   }catch(e){ flash($("s1state"),sampleCopy(e),true); }
   finally{ b.disabled=false; b.textContent="Auto-pick for this brief"; }
@@ -683,7 +706,7 @@ ${settingRule()}
 
 ${lookRule()}
 
-Brief (may be Arabic or English; a [shot: …] tag is the camera angle/framing the user chose — it is mandatory and overrides the Shot option): "${$("brief").value}"
+Brief (may be Arabic or English; a [shot: …] tag is the camera angle/framing the user chose — it is mandatory and overrides the Shot option): "${$("brief").value}"${outfitNote()}
 ${castText()}
 Setting: ${S.setting}. Shot type: ${S.shot}. Aspect ratio: ${aspectText()}. Channel: ${$("channel").value}. Copy space for gradient shape: ${$("copySpace").checked?"yes":"no"}.
 ${imgNote}
@@ -728,7 +751,7 @@ ${settingRule()}
 ${lookRule()}
 
 Scene breakdown: ${JSON.stringify(S.analysis||{brief:$("brief").value})}
-Brief: "${$("brief").value}" (a [shot: …] tag in the brief is the camera angle/framing the user chose: build the composition on it, describe it in plain photographic words, never print the tag itself; it overrides the Shot option). Setting: ${S.setting}. Shot: ${S.shot}. Aspect ratio: ${aspectText()}. Output: native 2K, highest quality. Channel: ${$("channel").value}. Copy space for the gradient shape: ${$("copySpace").checked?"yes, keep calm, even space around the centred subject":"no"}.
+Brief: "${$("brief").value}" (a [shot: …] tag in the brief is the camera angle/framing the user chose: build the composition on it, describe it in plain photographic words, never print the tag itself; it overrides the Shot option).${outfitNote()} Setting: ${S.setting}. Shot: ${S.shot}. Aspect ratio: ${aspectText()}. Output: native 2K, highest quality. Channel: ${$("channel").value}. Copy space for the gradient shape: ${$("copySpace").checked?"yes, keep calm, even space around the centred subject":"no"}.
 Reference images (${S.picked.length}) will be attached. Character references carry identity (see CAST). The others are STYLE references; what they show is for YOUR understanding of the photography only — never describe or reuse that content in the prompt: ${S.picked.filter(id=>!isChar(id)).map(id=>`${refById(id)?.set==="bae"?"BAE guideline":refById(id)?.set==="yt"?"Youth campaign":"Mari Juliano"} — ${refById(id)?.d}`).join("; ")}
 ${castText()}${S.upload&&$("useUpAsRef").checked?"; plus the user's own image as the first reference for content":""}.
 
@@ -805,14 +828,15 @@ function renderCard(key,st){
   <ol class="steps">${STEPS.map((s,i)=>`<li class="${st.steps?.[i]||""}">${s}${st.stepNote?.[i]?` · ${esc(st.stepNote[i])}`:""}</li>`).join("")}</ol>
   ${st.err?`<div class="msg">${esc(st.err)}</div>`:""}${st.refWarn?`<div class="msg info">${esc(st.refWarn)}</div>`:""}
   <div class="btns">${o?.blob?`<button class="btn small primary" data-act="dl">Download ${/png/.test(o.blob.type)?"PNG":"image"}</button>`:""}${o?.url?`<a class="btn small ${o.blob?"":"primary"}" href="${esc(o.url)}" target="_blank" rel="noopener">Open ${o.long>=3800?"4K ":""}PNG</a><button class="btn small" data-act="copy">Copy link</button>`:""}${o?.webUrl?`<a class="btn small ${o.blob||o.url?"":"primary"}" href="${esc(o.webUrl)}" target="_blank" rel="noopener">Open in Magnific</a>`:""}${st.done||st.err?`<button class="btn small" data-act="regen">Regenerate</button>`:""}</div>
-  ${o?.id&&st.done&&!S.web?`<form class="edit-one" data-edit><label class="t12 muted" for="edit-${key}">Change one thing in this image</label><div class="row"><input class="rl-field" id="edit-${key}" name="q" dir="auto" value="${esc(st.editQ||"")}" placeholder="e.g. make the jacket navy, keep everything else" ${st.editing?"disabled":""}><button class="btn small primary" type="submit" ${st.editing?"disabled":""}>${st.editing?"Editing…":"Apply change"}</button></div><span class="t12 ${st.editErr?"bad":"muted"}" role="status">${esc(st.editErr||st.editMsg||"Same photo, same person. Only what you ask changes. Makes 1 new image.")}</span></form>`:""}
+  ${o?.id&&st.done&&!S.web?`<form class="edit-one" data-edit><label class="t12 muted" for="edit-${key}">Change one thing in this image</label><div class="row"><textarea class="rl-field" id="edit-${key}" rows="1" dir="auto" data-only="outfit" aria-label="Change one thing in this image" placeholder="e.g. make the jacket navy · or type @ to pick an outfit">${esc(st.editQ||"")}</textarea><button class="btn small primary" type="submit" ${st.editing?"disabled":""}>${st.editing?"Editing…":"Apply change"}</button></div><span class="t12 ${st.editErr?"bad":"muted"}" role="status">${esc(st.editErr||st.editMsg||"Same photo, same person. Only what you ask changes. Makes 1 new image.")}</span></form>`:""}
   ${isIconKey(key)&&o?.blob?`<div class="btns exports"><span class="t12 muted">Export PNG on Light Stone:</span>${[96,144,192,256,1024,"wide"].map(s=>`<button class="btn small" data-exp="${s}" title="${({96:"S · square, dashboards, tooltips",144:"M · square, spot, onboarding",192:"L · square, modals, marketing",256:"XL · square, hero moments",1024:"Square master",wide:"Full 16:9 frame"})[s]}">${({96:"S 96",144:"M 144",192:"L 192",256:"XL 256",1024:"1024",wide:"16:9 full"})[s]}</button>`).join("")}</div>`:""}
   ${o?.url?`<input type="text" readonly class="linkbox" id="link-${key}" value="${esc(o.url)}" aria-label="Image link">`:""}
   ${o?.links?.length>1?`<details class="links"><summary>All links from Magnific (${o.links.length})</summary>${o.links.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`).join("")}</details>`:""}`;
   el.querySelector('[data-act="dl"]')?.addEventListener("click",()=>save(key,o));
   el.querySelector('[data-act="copy"]')?.addEventListener("click",async e=>{ const b=e.currentTarget; try{ await navigator.clipboard.writeText(o.url); b.textContent="Copied"; }catch{ const i=$("link-"+key); i.focus(); i.select(); b.textContent="Selected, press Ctrl/Cmd+C"; } setTimeout(()=>{ b.textContent="Copy link"; },1800); });
   el.querySelector('[data-act="regen"]')?.addEventListener("click",()=>generate([key]));
-  el.querySelector("[data-edit]")?.addEventListener("submit",e=>{ e.preventDefault(); editImage(key,String(new FormData(e.currentTarget).get("q")||"")); });
+  if(el.querySelector("[data-edit]")){ atMake("edit-"+key,true); const f=$("edit-"+key), fm=el.querySelector("[data-edit]"); if(f){ if(st.editing) f.contentEditable="false"; f.addEventListener("input",()=>{ st.editQ=f.value; }); f.addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing){ e.preventDefault(); fm.requestSubmit(); } }); }
+    fm.addEventListener("submit",e=>{ e.preventDefault(); editImage(key,String($("edit-"+key)?.value||"")); }); }
   el.querySelectorAll(".thumbs button").forEach(b=>b.addEventListener("click",()=>{ st.sel=+b.dataset.i; renderCard(key,st); }));
   el.querySelector(".frame > img")?.addEventListener("click",()=>openLightbox(o.img));
   el.querySelectorAll("[data-exp]").forEach(b=>b.addEventListener("click",()=>exportIcon(o,b.dataset.exp==="wide"?"wide":+b.dataset.exp,MODELS[key].label)));
@@ -865,6 +889,7 @@ function refRole(id,meta){
     mj:{role:"image",use:"photography style direction: clean natural light and colour"},
     user:{role:"image",use:"camera and photography style direction"},
     ic:{role:"image",use:"BAE illustration style direction: translucent layered material, orange-to-burgundy gradient, soft rounded 3D forms, isometric angle and lighting"},
+    of:{role:"image",use:"wardrobe reference (outfit sheet \""+(meta?.outfit||"")+"\"): the clothes and accessories the person wears"},
     ch:{role:"image",use:"character identity: "+charLabel(id)}
   })[set]||{role:"image",use:"camera and photography style direction"};
 }
@@ -1015,9 +1040,10 @@ function refPlan(){ const ids=[...(S.upload&&$("useUpAsRef").checked?["user-imag
 function refLine(list){
   if(S.mode==="icon") return list.length?"Reference images (BAE illustration style direction ONLY): "+list.map(r=>`${r.tag} = ${r.use}`).join("; ")+". Take only their material, translucency, orange-to-burgundy gradient, softness, isometric angle and lighting. Do NOT copy their objects, composition or any symbol, and do not reproduce any reference as is. The object and composition come only from this prompt.":"";
   const key=r=>r.ref||r.id; /* uploaded refs carry the BAE id in .ref and the Magnific id in .id */
-  const chars=list.filter(r=>isChar(key(r))), style=list.filter(r=>!isChar(key(r))), tags=style.map(r=>r.tag).join(", ");
+  const chars=list.filter(r=>isChar(key(r))), ofl=list.filter(r=>isOutfit(key(r))), style=list.filter(r=>!isChar(key(r))&&!isOutfit(key(r))), tags=style.map(r=>r.tag).join(", ");
+  const ofLine=ofl.length?`Wardrobe reference: ${ofl.map(r=>`${r.tag} = outfit sheet "${refById(key(r))?.outfit||""}"`).join(", ")}. Dress the person in exactly the pieces shown there: same colours, fabrics, cuts and details, worn naturally and fitted to the pose. Never show the flat-lay itself, the grey board or loose items. `:"";
   const castLine=chars.length?`Character references (identity): ${chars.map(r=>`${r.tag} = ${charLabel(key(r))}`).join(", ")}. Keep each character's exact face, facial features, hairline and hairstyle, eye colour, skin tone and build so they are clearly the same person. Use ONLY their identity: ignore the clothing, grey backdrop, pose and three-panel sheet layout in those images; dress them by the look rules. `:"";
-  return castLine+(!style.length?"":`Reference images (photographic style ONLY): ${tags}. Study them only for camera height and angle, lens and focal-length feel, depth of field, light direction and quality, colour grade, and the general kind of place (modern, open, architectural). Recreate NOTHING literal from them: not the location, building, walls, furniture, objects, people, faces, poses, clothing, clothing colours, composition or framing. The scene is a new, different place; content and composition come only from this prompt.`); }
+  return castLine+ofLine+(!style.length?"":`Reference images (photographic style ONLY): ${tags}. Study them only for camera height and angle, lens and focal-length feel, depth of field, light direction and quality, colour grade, and the general kind of place (modern, open, architectural). Recreate NOTHING literal from them: not the location, building, walls, furniture, objects, people, faces, poses, clothing, clothing colours, composition or framing. The scene is a new, different place; content and composition come only from this prompt.`); }
 async function uploadRefs(){
   const sig=S.picked.join(",")+"|"+(S.upload&&$("useUpAsRef").checked?S.upload.size:"");
   if(refCache&&refCache.sig===sig&&!refCache.errors.length) return refCache;
@@ -1119,7 +1145,7 @@ async function generate(keys){
 async function runModel(key,refs){
   const m=MODELS[key]; const c=cards[key]; const modelId=$(m.sel).value||null; if($(m.prompt).value.trim()) $(m.prompt).value=enforce($(m.prompt).value);
   /* Name the attached references in the prompt as @img1, @img2… in upload order */
-  if($(m.prompt).value.trim()) $(m.prompt).value=$(m.prompt).value.replace(/\n*(Character references \(identity\)|Reference images)[^\n]*/g,"")+(refs.length?"\n"+refLine(refs):"");
+  if($(m.prompt).value.trim()) $(m.prompt).value=$(m.prompt).value.replace(/\n*(Character references \(identity\)|Wardrobe reference|Reference images)[^\n]*/g,"")+(refs.length?"\n"+refLine(refs):"");
   const prompt=$(m.prompt).value.trim();
   const mode=$(m.mode).value||null; const count=Math.max(1,Math.min(4,+$("count").value||1)); const aspect=aspectVal();
   const up=()=>renderCard(key,c);
@@ -1202,9 +1228,13 @@ REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this o
 /* Change one thing in a finished image: the result itself is the reference, Claude writes a strict "same photo, only this changes" prompt */
 async function editImage(key,ask){ const c=cards[key]; ask=String(ask||"").trim(); const base=c?.outs?.[c.sel||0]; if(!c||!base?.id||!ask||c.editing) return;
   c.editing=true; c.editQ=ask; c.editErr=""; c.editMsg="Writing the edit…"; renderCard(key,c);
-  try{ const icon=isIconKey(key);
-    const w=await rlAsk(`You write ONE image-edit prompt for an image model that receives the finished image as its only reference, @img1. The user likes the image and wants a single change.
-USER'S CHANGE (may be Arabic): "${ask}"
+  try{ const icon=isIconKey(key); const fit=icon?null:atOutfitsIn(ask)[0]||null; let fitId=null;
+    if(fit){ c.editMsg="Sending the outfit sheet to Magnific…"; renderCard(key,c); let U={}; try{ U=JSON.parse(localStorage.getItem("bae_user_magids")||"{}"); }catch{} fitId=S.magIds?.[fit.id]||U[fit.id]||null;
+      if(!fitId){ if(!S.connected) await connect(true); const res=await fetch(`refs/${fit.id}.jpg`); if(!res.ok) throw {code:"tool_error",message:"The outfit sheet file is missing."}; const up=await rlUploadMag(await res.blob(),"outfit-"+fit.id); if(!up?.id) throw {code:"tool_error",message:"Magnific returned no identifier for the outfit sheet."}; fitId=up.id; U[fit.id]=fitId; try{ localStorage.setItem("bae_user_magids",JSON.stringify(U)); }catch{} }
+      c.editMsg="Writing the edit…"; renderCard(key,c); }
+    const w=await rlAsk(`You write ONE image-edit prompt for an image model that receives the finished image as ${fit?"reference @img1 and an outfit sheet as reference @img2":"its only reference, @img1"}. The user likes the image and wants a single change.
+USER'S CHANGE (may be Arabic): "${ask}"${fit?`
+THE USER PICKED AN OUTFIT: @img2 is a flat-lay sheet of the outfit "${fit.name}". Its pieces: ${fit.d}. The change is: dress the person in @img1 in exactly these pieces — same colours, fabrics, cuts and details as @img2 — worn naturally and fitted to the pose and the light. Shoes and bag appear only if that part of the body is in frame or it is natural to carry them. Never show the flat-lay, the grey board or loose items. Say this explicitly in the CHANGE ONLY part and name the pieces. Any other words the user wrote are extra instructions.`:""}
 THE PROMPT THAT MADE THE IMAGE (context only, do not repeat it): """${String($(MODELS[key].prompt).value||"").slice(0,2500)}"""
 Write the edit prompt in English, 60–110 words, in this order:
 1. "Edit @img1. This is the same ${icon?"icon illustration":"photograph"}." 
@@ -1214,7 +1244,7 @@ Write the edit prompt in English, 60–110 words, in this order:
 Never invent extra changes. Return ONLY JSON: {"prompt":"…","summary":"what changes, in 6 words or fewer"}`,{modelTier:"quick",cache:false});
     const prompt=String(w?.prompt||"").trim(); if(!prompt) throw {code:"bad_answer"};
     c.editMsg=`Editing: ${String(w.summary||ask).slice(0,60)}…`; renderCard(key,c);
-    const out=await rlJob(()=>rlImage({prompt,aspect:aspectText(),refs:[{id:base.id,tag:"@img1"}],label:"image edit"}));
+    const out=await rlJob(()=>rlImage({prompt,aspect:aspectText(),refs:[{id:base.id,tag:"@img1"},...(fitId?[{id:fitId,tag:"@img2"}]:[])],label:"image edit"}));
     const src=rlFull[out.id]||null; const o={id:out.id,url:null,img:src,blob:null,long:base.long||2048,webUrl:out.web||null,pending:false,edit:ask};
     if(src){ try{ const m=src.match(/^data:([^;]+);base64,(.*)$/); if(m) o.blob=b64Blob(m[2],m[1]); }catch{} }
     try{ await completeFiles(o,{ids:[o.id],urls:[],links:[],images:[]}); }catch{}
@@ -1390,7 +1420,7 @@ async function generateWeb(){
     c.steps=["ok","run"]; c.stepNote=[sendRefs.length?`${sendRefs.length} attached`:"none, prompt only"]; c.ph="Rendering in 4K…"; up();
     const count=Math.max(1,Math.min(4,+$("count").value||1)), aspect=geminiAspect();
     const plan=refPlan().slice(0,sendRefs.length);
-    $(m.prompt).value=$(m.prompt).value.replace(/\n*(Character references \(identity\)|Reference images)[^\n]*/g,"")+(plan.length?"\n"+refLine(plan):"");
+    $(m.prompt).value=$(m.prompt).value.replace(/\n*(Character references \(identity\)|Wardrobe reference|Reference images)[^\n]*/g,"")+(plan.length?"\n"+refLine(plan):"");
     const full=`${$(m.prompt).value.trim()}\n\nAvoid: ${negativeNow()}.`;
     const res=await Promise.allSettled(Array.from({length:count},()=>geminiImage({model:S.geminiModel||GEMINI_DEFAULT,prompt:full,images:sendRefs,aspect,size:"4K"})));
     const okR=res.filter(x=>x.status==="fulfilled").map(x=>x.value);
