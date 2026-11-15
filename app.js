@@ -5129,5 +5129,153 @@ function lvUse(i){ const o=LV.out, x=o?.options?.[i]; if(!x) return; const mode=
     const dr=e.target.closest("[data-lvdrop]"); if(dr){ const x=LV.out?.options?.[+dr.dataset.lvdrop]; if(x){ const k=dr.dataset.k; if(k==="scene"){ try{ URL.revokeObjectURL(x.sceneUrl); }catch{} x.scene=null; x.sceneUrl=""; } else { const p=x.people?.[+dr.dataset.p]; if(p){ p[k]=""; p[k+"Src"]=""; x.people=x.people.filter(q=>q.cast||q.outfit); } } lvDraw(); } return; } if(e.target.closest("[data-lvx]")){ LV.out=null; lvDraw(); } });
 })();
 
+/* ================= Image Upscale: faithful restore + upscale with Magnific, compare, mark problems, retry, and a team tuning that learns =================
+   Nothing here trains a model. "Training" is a shared set of slider corrections per kind of image, moved a little every time someone marks a result. */
+(function(){
+  const P=$("upscale"); if(!P) return; const body=$("upBody");
+  const PROBLEMS=[["smooth","Too smooth / plastic",{grain:4,sharp:3,detail:4,creat:1,fract:1,skin:1}],["pores","Pores / skin texture missing",{grain:3,detail:5,sharp:2,skin:1}],["harsh","Too harsh / gritty",{sharp:-5,grain:-3,detail:-3,hdr:-2,fract:-2}],["invented","Invented detail",{creat:-3,resem:3,fract:-2,faithful:1}],["mark","Real mark lost or changed",{creat:-3,resem:3,faithful:1}],["wrinkles","Wrinkles changed",{creat:-2,resem:2,faithful:1}],["freckles","Freckles / spots lost",{creat:-2,resem:2,grain:2,faithful:1}],["hair","Hair / beard wrong",{detail:3,sharp:2,creat:-1}],["eyes","Eyes blurry or changed",{sharp:3,detail:3,creat:-1}],["lips","Lips / mouth / teeth wrong",{sharp:2,detail:2,creat:-1}],["identity","Looks like a different person",{creat:-4,resem:4,faithful:1}],["halos","Halos / over-sharpened edges",{sharp:-6,hdr:-2}],["bg","Background artefacts",{fract:-2,creat:-1}]];
+  const PK=Object.fromEntries(PROBLEMS.map(p=>[p[0],p]));
+  const ZERO=()=>({sharp:0,grain:0,detail:0,creat:0,resem:0,hdr:0,fract:0,faithful:0,skin:0});
+  const NUM=["sharp","grain","detail","creat","resem","hdr","fract"];
+  const U={file:null,url:"",w:0,h:0,srcId:null,scan:null,target:"4x",tune:ZERO(),runs:[],sel:-1,busy:"",err:"",marks:new Set(),note:"",auto:null,autoBusy:false,cost:null,team:{clean:ZERO(),blurry:ZERO(),n:0,lessons:[]},teamLoaded:false,canTeach:false,split:50,zoom:{x:.5,y:.35}};
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,Math.round(v)));
+  const bucket=()=>/blurry|very_low/.test(U.scan?.quality||"")?"blurry":"clean";
+  /* ---------- team tuning ---------- */
+  async function teamLoad(){ if(U.teamLoaded) return; U.teamLoaded=true; try{ const l=JSON.parse(localStorage.getItem("bae_up_tuning")||"null"); if(l) U.team={...U.team,...l}; }catch{}
+    try{ await rlStoreInit(); if(RLS.db){ const d=await RLS.db.collection("upscale").doc("tuning").get(); if(d.exists){ const v=JSON.parse(JSON.stringify(d.data())); U.team={clean:{...ZERO(),...(v.clean||{})},blurry:{...ZERO(),...(v.blurry||{})},n:+v.n||0,lessons:Array.isArray(v.lessons)?v.lessons:[]}; } } const u=await window.claude?.use?.("user"); U.canTeach=!!u?.canEdit?.(); }catch{} }
+  async function teamSave(){ try{ localStorage.setItem("bae_up_tuning",JSON.stringify(U.team)); }catch{} try{ await rlStoreInit(); if(RLS.db&&U.canTeach) await RLS.db.collection("upscale").doc("tuning").set(JSON.parse(JSON.stringify(U.team))); }catch(e){ log("✕","upscale tuning save",{code:e?.code}); } }
+  function teamLearn(tune,rate,lesson){ const b=U.team[bucket()]; for(const k of NUM) b[k]=Math.round((b[k]+(tune[k]-b[k])*rate)*10)/10; for(const k of ["faithful","skin"]) b[k]=Math.round((b[k]+((tune[k]?1:0)-b[k])*rate)*100)/100; U.team.n=(+U.team.n||0)+1; if(lesson) U.team.lessons=[{t:Date.now(),q:bucket(),...lesson},...(U.team.lessons||[])].slice(0,40); teamSave(); }
+  /* ---------- the recipe: which Magnific passes, in which order, with which sliders ---------- */
+  function effTune(){ const b=U.team[bucket()], t=ZERO(); for(const k of NUM) t[k]=(+b[k]||0)+U.tune[k]; t.faithful=U.tune.faithful||b.faithful>=.5?1:0; t.skin=U.tune.skin||b.skin>=.5?1:0; return t; }
+  function recipe(){ const s=U.scan||{}, t=effTune(), face=s.face&&s.face!=="none", blurry=bucket()==="blurry";
+    const chain={"2x":[2],"4x":[2,2],"8x":[2,4],"16x":[2,8]}[U.target]||[2,2];
+    const prec=(mode,scale)=>{ const o={mode,scale:scale+"x",sharpness:clamp((face?11:8)+t.sharp,0,40),grain:clamp(7+t.grain,0,30)}; if(mode!=="ultra-sublime") o.ultraDetail=clamp((face?9:7)+t.detail,0,40); return o; };
+    const keep=(s.marks||[]).slice(0,8).join("; ");
+    const steps=chain.map((f,i)=>{ if(i>0) return {why:"Enlarge with the precision model, no invention",...prec("ultra-sublime",f)};
+      if(blurry&&!t.faithful) return {why:"Rebuild the lost detail carefully, staying close to the original",mode:"creative",scale:f+"x",presets:"custom",optimised:face?"SoftPortrait":"FilmAndPhotography",engine:s.noise==="jpeg"?"magnific_sparkle":"automatic",creativity:clamp((s.quality==="very_low"?-1:-3)+t.creat,-10,4),resemblance:clamp(6+t.resem,0,10),hdr:clamp(-1+t.hdr,-10,4),fractality:clamp(-2+t.fract,-10,4),
+        prompt:`Faithful photographic restoration. ${s.describe||"A real photograph."} Keep this exact person: identical face shape, eyes, nose, lips, teeth, hairline and beard pattern. Natural real skin with fine visible pores and soft micro-texture, never smooth or plastic, never gritty.${keep?` Keep every real mark exactly where it is: ${keep}.`:""} Add no new moles, freckles, wrinkles, hairs, jewellery or details that are not in the original. Sharp, clean, true to the original light and colour.${U.promptAdd?" "+U.promptAdd:""}`.slice(0,1900)};
+      return {why:blurry?"Clean and sharpen with zero invention (faithful mode)":"Most faithful pass: sharpen what is already there",...prec(blurry?"ultra-denoiser":"ultra-photo",2)}; });
+    if(t.skin&&face) steps.push({why:"Bring back real skin texture, identity locked",tool:"images_skin_enhancer",version:"faithful",skinDetail:clamp(55+t.detail*3,20,90),sharpen:clamp(4+t.sharp,0,30),smartGrain:clamp(8+t.grain,0,30)});
+    return steps; }
+  const outPx=()=>{ const k=+U.target.replace("x","")||1; return [U.w*k,U.h*k]; };
+  const stepLabel=s=>s.tool?"Skin texture · faithful":({creative:"Restore · Creative",["ultra-photo"]:"Precision · photo",["ultra-denoiser"]:"Precision · denoise",["ultra-sublime"]:"Precision · sublime"}[s.mode]||s.mode)+" · "+s.scale;
+  const stepArgs=(s,id)=>{ const {why,tool,...a}=s; return {creationIdentifier:id,...a}; };
+  /* ---------- reading the picture ---------- */
+  async function setFile(f){ if(!f||!/^image\//.test(f.type)){ U.err="That file isn't an image. Use JPEG, PNG or WebP."; draw(); return; }
+    try{ if(U.url) URL.revokeObjectURL(U.url); }catch{} const bmp=await createImageBitmap(f).catch(()=>null); if(!bmp){ U.err="Couldn't open that image."; draw(); return; }
+    Object.assign(U,{file:f,url:URL.createObjectURL(f),w:bmp.width,h:bmp.height,srcId:null,scan:null,tune:ZERO(),runs:[],sel:-1,err:"",marks:new Set(),note:"",auto:null,cost:null,promptAdd:""});
+    U.target=Math.max(bmp.width,bmp.height)<=700?"8x":Math.max(bmp.width,bmp.height)<=1400?"4x":"2x"; draw(); scan(); }
+  async function scan(){ if(!sample||!U.file) return; U.busy="Looking at your image…"; draw();
+    try{ const o=await rlAsk(`You are a photo restoration specialist preparing an image for a faithful upscale. Look at the attached image (${U.w}×${U.h} px) and report only what is really there.
+Return ONLY JSON:
+{"quality":"clean|soft|blurry|very_low" (clean = sharp, just small; soft = slightly soft; blurry = clearly blurred or heavily compressed; very_low = tiny or badly degraded),
+"noise":"none|jpeg|grain",
+"face":"none|small|medium|large" (how much of the frame the main face fills), "faces":0,
+"facebox":{"x":0,"y":0,"w":0,"h":0} (the main face as fractions of the image width and height, or null),
+"marks":["every real identifying mark you can see, each with its exact place, e.g. 'small mole on the left cheek near the nose', 'freckles across the nose', 'short beard with a gap under the lower lip', 'crow's feet at the right eye', 'scar on the chin'"] (up to 8, empty if none are visible),
+"describe":"one faithful sentence: who is in it (age range, gender, hair, beard, headwear), expression, clothing, light. No names.",
+"risk":"one short sentence in plain words on what could go wrong when this image is enlarged"}`,{images:[await toJpeg(U.file,1400).catch(()=>U.file)],cache:false});
+      U.scan={quality:["clean","soft","blurry","very_low"].includes(o?.quality)?o.quality:"soft",noise:o?.noise||"none",face:o?.face||"none",faces:+o?.faces||0,facebox:o?.facebox&&+o.facebox.w>0?o.facebox:null,marks:(Array.isArray(o?.marks)?o.marks:[]).map(String).slice(0,8),describe:String(o?.describe||""),risk:String(o?.risk||"")};
+    }catch(e){ log("✕","upscale scan",{code:e?.code}); U.scan={quality:"soft",noise:"none",face:"none",faces:0,facebox:null,marks:[],describe:"",risk:""}; }
+    U.busy=""; draw(); price(); }
+  async function price(){ U.cost=null; if(!mcp||!S.connected) return; const steps=recipe(); let sum=0, ok=true;
+    for(const s of steps){ try{ const r=await mcp.callTool(SRV,"simulate_cost",{tool:s.tool||"images_upscale",arguments:stepArgs(s,U.srcId||"pending")},{cache:false}); const c=+(r?.payload?.credits??r?.payload?.cost?.credits); if(isFinite(c)) sum+=c; else ok=false; }catch{ ok=false; } }
+    U.cost=ok?sum:null; if(!U.busy) draw(); }
+  /* ---------- run ---------- */
+  async function run(){ if(U.busy||!U.file) return; if(S.web||!mcp){ U.err="Upscaling needs Magnific, which works when the studio is opened in claude.ai."; draw(); return; }
+    const steps=recipe(), rec={steps,tune:{...U.tune},eff:effTune(),target:U.target}; U.err=""; U.auto=null;
+    try{ U.busy="Connecting to Magnific…"; draw(); if(!S.connected) await connect(true);
+      if(!U.srcId){ U.busy="Sending your image to Magnific at full size…"; draw(); const up=await rlUploadMag(U.file,"upscale-source"); if(!up?.id) throw {code:"tool_error",message:"Magnific returned no identifier for the image."}; U.srcId=up.id; }
+      let id=U.srcId, o=null;
+      for(let i=0;i<steps.length;i++){ const s=steps[i]; U.busy=`Step ${i+1} of ${steps.length} · ${stepLabel(s)}…`; draw();
+        const r=await callMag(s.tool||"images_upscale",stepArgs(s,id)); let rr=readResult(r); const nid=rr.ids.find(x=>x!==id)||rr.ids[0]; if(!nid) throw {code:"tool_error",message:"Magnific did not return the new image."};
+        rr=await waitFor([nid],stepLabel(s),18,true); id=nid; if(i===steps.length-1){ o={id,url:null,img:null,blob:null,long:0,webUrl:rr.webUrl||null}; await completeFiles(o,rr); } }
+      U.runs.push({...o,rec,label:`v${U.runs.length+1} · ${U.target}`,marks:[],note:""}); U.sel=U.runs.length-1; U.marks=new Set(); U.note=""; U.busy=""; draw(); check();
+    }catch(e){ log("✕","upscale",{code:e?.code,message:e?.message}); U.busy=""; U.err=(e?.code&&!e.server&&["not_granted","rate_limited","refused"].includes(e.code)?sampleCopy(e):mcpCopy(e))||"The upscale didn't finish. Try again."; draw(); } }
+  /* ---------- checking ---------- */
+  async function crop(src,box,size){ const bmp=await createImageBitmap(src); const b=box||{x:.25,y:.15,w:.5,h:.5}, pad=.25; const x=Math.max(0,(b.x-b.w*pad))*bmp.width, y=Math.max(0,(b.y-b.h*pad))*bmp.height, w=Math.min(bmp.width-x,b.w*(1+2*pad)*bmp.width), h=Math.min(bmp.height-y,b.h*(1+2*pad)*bmp.height);
+    const k=size/Math.max(w,h), c=document.createElement("canvas"); c.width=Math.round(w*k); c.height=Math.round(h*k); const g=c.getContext("2d"); g.imageSmoothingQuality="high"; g.drawImage(bmp,x,y,w,h,0,0,c.width,c.height); return await new Promise(r=>c.toBlob(r,"image/jpeg",.92)); }
+  async function resultBlob(o){ if(o.full) return o.full; if(o.url){ try{ const r=await fetch(o.url); if(r.ok){ o.full=await r.blob(); return o.full; } }catch{} } return o.blob||null; }
+  async function check(){ const o=U.runs[U.sel]; if(!o||!sample||U.autoBusy) return; U.autoBusy=true; draw();
+    try{ const rb=await resultBlob(o); if(!rb) throw {code:"no_image"}; const fb=U.scan?.facebox;
+      const imgs=[await crop(U.file,fb,900),await crop(rb,fb,1200),await toJpeg(U.file,900),await toJpeg(rb,1100)];
+      const r=await rlAsk(`You are a strict retoucher checking an AI upscale. Images in order: 1 = ORIGINAL, close crop of the main subject; 2 = UPSCALED, the same crop; 3 = ORIGINAL, whole frame; 4 = UPSCALED, whole frame. The goal was a faithful enlargement: more real detail, the same person, nothing invented.
+Real marks seen in the original: ${(U.scan?.marks||[]).join("; ")||"none listed"}.
+Compare region by region — skin of forehead, cheeks, nose; eyes and lashes; eyebrows; lips, mouth, teeth; hair, hairline, beard; clothing and headwear; background — and report every real problem, nothing imagined. Problem keys you may use: ${PROBLEMS.map(p=>`${p[0]} (${p[1]})`).join(", ")}.
+Return ONLY JSON: {"identity":"same|slightly_changed|changed","score":0-100,"verdict":"one short plain sentence","issues":[{"key":"…","where":"e.g. left cheek","note":"what exactly is wrong, in a few words"}],"good":["up to 3 things that came out well"]}`,{images:imgs,cache:false});
+      U.auto={identity:r?.identity||"same",score:clamp(+r?.score||0,0,100),verdict:String(r?.verdict||""),issues:(Array.isArray(r?.issues)?r.issues:[]).filter(x=>PK[x?.key]).slice(0,10),good:(Array.isArray(r?.good)?r.good:[]).map(String).slice(0,3)};
+      for(const x of U.auto.issues) U.marks.add(x.key); if(U.auto.identity==="changed") U.marks.add("identity");
+    }catch(e){ log("✕","upscale check",{code:e?.code}); U.auto={error:"The automatic check couldn't run. Mark the problems yourself below."}; }
+    U.autoBusy=false; draw(); }
+  /* ---------- retry and teach ---------- */
+  async function retry(){ const o=U.runs[U.sel]; if(!o||U.busy) return; if(!U.marks.size&&!U.note.trim()){ U.err="Mark at least one problem or write a note first."; draw(); return; }
+    const d=ZERO(); for(const k of U.marks){ const p=PK[k]?.[2]||{}; for(const q in p) d[q]+=p[q]; }
+    U.promptAdd=U.promptAdd||"";
+    if(U.note.trim()&&sample){ U.busy="Reading your note…"; draw(); try{ const r=await rlAsk(`A retoucher wrote this note about an AI upscale result: "${U.note.trim().slice(0,600)}". Turn it into slider corrections for the next attempt. Sliders: sharp (edge sharpness), grain (fine photographic grain, adds skin micro-texture), detail (fine detail strength), creat (how much the model may invent; negative = more faithful), resem (how close it must stay to the original), hdr (local contrast), fract (density of tiny detail). Each from -6 to 6, 0 = no change. faithful = 1 if the note asks to stop inventing or to keep the person exactly. skin = 1 if it asks for more real skin texture.
+Return ONLY JSON: {"sharp":0,"grain":0,"detail":0,"creat":0,"resem":0,"hdr":0,"fract":0,"faithful":0,"skin":0,"prompt_add":"one short English sentence to add to the restoration guidance, or empty"}`,{modelTier:"quick",cache:false}); for(const k of NUM) d[k]+=clamp(+r?.[k]||0,-6,6); if(+r?.faithful) d.faithful=1; if(+r?.skin) d.skin=1; if(r?.prompt_add) U.promptAdd=(U.promptAdd+" "+String(r.prompt_add)).trim().slice(0,400); }catch{} }
+    for(const k of NUM) U.tune[k]=clamp(U.tune[k]+d[k],-14,14); if(d.faithful) U.tune.faithful=1; if(d.skin) U.tune.skin=1;
+    o.marks=[...U.marks]; o.note=U.note; teamLearn({...effTune()},.2,{marks:o.marks,note:U.note.trim().slice(0,200),ok:false});
+    U.busy=""; await run(); }
+  function approve(){ const o=U.runs[U.sel]; if(!o) return; o.ok=true; teamLearn({...o.rec.eff},.5,{marks:[],note:"approved",ok:true}); U.msg="Saved. The next images of this kind start from these settings."; draw(); setTimeout(()=>{ U.msg=""; if(!P.hidden) draw(); },4000); }
+  async function download(){ const o=U.runs[U.sel]; if(!o) return; const b=await resultBlob(o); const name=(U.file?.name||"image").replace(/\.[a-z0-9]+$/i,"")+"_"+o.rec.target+"_BAE"; if(b&&(o.full||!o.url)) await uxSaveBlob(b,name).catch(()=>{}); else if(o.url) window.open(o.url,"_blank","noopener"); }
+  /* ---------- page ---------- */
+  const QN={clean:"Sharp, just small",soft:"Slightly soft",blurry:"Blurry or compressed",very_low:"Very low quality"};
+  const fmt=t=>NUM.filter(k=>Math.abs(t[k])>=.5).map(k=>`${({sharp:"sharpness",grain:"grain",detail:"detail",creat:"invention",resem:"faithfulness",hdr:"contrast",fract:"micro-detail"})[k]} ${t[k]>0?"+":""}${Math.round(t[k])}`).join(" · ")||"defaults";
+  function draw(){ const o=U.runs[U.sel]||null, steps=U.file&&U.scan?recipe():[], [ow,oh]=outPx(), big=Math.max(ow,oh)>12000, after=o?(o.url||o.img):"";
+    body.innerHTML=`
+    <section class="rl-card up-top">
+      <label class="pg-drop up-drop${U.file?" has":""}" id="upDrop"><input type="file" accept="image/*" id="upFile">${U.file?`<img src="${U.url}" alt="Your image"><span><b data-noi18n>${esc(U.file.name)}</b><span class="t12 muted">${U.w} × ${U.h} px · click, drop or paste to replace</span></span>`:`<span><b>Drop, paste or choose an image</b><span class="t12 muted">Small, soft or blurry is fine. The original is sent at full size.</span></span>`}</label>
+      ${U.file?`<div class="up-set">
+        <div><span class="lbl">Enlarge</span><div class="a-seg" role="group" aria-label="Scale">${["2x","4x","8x","16x"].map(k=>`<button type="button" data-upscale="${k}" aria-pressed="${U.target===k}">${k.replace("x","×")}</button>`).join("")}</div><span class="t12 ${big?"bad":"muted"}">${ow.toLocaleString()} × ${oh.toLocaleString()} px${big?" · very large, Magnific may refuse it":""}</span></div>
+        ${U.scan?`<div class="up-scan"><span class="lbl">What I see</span><p><b>${QN[U.scan.quality]}</b>${U.scan.face!=="none"?` · face: ${esc(U.scan.face)}`:" · no face"}${U.scan.noise!=="none"?` · ${esc(U.scan.noise)} noise`:""}</p>${U.scan.marks.length?`<p class="t12">Real marks to keep: <span data-noi18n dir="auto">${esc(U.scan.marks.join(" · "))}</span></p>`:""}${U.scan.risk?`<p class="t12 muted" data-noi18n dir="auto">${esc(U.scan.risk)}</p>`:""}</div>
+        <div class="up-plan"><span class="lbl">Plan</span><ol>${steps.map(s=>`<li><b>${esc(stepLabel(s))}</b><span class="t12 muted">${esc(s.why)}</span></li>`).join("")}</ol><span class="t12 muted">Tuning: ${esc(fmt(effTune()))}${U.cost!=null?` · about ${Math.round(U.cost).toLocaleString()} credits`:""}</span></div>`:""}
+      </div>
+      <div class="rl-btns"><button type="button" class="btn primary" data-upgo ${U.busy||!U.scan?"disabled":""}>${U.runs.length?"Upscale again":"Upscale"}</button>${U.busy?`<span class="t12" role="status">${esc(U.busy)}</span>`:""}</div>`:""}
+      ${U.err?`<p class="t12 bad" role="alert">${esc(U.err)}</p>`:""}
+      <p class="t12 muted">Team tuning learned from ${+U.team.n||0} marked result${U.team.n===1?"":"s"}. It adjusts the sliders, it does not retrain Magnific's model.</p>
+    </section>
+    ${o?`<section class="rl-card up-res">
+      <div class="rl-ihead"><b>Compare</b><div class="rl-btns">${U.runs.map((r,i)=>`<button type="button" class="btn small${i===U.sel?" primary":""}" data-upsel="${i}" data-noi18n>${esc(r.label)}${r.ok?" ✓":""}</button>`).join("")}</div></div>
+      <div class="up-cmp" id="upCmp" style="aspect-ratio:${U.w}/${U.h};max-width:calc(72vh * ${(U.w/U.h).toFixed(4)})"><img src="${after}" alt="Upscaled image"><div class="b4" id="upB4" style="width:${U.split}%"><img src="${U.url}" alt="Original image" style="width:${10000/Math.max(1,U.split)}%"></div><span class="tag l">Before</span><span class="tag r">After</span><div class="bar" id="upBar" style="left:${U.split}%" role="slider" tabindex="0" aria-label="Before and after" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(U.split)}"></div></div>
+      <p class="t12 muted">Drag the line to compare. Click anywhere on the image to inspect that spot at full detail below.</p>
+      <div class="up-loupe"><figure><div id="upL1"></div><figcaption>Before</figcaption></figure><figure><div id="upL2"></div><figcaption>After · 100%</figcaption></figure></div>
+      <div class="rl-btns"><button type="button" class="btn small primary" data-updl>Download</button>${o.webUrl?`<a class="btn small" href="${esc(o.webUrl)}" target="_blank" rel="noopener">Open in Magnific</a>`:""}</div>
+    </section>
+    <section class="rl-card up-chk">
+      <div class="rl-ihead"><b>Check</b>${U.autoBusy?`<span class="t12" role="status">Checking every region…</span>`:`<button type="button" class="a-btn" data-upcheck>Check again</button>`}</div>
+      ${U.auto&&!U.auto.error?`<div class="up-auto"><p><b>${U.auto.score}/100</b> · identity: <b class="${U.auto.identity==="same"?"ok":"bad"}">${esc(U.auto.identity.replace("_"," "))}</b></p><p data-noi18n dir="auto">${esc(U.auto.verdict)}</p>${U.auto.issues.length?`<ul>${U.auto.issues.map(x=>`<li><b>${esc(PK[x.key][1])}</b> <span data-noi18n dir="auto">${esc([x.where,x.note].filter(Boolean).join(" — "))}</span></li>`).join("")}</ul>`:`<p class="t12 ok">No problems found by the automatic check. Look yourself too.</p>`}${U.auto.good.length?`<p class="t12 muted" data-noi18n dir="auto">Good: ${esc(U.auto.good.join(" · "))}</p>`:""}</div>`:U.auto?.error?`<p class="t12 muted">${esc(U.auto.error)}</p>`:""}
+      <span class="lbl">Mark the problems</span>
+      <div class="up-marks">${PROBLEMS.map(([k,l])=>`<button type="button" class="br-topic" data-upmark="${k}" aria-pressed="${U.marks.has(k)}">${l}</button>`).join("")}</div>
+      <label class="lbl" for="upNote">Note (optional)</label><textarea class="rl-field" id="upNote" rows="2" dir="auto" placeholder="e.g. the mole under the left eye disappeared, beard edge too sharp">${esc(U.note)}</textarea>
+      <div class="rl-btns"><button type="button" class="btn primary" data-upretry ${U.busy?"disabled":""}>Retry with these fixes</button><button type="button" class="btn" data-upok ${U.busy?"disabled":""}>This one is right · remember it</button></div>
+      ${U.msg?`<p class="t12 ok" role="status">${esc(U.msg)}</p>`:""}
+      <p class="t12 muted">Retry runs the plan again with corrected sliders (uses credits). Both buttons teach the team tuning${U.canTeach?"":" on this device; only the studio owner's marks are shared with everyone"}.</p>
+    </section>`:""}`;
+    if(o) loupe(); if(typeof uxT==="function") uxT(P); }
+  function loupe(){ const o=U.runs[U.sel]; const a=$("upL1"), b=$("upL2"); if(!o||!a) return; const k=+o.rec.target.replace("x","")||1, W=U.w*k, H=U.h*k, bw=a.clientWidth||320, bh=a.clientHeight||240;
+    const px=clamp(U.zoom.x*W-bw/2,0,Math.max(0,W-bw)), py=clamp(U.zoom.y*H-bh/2,0,Math.max(0,H-bh));
+    for(const [el,src] of [[a,U.url],[b,o.url||o.img]]){ el.style.backgroundImage=`url("${src}")`; el.style.backgroundSize=`${W}px ${H}px`; el.style.backgroundPosition=`-${px}px -${py}px`; } a.style.imageRendering="auto"; }
+  P.addEventListener("click",e=>{ const t=e.target;
+    const s=t.closest("[data-upscale]"); if(s){ U.target=s.dataset.upscale; draw(); price(); return; }
+    if(t.closest("[data-upgo]")){ run(); return; } if(t.closest("[data-upretry]")){ U.note=$("upNote")?.value||""; retry(); return; } if(t.closest("[data-upok]")){ approve(); return; }
+    if(t.closest("[data-updl]")){ download(); return; } if(t.closest("[data-upcheck]")){ check(); return; }
+    const v=t.closest("[data-upsel]"); if(v){ U.sel=+v.dataset.upsel; U.marks=new Set(U.runs[U.sel].marks||[]); U.note=U.runs[U.sel].note||""; U.auto=null; draw(); return; }
+    const m=t.closest("[data-upmark]"); if(m){ const k=m.dataset.upmark; U.marks.has(k)?U.marks.delete(k):U.marks.add(k); m.setAttribute("aria-pressed",U.marks.has(k)); return; }
+    const c=t.closest("#upCmp"); if(c&&!t.closest("#upBar")){ const r=c.getBoundingClientRect(); U.zoom={x:(e.clientX-r.left)/r.width,y:(e.clientY-r.top)/r.height}; loupe(); } });
+  P.addEventListener("input",e=>{ if(e.target.id==="upNote") U.note=e.target.value; });
+  P.addEventListener("change",e=>{ if(e.target.id==="upFile"){ const f=e.target.files?.[0]; e.target.value=""; if(f) setFile(f); } });
+  P.addEventListener("dragover",e=>{ if(e.dataTransfer?.types?.includes("Files")){ e.preventDefault(); $("upDrop")?.classList.add("over"); } });
+  P.addEventListener("dragleave",e=>{ if(!P.contains(e.relatedTarget)) $("upDrop")?.classList.remove("over"); });
+  P.addEventListener("drop",e=>{ const f=[...(e.dataTransfer?.files||[])].find(x=>/^image\//.test(x.type)); if(f){ e.preventDefault(); setFile(f); } });
+  document.addEventListener("paste",e=>{ if(P.hidden||e.target.closest?.("textarea,input,[contenteditable]")) return; const f=[...(e.clipboardData?.files||[])].find(x=>/^image\//.test(x.type)); if(f){ e.preventDefault(); setFile(f); } });
+  /* the before/after line: drag, or arrow keys */
+  const setSplit=v=>{ U.split=Math.max(2,Math.min(98,v)); const b4=$("upB4"), bar=$("upBar"); if(!b4) return; b4.style.width=U.split+"%"; b4.firstElementChild.style.width=(10000/U.split)+"%"; bar.style.left=U.split+"%"; bar.setAttribute("aria-valuenow",Math.round(U.split)); };
+  P.addEventListener("pointerdown",e=>{ const bar=e.target.closest("#upBar"); if(!bar) return; e.preventDefault(); bar.setPointerCapture(e.pointerId); const mv=ev=>{ const r=$("upCmp").getBoundingClientRect(); setSplit((ev.clientX-r.left)/r.width*100); }; const up=()=>{ bar.removeEventListener("pointermove",mv); bar.removeEventListener("pointerup",up); bar.removeEventListener("pointercancel",up); }; bar.addEventListener("pointermove",mv); bar.addEventListener("pointerup",up); bar.addEventListener("pointercancel",up); });
+  P.addEventListener("keydown",e=>{ if(e.target.id!=="upBar") return; if(e.key==="ArrowLeft"){ e.preventDefault(); setSplit(U.split-3); } else if(e.key==="ArrowRight"){ e.preventDefault(); setSplit(U.split+3); } });
+  addEventListener("resize",()=>{ if(!P.hidden) loupe(); });
+  const open=()=>{ P.hidden=false; P.scrollTop=0; draw(); teamLoad().then(()=>{ if(!U.busy) draw(); }); };
+  $("openUpscale")?.addEventListener("click",open); $("closeUpscale")?.addEventListener("click",()=>{ P.hidden=true; $("openUpscale")?.focus(); });
+})();
+
 boot();
 })();
