@@ -805,12 +805,14 @@ function renderCard(key,st){
   <ol class="steps">${STEPS.map((s,i)=>`<li class="${st.steps?.[i]||""}">${s}${st.stepNote?.[i]?` · ${esc(st.stepNote[i])}`:""}</li>`).join("")}</ol>
   ${st.err?`<div class="msg">${esc(st.err)}</div>`:""}${st.refWarn?`<div class="msg info">${esc(st.refWarn)}</div>`:""}
   <div class="btns">${o?.blob?`<button class="btn small primary" data-act="dl">Download ${/png/.test(o.blob.type)?"PNG":"image"}</button>`:""}${o?.url?`<a class="btn small ${o.blob?"":"primary"}" href="${esc(o.url)}" target="_blank" rel="noopener">Open ${o.long>=3800?"4K ":""}PNG</a><button class="btn small" data-act="copy">Copy link</button>`:""}${o?.webUrl?`<a class="btn small ${o.blob||o.url?"":"primary"}" href="${esc(o.webUrl)}" target="_blank" rel="noopener">Open in Magnific</a>`:""}${st.done||st.err?`<button class="btn small" data-act="regen">Regenerate</button>`:""}</div>
+  ${o?.id&&st.done&&!S.web?`<form class="edit-one" data-edit><label class="t12 muted" for="edit-${key}">Change one thing in this image</label><div class="row"><input class="rl-field" id="edit-${key}" name="q" dir="auto" value="${esc(st.editQ||"")}" placeholder="e.g. make the jacket navy, keep everything else" ${st.editing?"disabled":""}><button class="btn small primary" type="submit" ${st.editing?"disabled":""}>${st.editing?"Editing…":"Apply change"}</button></div><span class="t12 ${st.editErr?"bad":"muted"}" role="status">${esc(st.editErr||st.editMsg||"Same photo, same person. Only what you ask changes. Makes 1 new image.")}</span></form>`:""}
   ${isIconKey(key)&&o?.blob?`<div class="btns exports"><span class="t12 muted">Export PNG on Light Stone:</span>${[96,144,192,256,1024,"wide"].map(s=>`<button class="btn small" data-exp="${s}" title="${({96:"S · square, dashboards, tooltips",144:"M · square, spot, onboarding",192:"L · square, modals, marketing",256:"XL · square, hero moments",1024:"Square master",wide:"Full 16:9 frame"})[s]}">${({96:"S 96",144:"M 144",192:"L 192",256:"XL 256",1024:"1024",wide:"16:9 full"})[s]}</button>`).join("")}</div>`:""}
   ${o?.url?`<input type="text" readonly class="linkbox" id="link-${key}" value="${esc(o.url)}" aria-label="Image link">`:""}
   ${o?.links?.length>1?`<details class="links"><summary>All links from Magnific (${o.links.length})</summary>${o.links.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`).join("")}</details>`:""}`;
   el.querySelector('[data-act="dl"]')?.addEventListener("click",()=>save(key,o));
   el.querySelector('[data-act="copy"]')?.addEventListener("click",async e=>{ const b=e.currentTarget; try{ await navigator.clipboard.writeText(o.url); b.textContent="Copied"; }catch{ const i=$("link-"+key); i.focus(); i.select(); b.textContent="Selected, press Ctrl/Cmd+C"; } setTimeout(()=>{ b.textContent="Copy link"; },1800); });
   el.querySelector('[data-act="regen"]')?.addEventListener("click",()=>generate([key]));
+  el.querySelector("[data-edit]")?.addEventListener("submit",e=>{ e.preventDefault(); editImage(key,String(new FormData(e.currentTarget).get("q")||"")); });
   el.querySelectorAll(".thumbs button").forEach(b=>b.addEventListener("click",()=>{ st.sel=+b.dataset.i; renderCard(key,st); }));
   el.querySelector(".frame > img")?.addEventListener("click",()=>openLightbox(o.img));
   el.querySelectorAll("[data-exp]").forEach(b=>b.addEventListener("click",()=>exportIcon(o,b.dataset.exp==="wide"?"wide":+b.dataset.exp,MODELS[key].label)));
@@ -1197,6 +1199,29 @@ REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this o
     c.ph="Not generated"; up();
   }
 }
+/* Change one thing in a finished image: the result itself is the reference, Claude writes a strict "same photo, only this changes" prompt */
+async function editImage(key,ask){ const c=cards[key]; ask=String(ask||"").trim(); const base=c?.outs?.[c.sel||0]; if(!c||!base?.id||!ask||c.editing) return;
+  c.editing=true; c.editQ=ask; c.editErr=""; c.editMsg="Writing the edit…"; renderCard(key,c);
+  try{ const icon=isIconKey(key);
+    const w=await rlAsk(`You write ONE image-edit prompt for an image model that receives the finished image as its only reference, @img1. The user likes the image and wants a single change.
+USER'S CHANGE (may be Arabic): "${ask}"
+THE PROMPT THAT MADE THE IMAGE (context only, do not repeat it): """${String($(MODELS[key].prompt).value||"").slice(0,2500)}"""
+Write the edit prompt in English, 60–110 words, in this order:
+1. "Edit @img1. This is the same ${icon?"icon illustration":"photograph"}." 
+2. LOCK: say what stays identical — ${icon?"the same object, shape, material, glass look, lighting, colours, framing and flat background":"the same person with the identical face, hair, skin, expression, body and pose; the same background, props, framing, camera angle, lens, light, shadows and colour grade"} — except what the change touches.
+3. CHANGE ONLY: describe the requested change precisely and concretely (garment, cut, fabric, colour; or object, colour, position). ${icon?"":"For clothing: solid colours, fine fabric with natural drape, no logos, no prints, no text, unless the user asked otherwise. Keep the new clothes consistent with the light and the pose."}
+4. End with: "Nothing else changes. ${icon?"Clean 3D render":"Photorealistic"}, 2K, no text, no watermark."
+Never invent extra changes. Return ONLY JSON: {"prompt":"…","summary":"what changes, in 6 words or fewer"}`,{modelTier:"quick",cache:false});
+    const prompt=String(w?.prompt||"").trim(); if(!prompt) throw {code:"bad_answer"};
+    c.editMsg=`Editing: ${String(w.summary||ask).slice(0,60)}…`; renderCard(key,c);
+    const out=await rlJob(()=>rlImage({prompt,aspect:aspectText(),refs:[{id:base.id,tag:"@img1"}],label:"image edit"}));
+    const src=rlFull[out.id]||null; const o={id:out.id,url:null,img:src,blob:null,long:base.long||2048,webUrl:out.web||null,pending:false,edit:ask};
+    if(src){ try{ const m=src.match(/^data:([^;]+);base64,(.*)$/); if(m) o.blob=b64Blob(m[2],m[1]); }catch{} }
+    try{ await completeFiles(o,{ids:[o.id],urls:[],links:[],images:[]}); }catch{}
+    if(icon){ try{ await whitenOut(o); }catch{} }
+    c.outs.push(o); c.sel=c.outs.length-1; c.editQ=""; c.editMsg="Done. The edited image was added next to the original."; if(o.url||o.img) addHistory(o);
+  }catch(e){ log("✕","image edit",{code:e?.code,message:e?.message}); c.editMsg=""; c.editErr=e?.code==="refs_missing"?"Couldn't attach the image to edit. Nothing was spent.":(e?.code&&!e.server&&["not_granted","rate_limited","refused"].includes(e.code)?sampleCopy(e):mcpCopy(e)); }
+  c.editing=false; renderCard(key,c); }
 async function completeFiles(o,lastRR){
   const take=x=>{ if(!o.url&&x.urls[0]) o.url=x.urls[0]; o.links=[...new Set([...(o.links||[]),...x.urls,...x.links])]; if(!o.img&&x.images[0]){ o.img=`data:${x.images[0].mime};base64,${x.images[0].data}`; o.blob=b64Blob(x.images[0].data,x.images[0].mime); } const L=Math.max(x.w,x.h); if(L>o.long) o.long=L; };
   if(o.url&&o.img) return;
