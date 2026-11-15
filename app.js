@@ -834,7 +834,7 @@ function renderCard(key,st){
   const res=o&&o.long?(o.long>=2000?`2K · ${o.long}px`:`${o.long}px`):"";
   el.innerHTML=`<div class="head"><b>${esc(m.label)}</b><span class="count">${esc(name)}</span></div>
   <div class="frame ${st.busy?"busy":""}${isIconKey(key)?" iconframe":""}" style="aspect-ratio:${ratioCSS()}">${o?.img?`<img src="${o.img}" alt="Generated image ${(st.sel||0)+1} from ${esc(m.label)}">`:`${!o&&!st.busy?`<div class="ph-empty" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="6" y="10" width="36" height="28" rx="6"/><circle cx="18" cy="21" r="4"/><path d="M8 34l10-9 8 7 6-5 10 8"/></svg></div>`:""}<span class="ph-txt">${esc(o?"Magnific sent a link but not the image itself, and claude.ai blocks outside images inside pages. Open the PNG below to view or save it.":(st.ph||"Your image appears here"))}</span>`}${res?`<span class="badge">${esc(res)}</span>`:""}${st.busy?`<span class="elapsed" id="elapsed-${key}">${fmtTime(st.t0)}</span>`:""}</div>
-  ${outs.length>1?`<div class="thumbs">${outs.map((x,i)=>`<button type="button" data-i="${i}" aria-pressed="${i===(st.sel||0)}" aria-label="Show image ${i+1}">${x.img?`<img src="${x.img}" alt="">`:i+1}</button>`).join("")}</div>`:""}
+  ${outs.length>1?`<div class="thumbs">${outs.map((x,i)=>`<button type="button" data-i="${i}" aria-pressed="${i===(st.sel||0)}" aria-label="Show image ${i+1}${x.angle?" · "+esc(x.angle):""}" title="${esc(x.angle||"")}">${x.img?`<img src="${x.img}" alt="">`:i+1}</button>`).join("")}</div>`:""}${o?.angle?`<p class="t12 muted">Angle: ${esc(o.angle)}</p>`:""}
   <ol class="steps">${STEPS.map((s,i)=>`<li class="${st.steps?.[i]||""}">${s}${st.stepNote?.[i]?` · ${esc(st.stepNote[i])}`:""}</li>`).join("")}</ol>
   ${st.err?`<div class="msg">${esc(st.err)}</div>`:""}${st.refWarn?`<div class="msg info">${esc(st.refWarn)}</div>`:""}
   <div class="btns">${o?.blob?`<button class="btn small primary" data-act="dl">Download ${/png/.test(o.blob.type)?"PNG":"image"}</button>`:""}${o?.url?`<a class="btn small ${o.blob?"":"primary"}" href="${esc(o.url)}" target="_blank" rel="noopener">Open ${o.long>=3800?"4K ":""}PNG</a><button class="btn small" data-act="copy">Copy link</button>`:""}${o?.webUrl?`<a class="btn small ${o.blob||o.url?"":"primary"}" href="${esc(o.webUrl)}" target="_blank" rel="noopener">Open in Magnific</a>`:""}${st.done||st.err?`<button class="btn small" data-act="regen">Regenerate</button>`:""}</div>
@@ -1157,7 +1157,8 @@ async function runModel(key,refs){
   /* Name the attached references in the prompt as @img1, @img2… in upload order */
   if($(m.prompt).value.trim()) $(m.prompt).value=$(m.prompt).value.replace(/\n*(Character references \(identity\)|Wardrobe reference|Reference images)[^\n]*/g,"")+(refs.length?"\n"+refLine(refs):"");
   const prompt=$(m.prompt).value.trim();
-  const mode=$(m.mode).value||null; const count=Math.max(1,Math.min(4,+$("count").value||1)); const aspect=aspectVal();
+  const ang=S.mode!=="icon"&&Array.isArray(S.angles)?S.angles:null;
+  const mode=$(m.mode).value||null; const count=ang?ang.length:Math.max(1,Math.min(4,+$("count").value||1)); const aspect=aspectVal();
   const up=()=>renderCard(key,c);
   try{
     if(!prompt) throw {code:"tool_error",message:"Write the prompt first (step 2)."};
@@ -1181,7 +1182,7 @@ REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this o
     c.outs=Array.from({length:count},()=>({id:null,url:null,img:null,blob:null,long:0,pending:true})); c.sel=0; c.webUrls=[]; up();
     let done=0;
     const genOne=async(slot)=>{
-      const r=await callMag("images_generate",plan.args);
+      const r=await callMag("images_generate",ang?swapPrompt(plan.args,prompt,prompt+"\n\n"+ang[slot].line):plan.args); if(ang) c.outs[slot].angle=ang[slot].name;
       let rr=readResult(r); if(!rr.ids.length&&!rr.urls.length&&!rr.images.length) rr=await extractWithClaude(r,"the creation identifier of the image being generated");
       const genId=rr.ids[0]||null; const web=rr.webUrl||rr.links.find(u=>/magnific\.com\/app\//i.test(u))||null;
       if(!rr.images.length&&!DONE.test(rr.status)){ if(!genId) throw {code:"tool_error",message:"Magnific didn't return a creation to wait for."}; rr=await waitFor([genId],"2K image generation"); }
@@ -1289,6 +1290,15 @@ async function save(key,o){
 
 /* ---------------- one-click flow, presets, history, lightbox ---------------- */
 $("btnCreate").onclick=createAll;
+/* four separate images of the same moment, each from a different candid camera position */
+const ANGLES4=[
+ ["3/4 front","CAMERA: eye level, about 45 degrees to one side of the subject (three-quarter front view), medium shot from the waist up, 50mm look. The subject is absorbed in the action and looks at what they are doing, never at the camera."],
+ ["Side profile","CAMERA: directly at the subject's side at eye level, clean full profile, medium-full shot from head to mid-thigh, 85mm look with a soft background. The subject is caught mid-movement, eyes on what they are doing."],
+ ["From behind","CAMERA: behind the subject and slightly to one side (three-quarter view from behind, over the shoulder), chest-up framing. We see the back of the shoulder, the line of the cheek and what the subject is looking at or holding; the face is mostly turned away. The place opens up in front of them."],
+ ["Wide, from a distance","CAMERA: observational long shot from across the place with a longer lens, eye level. The whole body is in frame and small (about a third of the frame height), sitting in the middle of a quiet, uncluttered place; optionally one soft out-of-focus element in the near foreground. The subject is unaware of the camera."]
+].map(([name,line])=>({name,line:`${line}\nThis camera position is mandatory and overrides any other camera angle, framing or shot size written above. Same person, same clothes, same place, same light and the same moment as described above: only the camera position changes.`}));
+$("btnAngles")?.addEventListener("click",async()=>{ if(S.mode==="icon"||S.web) return; const b=$("btnAngles"), t=b.textContent; S.angles=ANGLES4; b.disabled=true; b.textContent="Creating 4 angles…"; try{ await createAll(); } finally{ S.angles=null; b.disabled=false; b.textContent=t; } });
+function swapPrompt(args,from,to){ const key=from.slice(0,80); let hit=false; const walk=v=>{ if(typeof v==="string"){ if(v===from||(key.length>40&&v.includes(key))){ hit=true; return to; } return v; } if(Array.isArray(v)) return v.map(walk); if(v&&typeof v==="object"){ const o={}; for(const k in v) o[k]=walk(v[k]); return o; } return v; }; const out=walk(args); if(!hit&&out&&typeof out==="object"&&"prompt" in out) out.prompt=to; return out; }
 async function createAll(){
   if(S.mode!=="icon"){ syncCast(); renderRefs(); }
   if(S.web&&!getKey("gemini")){ openKeys(); flash($("s3state"),"Add your Google Gemini API key under API keys first.",true); return; }
