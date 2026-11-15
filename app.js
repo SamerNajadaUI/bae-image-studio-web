@@ -5164,7 +5164,10 @@ function lvUse(i){ const o=LV.out, x=o?.options?.[i]; if(!x) return; const mode=
     const shuffle=s=>{ class PS extends tf.layers.Layer{ constructor(){ super({}); } computeOutputShape(sh){ return [sh[0],sh[1],sh[2],3]; } call(i){ return tf.depthToSpace(one(i),s,"NHWC"); } static className=`PixelShuffle${s}x`; } return PS; };
     for(const c of [MultiplyBeta,shuffle(2),shuffle(4)]){ try{ tf.serialization.registerClass(c); }catch{} }
     return TF=tf; }
-  async function model(s){ if(MODELS[s]) return MODELS[s]; const tf=await engine(); U.busy=`Loading the ${s}× network (28 MB, once)…`; draw(); return MODELS[s]=await tf.loadLayersModel(`up/x${s}/model.json`); }
+  async function model(s){ if(MODELS[s]) return MODELS[s]; const tf=await engine(); U.busy=`Loading the ${s}× network (once)…`; draw(); const net=await (await fetch(`up/x${s}/net.json`)).json(); const data=new Uint8Array(net.bytes); let off=0;
+    for(const p of net.parts){ const t=await (await fetch(`up/x${s}/${p}`)).text(); for(let i=0;i<t.length;i+=1048576){ const bin=atob(t.slice(i,i+1048576)); for(let j=0;j<bin.length;j++) data[off++]=bin.charCodeAt(j); } }
+    if(off!==net.bytes) throw {message:"The upscale network didn't download completely. Reload and try again."};
+    return MODELS[s]=await tf.loadLayersModel(tf.io.fromMemory({modelTopology:net.modelTopology,format:net.format,generatedBy:net.generatedBy,convertedBy:net.convertedBy,weightSpecs:net.weightSpecs,weightData:data.buffer})); }
   const mk=(w,h)=>{ const c=document.createElement("canvas"); c.width=w; c.height=h; return c; };
   /* one network pass over the whole picture, tile by tile with overlap so no seams show */
   async function pass(src,s,label,from,to){ const tf=await engine(), net=await model(s); const W=src.width, H=src.height, out=mk(W*s,H*s), og=out.getContext("2d"), sg=src.getContext("2d",{willReadFrequently:true});
