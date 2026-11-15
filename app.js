@@ -20,7 +20,11 @@ const AT_OUTFITS=[
  ["of_08","Orange shirt, blue jeans","Women","orange oversized linen shirt with a chest pocket, worn open with rolled sleeves; white tank top; light-blue high-waist wide-leg jeans; cream top-handle leather bag with a gold clasp; white leather sneakers; fine gold necklace and chain bracelet"],
  ["of_09","Brown jacket, cream trousers","Women","brown cotton cropped button jacket with a shirt collar and blue-striped turned-back cuffs; cream ribbed tank top; cream high-waist wide-leg trousers; dark brown leather belt with a gold buckle; dark brown leather shoulder bag; layered fine gold necklaces"],
  ["of_10","Cream tweed jacket","Women","cream cropped collarless tweed jacket with gold buttons and two flap pockets; white tank top; beige linen-blend pleated wide-leg trousers; beige leather crossbody flap bag; metallic gold pointed flat shoes with a strap; fine gold necklace; gold ball stud earrings"],
- ["of_11","Camel cable knit, chinos","Men","camel cable-knit half-zip sweater over a white dress shirt and a dark brown tie; khaki-beige slim pleated chinos; white leather low-top sneakers"]
+ ["of_11","Camel cable knit, chinos","Men","camel cable-knit half-zip sweater over a white dress shirt and a dark brown tie; khaki-beige slim pleated chinos; white leather low-top sneakers"],
+ ["of_12","Blue flower cardigan","Girls","child's dusty-blue chunky knit cardigan with cream trim, wooden buttons and small white crochet daisies; cream short-sleeve T-shirt; cream relaxed trousers with an elastic waist and rolled hems; white leather sneakers; cream fabric hair bow"],
+ ["of_13","Beige knit, blue jeans","Girls","child's oatmeal-beige chunky ribbed crew-neck sweater; light-blue straight wide-leg jeans with raw hems; taupe suede sneakers with cream side stripes, unbranded; small cream and tan leather crossbody bag"],
+ ["of_14","Navy sweater, light jeans","Boys","child's dark navy cotton crew-neck sweater, plain and unbranded; white cotton button-up shirt underneath; light-blue wide straight jeans; white canvas low-top sneakers"],
+ ["of_15","Camel cable knit, black jeans","Boys","child's camel cable-knit half-zip sweater with a stand collar over a white T-shirt; washed-black straight jeans; cream and beige leather sneakers"]
 ].map(([id,name,cat,d])=>({id,name,cat,d,src:`refs/${id}_t.jpg`}));
 const atOutfit=name=>AT_OUTFITS.find(o=>o.name.toLowerCase()===String(name||"").toLowerCase());
 const atOutfitsIn=text=>[...String(text||"").matchAll(/\[outfit: ([^\]]+)\]/gi)].map(m=>atOutfit(m[1])).filter(Boolean);
@@ -5022,7 +5026,7 @@ function lvCastInfo(){ const cs=CHAR_REFS.filter(r=>r.lib).map(r=>`"${charName(r
 CHARACTERS (name and shelf): ${cs.length?cs.join(", "):"none in the library — leave cast empty"}
 OUTFITS (name · for · pieces): ${AT_OUTFITS.map(o=>`"${o.name}" · ${o.cat} · ${o.d.slice(0,110)}`).join(" | ")}
 "cast" = the exact name of ONE character whose shelf fits the main person of the brief (Men for a man, Women for a woman, Kids for a child, Elderly for an older person), or "" when none fits. When you pick a character, write the brief about that same kind of person.
-"outfit" = the exact name of ONE outfit made for that person's gender that suits the scene, the season and the mood of the copy (calmer tailored ones for studio), or "" when none fits (always "" for children). When you pick an outfit, do not describe any other clothes in the brief.`; }
+"outfit" = the exact name of ONE outfit made for that person's gender that suits the scene, the season and the mood of the copy (calmer tailored ones for studio), or "" when none fits. Girls and Boys outfits are for children only, and a child never gets an adult outfit. When you pick an outfit, do not describe any other clothes in the brief.`; }
 const lvClean=x=>{ const c=CHAR_REFS.find(r=>r.lib&&charName(r.id).toLowerCase()===String(x?.cast||"").trim().toLowerCase()); x.cast=c?charName(c.id):""; x.castSrc=c?.src||""; const o=atOutfit(String(x?.outfit||"").trim()); x.outfit=o?o.name:""; x.outfitSrc=o?.src||""; return x; };
 async function lvRun(file){ if(LV.busy||!file) return; const box=$("lvOut"); if(!box) return;
   if(!sample){ LV.err="Claude isn't connected in this view."; lvDraw(); return; }
