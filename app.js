@@ -5200,12 +5200,16 @@ function lvUse(i){ const o=LV.out, x=o?.options?.[i]; if(!x) return; const mode=
     return out; }
   const toBlob=(c,type,q)=>new Promise(r=>c.toBlob(r,type,q));
   let tickAt=0; const tick=()=>{ const n=Date.now(); if(n-tickAt<250) return; tickAt=n; const el=$("upBusy"); if(el) el.textContent=U.busy; const pb=$("upProg"); if(pb) pb.value=Math.round(U.prog*100); };
+  /* the chosen image is kept in this browser, so a page reload (for example when the studio updates) does not lose it */
+  const idb=()=>new Promise((res,rej)=>{ const r=indexedDB.open("bae_upscale",1); r.onupgradeneeded=()=>r.result.createObjectStore("k"); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); });
+  async function keep(f){ try{ const d=await idb(); await new Promise((res,rej)=>{ const t=d.transaction("k","readwrite"); f?t.objectStore("k").put({blob:f,name:f.name,type:f.type,target:U.target},"last"):t.objectStore("k").delete("last"); t.oncomplete=res; t.onerror=()=>rej(t.error); }); d.close(); }catch{} }
+  async function restore(){ if(U.file) return; try{ const d=await idb(); const v=await new Promise((res,rej)=>{ const q=d.transaction("k").objectStore("k").get("last"); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); d.close(); if(v?.blob&&!U.file){ await setFile(new File([v.blob],v.name||"image",{type:v.type||v.blob.type}),true); if(v.target&&CHAIN[v.target]){ U.target=v.target; draw(); } U.msg0="Your last image is back. The enlarged versions are not kept after a reload, so press Upscale again."; draw(); } }catch{} }
   /* ---------- reading the picture ---------- */
-  async function setFile(f){ if(!f||!/^image\//.test(f.type)){ U.err="That file isn't an image. Use JPEG, PNG or WebP."; draw(); return; } if(U.busy) return;
+  async function setFile(f,quiet){ if(!f||!/^image\//.test(f.type)){ U.err="That file isn't an image. Use JPEG, PNG or WebP."; draw(); return; } if(U.busy) return; U.msg0="";
     try{ if(U.url) URL.revokeObjectURL(U.url); }catch{} const bmp=await createImageBitmap(f).catch(()=>null); if(!bmp){ U.err="Couldn't open that image."; draw(); return; }
     for(const r of U.runs){ try{ URL.revokeObjectURL(r.url); }catch{} }
     Object.assign(U,{file:f,url:URL.createObjectURL(f),w:bmp.width,h:bmp.height,scan:null,tune:ZERO(),runs:[],sel:-1,err:"",msg:"",marks:new Set(),note:"",auto:null});
-    const L=Math.max(bmp.width,bmp.height); U.target=L<=500?"10x":L<=800?"8x":L<=1600?"4x":"2x"; draw(); scan(); }
+    const L=Math.max(bmp.width,bmp.height); U.target=L<=500?"10x":L<=800?"8x":L<=1600?"4x":"2x"; draw(); if(!quiet) keep(f); scan(); }
   async function scan(){ const blank={quality:"soft",noise:"none",face:"none",faces:0,facebox:null,marks:[],describe:"",risk:""}; if(!sample||!U.file){ U.scan=blank; draw(); return; } const f=U.file; U.scanBusy=true; draw();
     try{ const o=await rlAsk(`You are a photo restoration specialist preparing an image for a faithful enlargement. Look at the attached image (${U.w}×${U.h} px) and report only what is really there.
 Return ONLY JSON:
@@ -5269,7 +5273,7 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
       </div>
       <div class="rl-btns"><button type="button" class="btn primary" data-upgo ${U.busy||big?"disabled":""}>${U.runs.length?"Upscale again":"Upscale"}</button>${U.busy?`<button type="button" class="btn small" data-upstop>Stop</button>`:""}</div>
       ${U.busy?`<div class="up-busy"><progress id="upProg" max="100" value="${Math.round(U.prog*100)}" aria-label="Progress"></progress><span class="t12" id="upBusy" role="status">${esc(U.busy)}</span></div>`:""}`:""}
-      ${U.err?`<p class="t12 bad" role="alert">${esc(U.err)}</p>`:""}
+      ${U.err?`<p class="t12 bad" role="alert">${esc(U.err)}</p>`:""}${U.msg0&&!U.runs.length?`<p class="t12" role="status">${esc(U.msg0)}</p>`:""}
       <p class="t12 muted">BAE Upscale runs on this computer's graphics card. Free, private, no outside service. Team tuning learned from ${+U.team.n||0} marked result${U.team.n===1?"":"s"}.</p>
     </section>
     ${o?`<section class="rl-card up-res">
@@ -5295,7 +5299,7 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
     const px=clamp(U.zoom.x*W-bw/2,0,Math.max(0,W-bw)), py=clamp(U.zoom.y*H-bh/2,0,Math.max(0,H-bh));
     for(const [el,src] of [[a,U.url],[b,o.url]]){ el.style.backgroundImage=`url("${src}")`; el.style.backgroundSize=`${W}px ${H}px`; el.style.backgroundPosition=`-${px}px -${py}px`; } }
   P.addEventListener("click",e=>{ const t=e.target;
-    const s=t.closest("[data-upscale]"); if(s){ if(!U.busy){ U.target=s.dataset.upscale; draw(); } return; }
+    const s=t.closest("[data-upscale]"); if(s){ if(!U.busy){ U.target=s.dataset.upscale; draw(); if(U.file) keep(U.file); } return; }
     if(t.closest("[data-upgo]")){ run(); return; } if(t.closest("[data-upstop]")){ U.stop=true; return; }
     if(t.closest("[data-upretry]")){ U.note=$("upNote")?.value||""; retry(); return; } if(t.closest("[data-upok]")){ approve(); return; }
     const dl=t.closest("[data-updl]"); if(dl){ download(dl.dataset.updl); return; } if(t.closest("[data-upcheck]")){ check(); return; }
@@ -5313,8 +5317,10 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
   P.addEventListener("pointerdown",e=>{ const bar=e.target.closest("#upBar"); if(!bar) return; e.preventDefault(); bar.setPointerCapture(e.pointerId); const mv=ev=>{ const r=$("upCmp").getBoundingClientRect(); setSplit((ev.clientX-r.left)/r.width*100); }; const up=()=>{ bar.removeEventListener("pointermove",mv); bar.removeEventListener("pointerup",up); bar.removeEventListener("pointercancel",up); }; bar.addEventListener("pointermove",mv); bar.addEventListener("pointerup",up); bar.addEventListener("pointercancel",up); });
   P.addEventListener("keydown",e=>{ if(e.target.id!=="upBar") return; if(e.key==="ArrowLeft"){ e.preventDefault(); setSplit(U.split-3); } else if(e.key==="ArrowRight"){ e.preventDefault(); setSplit(U.split+3); } });
   addEventListener("resize",()=>{ if(!P.hidden) loupe(); });
-  const open=()=>{ P.hidden=false; P.scrollTop=0; draw(); teamLoad().then(()=>{ if(!U.busy) draw(); }); };
-  $("openUpscale")?.addEventListener("click",open); $("closeUpscale")?.addEventListener("click",()=>{ P.hidden=true; $("openUpscale")?.focus(); });
+  const open=()=>{ P.hidden=false; P.scrollTop=0; try{ sessionStorage.setItem("bae_up_open","1"); }catch{} draw(); restore(); teamLoad().then(()=>{ if(!U.busy) draw(); }); };
+  $("openUpscale")?.addEventListener("click",open); $("closeUpscale")?.addEventListener("click",()=>{ P.hidden=true; try{ sessionStorage.removeItem("bae_up_open"); }catch{} $("openUpscale")?.focus(); });
+  /* if the page reloaded while this tool was open, come straight back to it */
+  try{ if(sessionStorage.getItem("bae_up_open")==="1") setTimeout(open,600); }catch{}
 })();
 
 boot();
