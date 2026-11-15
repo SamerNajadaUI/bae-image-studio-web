@@ -207,7 +207,15 @@ function syncCast(){ if(S.mode==="icon") return;
 function outfitNote(){ const L=atOutfitsIn($("brief")?.value); return L.length?` OUTFIT CHOSEN BY THE USER — mandatory, overrides every wardrobe rule of the look and the studio: ${L.map(o=>`[outfit: ${o.name}] = ${o.d}`).join(" | ")}. ${L.length>1?"Each outfit belongs to the person named right next to its tag in the brief; never swap or mix them. Each person wears":"The person wears"} exactly these pieces (same colours, fabrics and cuts), worn naturally; ${L.length>1?"the outfit sheets are":"the outfit sheet is"} attached as wardrobe reference${L.length>1?"s":""}. Describe the clothes in words in the prompt and never print the tag.`:""; }
 function castText(){ const chars=refPlan().filter(r=>isChar(r.id)); if(!chars.length) return "";
   return "CAST — these people are fixed characters; keep each one's exact identity (face, facial features, hairline and hairstyle, eye colour, skin tone, build): "+chars.map(r=>`${charLabel(r.id)} = ${r.tag} (${refById(r.id).look})`).join("; ")+". When the brief names a character, or describes a person of the same gender and age who is not otherwise named, that person IS the character. Characters keep their own look even where the generic people description would differ. Their clothing, pose and background in the reference are NOT used: dress them by the look rules for this scene."; }
-const MAX_REFS=6;
+const MAX_REFS=10;
+/* what each style reference is used for: the user chooses per image */
+const REF_USES={both:["Colour + light","COLOUR GRADING and LIGHTING reference: take its palette, tonal curve, contrast, saturation, white balance and the way skin tones render, and its light direction, light quality (hard or soft), shadows and highlights"],
+  grade:["Colour grading","COLOUR GRADING reference only: take its palette, tonal curve, contrast, saturation, white balance and the way skin tones render; ignore its light direction, camera and everything else"],
+  light:["Lighting","LIGHTING reference only: take its light direction, light quality (hard or soft), key-to-fill ratio, shadows, highlights and time-of-day feel; ignore its colours, camera and everything else"],
+  style:["Full style",""]};
+let REF_USE={}; try{ REF_USE=JSON.parse(localStorage.getItem("bae_ref_use")||"{}")||{}; }catch{}
+const refUsable=id=>{ const r=refById(id); return !!r&&id!=="user-image"&&!isChar(id)&&!isOutfit(id)&&!r.auto&&r.set!=="ic"; };
+const refUseOf=id=>REF_USES[REF_USE[id]]?REF_USE[id]:(refById(id)?.set==="bae"?"both":"style");
 
 /* ---------------- Jordanian faces: one casting lock for every image and video prompt in the studio ---------------- */
 const JO_FACE = `JORDANIAN FACES — CASTING LOCK (applies to every person in every image or video prompt):
@@ -655,18 +663,21 @@ function renderRefs(){
   $("refCount").textContent=`${S.picked.length} / ${MAX_REFS} · ${nb} BAE`;
   /* selected strip: always visible, click to remove */
   const pk=$("picked"); pk.innerHTML="";
-  if(!S.picked.length) pk.innerHTML='<span class="none">No references picked. Choose up to 6 below, or use Auto-pick.</span>';
+  if(!S.picked.length) pk.innerHTML=`<span class="none">No references picked. Choose up to ${MAX_REFS} below, or use Auto-pick.</span>`;
   S.picked.forEach(id=>{ const r=refById(id); if(!r) return; const b=document.createElement("button"); b.type="button"; b.className="pk"; b.title="Remove: "+r.d; b.setAttribute("aria-label","Remove reference: "+r.d);
-    b.innerHTML=`<img src="${r.src}" alt="">${isChar(id)?`<span class="pk-name">${esc(charLabel(id))}</span>`:""}`; b.onclick=()=>{ S.picked=S.picked.filter(x=>x!==id); S._autoCast=(S._autoCast||[]).filter(x=>x!==id); renderRefs(); }; pk.appendChild(b); });
+    b.innerHTML=`<img src="${r.src}" alt="">${isChar(id)?`<span class="pk-name">${esc(charLabel(id))}</span>`:""}`; b.onclick=()=>{ S.picked=S.picked.filter(x=>x!==id); S._autoCast=(S._autoCast||[]).filter(x=>x!==id); renderRefs(); };
+    if(refUsable(id)&&S.mode!=="icon"){ const w=document.createElement("div"); w.className="pkw"; w.appendChild(b); const s=document.createElement("select"); s.className="pk-use"; s.setAttribute("aria-label","Use this reference for"); s.title="What to take from this reference";
+      s.innerHTML=Object.entries(REF_USES).map(([k,v])=>`<option value="${k}">${v[0]}</option>`).join(""); s.value=refUseOf(id); s.onchange=()=>{ REF_USE[id]=s.value; try{ localStorage.setItem("bae_ref_use",JSON.stringify(REF_USE)); }catch{} }; w.appendChild(s); pk.appendChild(w); }
+    else pk.appendChild(b); });
 }
 function syncTabs(){ document.querySelectorAll("#refTabs button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.tab===S.refTab?"true":"false"));
   $("addRefWrap").hidden=S.refTab!=="user";
   $("refHint").textContent=({
     ic:"BAE illustration set (guidelines p.101, light mode). Sent to GPT 2.5 as style direction only: material, translucency, gradient, angle and lighting.",
     user:"Your own reference photos, kept only on this device. Add licensed images that show the light, wardrobe or camera angle you want.",
-    bae:"Photos from the Bank al Etihad guidelines. Picked frames go to Claude for style analysis and to Seedream 5.5 as references. Up to 6, from any set. Choosing Studio picks the BAE studio frames for you.",
+    bae:"Photos from the Bank al Etihad guidelines. Picked frames go to Claude for style analysis and to Seedream 5.5 as references. Up to 10, from any set. Under each picked photo choose what to take from it: colour grading, lighting, both, or the full style. Choosing Studio picks the BAE studio frames for you.",
     yt:"Youth campaign set: bold streetwear, low-angle wide camera, blue sky, hard sun and friends mid-laugh. Used for wardrobe, camera and energy; their logos and orange clothing are never copied.",
-    mj:"Mari Juliano lifestyle set, for clean natural light and candid energy. Mix with the other sets, up to 6 in total.",
+    mj:"Mari Juliano lifestyle set, for clean natural light and candid energy. Mix with the other sets, up to 10 in total.",
     ch:"The team's character library. Write a character's name in the brief and they are cast automatically."})[S.refTab]; }
 $("refTabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return; S.refTab=b.dataset.tab; syncTabs(); renderRefs(); });
 renderRefs(); syncTabs();
@@ -896,6 +907,7 @@ let refCache=null;
 /* What each reference is used for; the order here is the @img1, @img2… order sent to Magnific */
 function refRole(id,meta){
   const set=id==="user-image"?"user-image":meta?.set;
+  if(refUsable(id)&&S.mode!=="icon"){ const u=refUseOf(id); if(u!=="style") return {role:"image",use:REF_USES[u][1]}; }
   return ({
     "user-image":{role:"image",use:"camera and photography style direction (lens feel, light, colour); its subject is already described in words"},
     bae:{role:"image",use:meta?.auto?"STUDIO STYLE master reference — match its wall, light, negative space, framing, wardrobe styling and finish; never copy the person's face or identity":meta?.studio?"photography style direction: soft directional studio light, backdrop tone and colour grade":"photography style direction: light, depth of field, focus and colour grade"},
@@ -1057,6 +1069,8 @@ function refLine(list){
   const chars=list.filter(r=>isChar(key(r))), ofl=list.filter(r=>isOutfit(key(r))), style=list.filter(r=>!isChar(key(r))&&!isOutfit(key(r))), tags=style.map(r=>r.tag).join(", ");
   const ofLine=ofl.length?`Wardrobe reference: ${ofl.map(r=>`${r.tag} = outfit sheet "${refById(key(r))?.outfit||""}"`).join(", ")}. ${ofl.length>1?"Each sheet dresses the one person this prompt gives it to; never mix pieces between people. Dress each of them":"Dress the person"} in exactly the pieces shown there: same colours, fabrics, cuts and details, worn naturally and fitted to the pose. Never show the flat-lay itself, the grey board or loose items. `:"";
   const castLine=chars.length?`Character references (identity): ${chars.map(r=>`${r.tag} = ${charLabel(key(r))}`).join(", ")}. Keep each character's exact face, facial features, hairline and hairstyle, eye colour, skin tone and build so they are clearly the same person. Use ONLY their identity: ignore the clothing, grey backdrop, pose and three-panel sheet layout in those images; dress them by the look rules. `:"";
+  const picky=style.some(r=>refUsable(key(r))&&refUseOf(key(r))!=="style");
+  if(picky) return castLine+ofLine+`Reference images, each used ONLY for what is named: ${style.map(r=>{ const k=key(r), u=refUsable(k)?refUseOf(k):"style"; return `${r.tag} = ${u==="style"?"photographic style (camera angle, lens feel, depth of field, light and colour grade)":REF_USES[u][1]}`; }).join("; ")}. Match the named qualities closely so the image clearly shares that colour grade and that light. Recreate NOTHING literal from any of them: not the location, building, walls, furniture, objects, people, faces, poses, clothing, composition or framing. The scene, content and composition come only from this prompt.`;
   return castLine+ofLine+(!style.length?"":`Reference images (photographic style ONLY): ${tags}. Study them only for camera height and angle, lens and focal-length feel, depth of field, light direction and quality, colour grade, and the general kind of place (modern, open, architectural). Recreate NOTHING literal from them: not the location, building, walls, furniture, objects, people, faces, poses, clothing, clothing colours, composition or framing. The scene is a new, different place; content and composition come only from this prompt.`); }
 async function uploadRefs(){
   const sig=S.picked.join(",")+"|"+(S.upload&&$("useUpAsRef").checked?S.upload.size:"");
