@@ -105,6 +105,8 @@ const REFS = [
 ].map(([id,d])=>({id,d,src:`refs/${id}.jpg`,set:"mj",studio:false}));
 /* Photos from the Bank al Etihad guidelines (photography chapter, pp.106–114) */
 const BAE_REFS = [
+ ["st_minimal_01","BAE STUDIO STYLE (master reference): woman standing centred against a seamless warm cream wall with a soft pool of light, tone-on-tone camel satin blouse and tan pleated wide-leg trousers, light-oak table with two small props, wide negative space",1],
+ ["st_minimal_02","BAE STUDIO STYLE (master reference): man seated cross-legged on a light-oak chair, navy tailored suit over a cream crew-neck knit, burgundy socks, white-painted textured wall with soft raking sunlight, light oak floor, wide negative space",1],
  ["bae_b113_0","BAE studio people: woman in a white shirt seated, warm plaster backdrop, soft directional light, calm confident gaze",1],
  ["bae_b114_1","BAE studio set: bearded man in a camel knit cardigan over a white tee at a white desk, warm textured plaster wall, centred, direct gaze",1],
  ["bae_b114_2","BAE studio set: woman in a cream turtleneck with a jade-green knit skirt seated, patterned backdrop and sheer curtain, restrained architectural set",1],
@@ -117,10 +119,10 @@ const BAE_REFS = [
  ["bae_b111_1","BAE foreground bokeh: profile of a woman behind a soft warm blurred foreground",0],
  ["bae_b111_2","BAE clarity: man in sunglasses sharp amid a motion-blurred city street",0],
  ["bae_b111_3","BAE movement: woman mid-stride in a motion-blurred urban scene",0]
-].map(([id,d,st])=>({id,d,src:`refs/${id}.jpg`,set:"bae",studio:!!st}));
+].map(([id,d,st])=>({id,d,src:/^st_/.test(id)?`refs/${id}_t.jpg`:`refs/${id}.jpg`,set:"bae",studio:!!st,auto:/^st_/.test(id)}));
 const ALL_REFS=[...BAE_REFS,...REFS];
 const refById=id=>ALL_REFS.find(r=>r.id===id);
-const PICK_STUDIO=["bae_b113_0","bae_b114_1","bae_b114_2"];
+const PICK_STUDIO=["st_minimal_01","st_minimal_02","bae_b113_0"];
 const PICK_LOCATION=["bae_b106_1","bae_b111_2","bae_b107_1","bae_b108_2"];
 /* Youth campaign references sent by the client (style, wardrobe and camera only) */
 const YOUTH_REFS = [
@@ -137,7 +139,7 @@ const YOUTH_REFS = [
 ALL_REFS.push(...YOUTH_REFS);
 /* Bold defaults lean on the BAE guideline frames (clean, refined) with one youth frame for camera energy only */
 const PICK_BOLD=["bae_b108_2","bae_b111_2","bae_b106_1","yt04"];
-const PICK_BOLD_STUDIO=["bae_b113_0","bae_b114_1","bae_b114_2"];
+const PICK_BOLD_STUDIO=["st_minimal_01","st_minimal_02","bae_b113_0"];
 /* BAE illustration set (guidelines p.101, light mode), used as style direction for the Icons mode */
 const ICON_REFS=[
  ["ic_savings","BAE icon: translucent coin over a stack of orange-to-burgundy coins"],
@@ -284,7 +286,7 @@ Choose for the SCENE:
 Mood and camera: composed, warm and confident; eye-level or gentle angles with selective focus, foreground depth and soft directional natural light.`;
 const LOOK_CALM_NEG = "streetwear, oversized t-shirt, baggy jeans, teal clothing, colours outside the BAE palette, camel, brown, olive, mustard, cobalt, neon colours, all-beige outfit, head-to-toe beige, head-to-toe cream, all-white outfit, monochrome beige styling, sand-coloured outfits, matching couple outfits, matching coats, washed-out pastel wardrobe";
 const LOOK_BOLD_NEG = "streetwear, oversized t-shirt, graphic tee, baggy jeans, balloon trousers, tube socks, chunky sneakers, hoodie, teal clothing, green clothing, colours outside the BAE palette, yellow clothing, purple, red clothing, neon colours, more than one colour per outfit, muddy colours, stiff stock pose";
-function lookRule(){ return S.look==="Bold"?LOOK_BOLD+(S.setting==="Studio"?"\nIn the studio, keep the bold wardrobe, low-angle wide camera and saturated grade; the backdrop may be a single seamless colour from the fresh BAE palette (teal, sky blue, blush or light stone) instead of plaster.":""):LOOK_CALM; }
+function lookRule(){ return S.look==="Bold"?LOOK_BOLD+(S.setting==="Studio"?"\nIn the studio the STUDIO lock wins over this look: eye-level camera, calm pose, warm neutral grade and the plain warm wall. From the bold look keep only one stronger solid wardrobe colour (deep navy, burgundy or teal) worn as a clean block.":""):LOOK_CALM; }
 function lookLine(){ return S.look==="Bold"?"Look lock: BOLD & COLOURFUL — refined old-money minimal wardrobe (tailored trousers, crisp shirts, fine knits, clean blazers, loafers or white leather sneakers; never streetwear), crisp white or ink-black layers over ONE fresh BAE colour piece per person (blush #F1C0B6, raspberry #B9516E, burgundy #A33755 or sky blue #4BBCDF), each person a different colour, never teal or green; bright clean light, confident energy, clean punchy grade.":"Look lock: ELEGANT & CALM — refined old-money tailored wardrobe ONLY in the warm, deep BAE palette (ink #19181E, slate #4F4E62, burgundy #A33755, raspberry #B9516E, dusty rose #F1C0B6, stone #CCC3B4, ecru #FFFAF4), never streetwear, never teal: a deep anchor piece, one tonal mid-tone, ecru or white as one layer only, one quiet accent; ordered and harmonious; never head-to-toe stone, beige or cream, never matching outfits; gentle angle and soft natural light."; }
 const CLIENT_LINE = "Mandatory art direction: modern, contemporary, upscale setting; modern wardrobe that follows the look lock, with no orange clothing on anyone; no hijab, no headscarf, no traditional Arab clothing; professionally retouched skin with an even skin tone and subtle real texture; any phone is a modern iPhone 18 with no visible logo; modern Scandinavian IKEA-style decor.";
 const CLIENT_NEG = "orange clothing, orange shirt, orange jacket, orange dress, orange sweater, rust clothing, terracotta clothing, coral clothing, hijab, headscarf, head covering, niqab, abaya, thobe, dishdasha, keffiyeh, shemagh, kaftan, traditional Arab clothing, old buildings, souk, old town, rustic, dated decor, ornate furniture, clutter, old phone, generic phone, visible logo, blemishes, uneven skin tone, acne, plastic skin, waxy skin";
@@ -296,9 +298,16 @@ const COMPOSITION_NEG = "off-centre subject, subject on the left, subject on the
 /* A scene must tell its whole story: whoever the action involves is in the frame */
 const STORY_RULE = `STORY LOCK: show everything the action needs so the moment reads instantly. Paying or buying → a cashier or sales associate across the counter (facing the customer, softly in focus, dressed in the same refined style) and the shop's products displayed neatly and minimally behind (folded garments, boxed goods on light-oak shelves). Ordering → a barista or waiter. Meeting or advice → the other person. Never an empty counter, empty shop or missing counterpart. The main subject stays centred; secondary people are smaller or softer.`;
 const STORY_LINE = "Story lock: every person the action needs is in the frame (e.g. a cashier or sales associate across the counter when paying, with neatly displayed products), never an empty counter or empty shop; the main subject stays centred.";
-const STUDIO_RULE = `SETTING LOCK — STUDIO (overrides any location named in the brief or seen in the references): photographed in a professional photo studio on a minimal, softly architectural BAE set — warm plaster or stone-toned seamless backdrop (light stone #ECE8DF, warm beige, soft terracotta), light oak modern furniture. The set is a clean, minimal STAGED VERSION of the brief's place so the story reads instantly: for shopping, a minimal boutique counter with a sales associate and a few neatly folded garments or boxed products on light-oak shelves; for a café, a minimal counter with a barista; for home, a sofa and side table. Every person the action needs is there. Soft directional key light from a large softbox that reads as clean natural window light, gentle fill, soft shadow. No real-world location: no café, no street, no shop, no outdoor or city background, no window views. Like the BAE studio references (woman in white shirt, man in brown cardigan at a desk, woman in cream turtleneck).`;
-const STUDIO_LINE = "Setting lock: STUDIO. Shot in a professional studio on a minimal, softly architectural set with a warm plaster or stone-toned seamless backdrop and light oak modern furniture, dressed as a clean minimal staged version of the brief's place (e.g. a boutique counter with a sales associate and neatly displayed products) with every person the action needs; soft directional softbox key light that reads as clean natural window light. No real location, no café, no street, no outdoor or city background.";
-const STUDIO_NEG = "outdoor, street, city background, window view, landscape, real-world location, empty set, missing cashier";
+const STUDIO_RULE = `SETTING LOCK — STUDIO, MINIMAL AND CLEAN (overrides any location named in the brief or seen in other references; overrides the look's camera and grade). Match the two BAE STUDIO STYLE master references exactly in style, never in face or identity:
+- SET: one plain wall and nothing else — a seamless warm cream / light-stone wall (#ECE8DF to warm beige), smooth plaster or white-painted board-textured, optionally a light oak plank floor. Empty, calm, architectural. No decor, no plants, no shelves, no screens, no signage.
+- PROPS: at most ONE piece of light-oak or walnut furniture (a chair, a stool or a small table) plus at most two small objects that tell the brief's story (a phone, a card, a microphone, an amber glass). A place named in the brief becomes these one or two props, never a built set. Every person the action needs is present, nobody extra.
+- COMPOSITION: wide frame with generous negative space on both sides for copy; the subject centred or just off-centre and small in the frame (about half to two-thirds of the height), full body or medium-full; eye-level camera, straight and level, 50–85mm look, f/4–5.6 so the person, clothes and props are all crisp.
+- LIGHT: one large soft warm key from the side that reads as window light, low contrast, soft natural shadow; a gentle pool of light or soft raking diagonal sun shapes on the wall behind the subject; faint natural vignette. No hard flash, no coloured gels, no rim lights.
+- WARDROBE: smart, tailored, modern, solid colours only — tone-on-tone earth (camel, tan, sand, cream, taupe) or one deep block (navy, ink) over cream; fine fabrics with visible texture and drape (satin, wool, fine knit); pleated wide-leg trousers, a draped blouse, an unstructured suit over a crew-neck knit, no tie; leather shoes. Exactly one small BAE accent in burgundy, terracotta or orange (socks, a glass, a notebook). No patterns, no logos, no prints, no heavy jewellery.
+- PEOPLE: calm, composed, confident; relaxed posture (hand on hip, legs crossed, hand resting on furniture); natural skin texture, minimal make-up, groomed hair.
+- FINISH: high-end editorial campaign photograph, medium-format clarity, true fabric and skin detail, warm neutral grade (cream, sand, oak), clean and uncluttered, no grain, no HDR.`;
+const STUDIO_LINE = "Setting lock: STUDIO, minimal and clean. One seamless warm cream / light-stone wall (smooth plaster or white-painted texture), optional light oak floor, at most one light-oak or walnut piece of furniture and two small story props; wide frame with generous negative space, subject centred and small in frame, eye-level, everything crisp; one large soft warm side key with a gentle pool of light or soft raking sun shapes on the wall; tailored solid-colour wardrobe, tone-on-tone earth or deep navy over cream, one small burgundy/terracotta accent, no patterns or logos; calm composed pose; high-end editorial finish. No real location, no built set, no clutter.";
+const STUDIO_NEG = "outdoor, street, city background, window view, landscape, real-world location, cluttered set, shelves, plants, decor, patterned clothing, printed fabric, logos on clothing, coloured gels, hard flash, low angle distortion, wide-angle distortion, busy background, oversaturated colours";
 const LOCATION_LINE = "Setting lock: on location in a real, modern, upscale place in Amman.";
 function settingRule(){ return S.setting==="Studio"?STUDIO_RULE:(S.look==="Bold"?`SETTING LOCK — ON-LOCATION: the real, modern, upscale place the brief names (in modern Amman), bright and clean; when outdoors, a bright open sky behind the subjects.`:`SETTING LOCK — ON-LOCATION: the real, modern, upscale place the brief names (modern Amman), with depth layers and foreground bokeh.`); }
 const REF_STYLE = CLIENT_RULES + "\n\n" + `REFERENCE PHOTOGRAPHER STYLE (Mari Juliano, lifestyle): bright, clean natural daylight (window light or open sun); crisp, sharp subjects with true-to-life colour; candid, genuine laughter and interaction captured mid-action; tidy, styled but lived-in real homes, cafés and parks; colour-coordinated wardrobe against the set; occasional low angles against open sky and overhead tabletop views. Blend: keep the clean natural light and candid energy, shift the palette to BAE warmth, add BAE depth layers and foreground bokeh, and place it in Jordan.`;
@@ -728,7 +737,7 @@ Requirements:
 - Photorealistic, 2K, real camera language (lens, aperture, angle), believable Jordanian people in modern places.
 - Apply every point of the CLIENT ART DIRECTION explicitly in the prompt: modern upscale setting, modern elegant wardrobe, no hijab or traditional Arab clothing, professionally retouched even skin tone, iPhone 18 for any phone, modern IKEA-style decor.
 - State the composition explicitly: the person centred on the vertical centre line, balanced framing, equal space left and right.
-- ${S.setting==="Studio"?"STUDIO: describe the studio set, backdrop and softbox light explicitly; translate any location in the brief into one or two modern props on the set; no real location.":"ON-LOCATION: encode depth layers and foreground bokeh in a modern real place."}
+- ${S.setting==="Studio"?"STUDIO: describe the plain warm wall, the single piece of furniture, the soft side light with its light shape on the wall, the wide negative space and the tailored solid-colour wardrobe explicitly; translate any location in the brief into one or two small props; no real location, no built set.":"ON-LOCATION: encode depth layers and foreground bokeh in a modern real place."}
 - ${S.look==="Bold"?"LOOK BOLD & COLOURFUL: dress each person in refined old-money minimal style for THIS scene (tailored trousers, crisp shirts, fine knits, clean blazers or overshirts, loafers or white leather sneakers; never streetwear) and name every piece with its colour: crisp white or ink-black layers over ONE colour piece from blush, raspberry, burgundy or sky blue, a different colour for each person, never teal or green. Then camera, light and a confident, natural moment.":"LOOK ELEGANT & CALM: choose each person's outfit for THIS scene and name every piece with its colour, using ONLY the warm, deep BAE palette (ink, slate, burgundy, raspberry, dark teal, dusty rose, stone, ecru): a deep anchor, a tonal mid-tone, ecru or white as one layer, one quiet accent; people in the same frame take different colour families; never head-to-toe stone, beige or cream."}
 - Encode selective focus with one focal anchor${S.look==="Bold"?" (faces sharp)":" and the BAE warm palette"}.
 - REFERENCES ARE STYLE ONLY: you have seen them and understand their photography; carry over only camera height and angle, lens feel, depth of field, light quality, colour grade and the general kind of place. Invent a NEW scene: never write "same place/location/room/street as", "like the reference image", "recreate", "replicate" or anything that copies a reference's location, objects, people, poses, wardrobe or layout, and never describe what a reference shows. Wardrobe comes only from the look rules.
@@ -849,7 +858,7 @@ function refRole(id,meta){
   const set=id==="user-image"?"user-image":meta?.set;
   return ({
     "user-image":{role:"image",use:"camera and photography style direction (lens feel, light, colour); its subject is already described in words"},
-    bae:{role:"image",use:meta?.studio?"photography style direction: soft directional studio light, backdrop tone and colour grade":"photography style direction: light, depth of field, focus and colour grade"},
+    bae:{role:"image",use:meta?.auto?"STUDIO STYLE master reference — match its wall, light, negative space, framing, wardrobe styling and finish; never copy the person's face or identity":meta?.studio?"photography style direction: soft directional studio light, backdrop tone and colour grade":"photography style direction: light, depth of field, focus and colour grade"},
     yt:{role:"image",use:"camera and photography style direction: low wide angle, lens feel, hard sunlight, saturated colour grade and styling energy"},
     mj:{role:"image",use:"photography style direction: clean natural light and colour"},
     user:{role:"image",use:"camera and photography style direction"},
@@ -872,7 +881,7 @@ function syncSetup(){ const box=$("setup"); if(!box) return;
   $("setupMagBtn").textContent=magOk?"Connected":"Connect"; $("setupMagBtn").disabled=magOk;
   $("setupLibBtn").textContent=libOk?"Linked":"Set up"; $("setupLibBtn").disabled=libOk;
   box.hidden=magOk&&libOk; }
-function libSummary(){ const n=Object.keys(S.magIds||{}).length; const total=ALL_REFS.filter(r=>r.set!=="user").length; return n?`${n} of ${total} references linked from your Magnific library.`:"Not linked yet. Upload the reference pack to a Magnific folder named “BAE References”, then press Link library."; }
+function libSummary(){ const n=Object.keys(S.magIds||{}).length; const total=ALL_REFS.filter(r=>r.set!=="user"&&!r.auto).length; return n?`${n} of ${total} references linked from your Magnific library.`:"Not linked yet. Upload the reference pack to a Magnific folder named “BAE References”, then press Link library."; }
 /* Names in the pack: bae_b114_1, yt04, r025 (Magnific may drop the .jpg) */
 /* Magnific can rewrite upload names ("bae b114 1", "Bae-B114-1", "bae_b114_1 (1)"), so each known
    reference id is matched with any separator (space, _, -, .) or none between its parts */
@@ -956,11 +965,11 @@ async function linkLibrary(){
         ["creations_search",`Find every creation, asset and uploaded image inside the folder/project "${folder.name}" (reference ${JSON.stringify(folder.ref)}), including uploads, maximum results, with names.`]]){
         const pl=await tryList(tool,goal,fdata); const cnt=await absorb(pl);
         log("·","library via "+tool,{items:cnt,matched:Object.keys(map).length});
-        if(Object.keys(map).length>=ALL_REFS.filter(r=>r.set!=="user").length) break;
+        if(Object.keys(map).length>=ALL_REFS.filter(r=>r.set!=="user"&&!r.auto).length) break;
       }
     }
     const seenIds=new Set(); let tmpl=null;
-    for(let page=0;page<30&&Object.keys(map).length<ALL_REFS.filter(r=>r.set!=="user").length;page++){
+    for(let page=0;page<30&&Object.keys(map).length<ALL_REFS.filter(r=>r.set!=="user"&&!r.auto).length;page++){
       libStatus(`Reading your Magnific library… page ${page+1}, ${Object.keys(map).length} references found`);
       let la;
       if(page>0&&tmpl&&S._libCursor!=null) la={args:replaceDeep(tmpl,"__CURSOR__",S._libCursor)};
@@ -978,7 +987,7 @@ async function linkLibrary(){
     S._libCursor=null; S.magIds={...(S.magIds||{}),...map}; try{ localStorage.setItem(LIB_KEY,JSON.stringify(map)); }catch{}
     refCache=null;
     const n=Object.keys(S.magIds).length;
-    const total=ALL_REFS.filter(r=>r.set!=="user"); const missing=total.filter(r=>!S.magIds[r.id.toLowerCase()]).map(r=>r.id);
+    const total=ALL_REFS.filter(r=>r.set!=="user"&&!r.auto); const missing=total.filter(r=>!S.magIds[r.id.toLowerCase()]).map(r=>r.id);
     if(n) libStatus(`${n} of ${total.length} references linked${folder?` from “${folder.name}”`:""}. They are attached as @img1, @img2… automatically.${missing.length?` Not in Magnific yet: ${missing.slice(0,8).join(", ")}${missing.length>8?` and ${missing.length-8} more`:""}.`:""}`,"ok");
     else libStatus(folder?`Found “${folder.name}” with ${seen} items, but no file names matched (bae_b114_1.jpg, yt04.jpg…). Keep the original file names from the pack, then link again.`:"No “BAE References” folder found. Create it in Magnific, drag the reference pack into it, then press Link library.","bad");
     renderRefs();
@@ -991,7 +1000,7 @@ async function downloadPack(){
   try{
     if(!window.JSZip) throw new Error("zip library didn't load");
     const zip=new JSZip(); const refs=ALL_REFS.filter(r=>r.set!=="user");
-    for(const r of refs){ const res=await fetch(r.src); if(res.ok) zip.file(r.id+".jpg",await res.blob()); }
+    for(const r of refs){ const res=await fetch(`refs/${r.id}.jpg`); if(res.ok) zip.file(r.id+".jpg",await res.blob()); }
     const blob=await zip.generateAsync({type:"blob"});
     if(downloads) await downloads.save({filename:"BAE-References.zip",data:blob});
     else { const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="BAE-References.zip"; a.click(); }
@@ -1015,7 +1024,7 @@ async function uploadRefs(){
   const list=[], errors=[], missing=[];
   /* your own images (uploaded characters, your references, the brief image) are sent to your Magnific once and remembered */
   let UMAG={}; try{ UMAG=JSON.parse(localStorage.getItem("bae_user_magids")||"{}"); }catch{}
-  const mine=it=>it.id==="user-image"||refById(it.id)?.user||refById(it.id)?.set==="user";
+  const mine=it=>it.id==="user-image"||refById(it.id)?.user||refById(it.id)?.auto||refById(it.id)?.set==="user";
   const unlinked=items.filter(it=>!mine(it)&&!S.magIds?.[String(it.id).toLowerCase()]).map(it=>String(it.id).toLowerCase());
   if(unlinked.length&&!S.allowDirectUpload) await findRefsByName(unlinked);
   for(const it of items){
