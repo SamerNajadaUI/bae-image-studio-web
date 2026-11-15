@@ -353,8 +353,10 @@ const STUDIO_RULE = `SETTING LOCK — STUDIO, MINIMAL AND CLEAN (overrides any l
 - FINISH: high-end editorial campaign photograph, medium-format clarity, true fabric and skin detail, warm neutral grade (cream, sand, oak), clean and uncluttered, no grain, no HDR.`;
 const STUDIO_LINE = "Setting lock: STUDIO, minimal and clean. One seamless warm cream / light-stone wall (smooth plaster or white-painted texture), optional light oak floor, at most one light-oak or walnut piece of furniture and two small story props; wide frame with generous negative space, subject centred and small in frame, eye-level, everything crisp; one large soft warm side key with a gentle pool of light or soft raking sun shapes on the wall; tailored solid-colour wardrobe, tone-on-tone earth or deep navy over cream, one small burgundy/terracotta accent, no patterns or logos; calm unposed moment, eyes away from the camera, body turned three-quarter; high-end editorial finish. No real location, no built set, no clutter.";
 const STUDIO_NEG = "outdoor, street, city background, window view, landscape, real-world location, cluttered set, shelves, plants, decor, patterned clothing, printed fabric, logos on clothing, coloured gels, hard flash, low angle distortion, wide-angle distortion, busy background, oversaturated colours";
-const LOCATION_LINE = "Setting lock: on location in a real, modern, upscale place in Amman.";
-function settingRule(){ return S.setting==="Studio"?STUDIO_RULE:(S.look==="Bold"?`SETTING LOCK — ON-LOCATION: the real, modern, upscale place the brief names (in modern Amman), bright and clean; when outdoors, a bright open sky behind the subjects.`:`SETTING LOCK — ON-LOCATION: the real, modern, upscale place the brief names (modern Amman), with depth layers and foreground bokeh.`); }
+const LOCATION_LINE = "Setting lock: on location in a real, modern, upscale place in Amman. Background softly blurred with shallow depth of field (f/2 look), clean and nearly empty: open sky, soft greenery or one plain wall; no building, facade or busy detail behind the people.";
+const LOCATION_BG=`
+BACKGROUND LOCK — ON-LOCATION (mandatory): everything behind the people is softly blurred: shallow depth of field, f/1.8–2.8 look on a 50–85mm lens, creamy soft bokeh, the people tack sharp. The background is clean and nearly empty, with very few elements: open sky, a soft blurred line of trees or greenery, one plain wall or a far soft horizon. Outdoors, most of what is behind and above the people is open sky. NO building dominating the frame, no facade or architecture filling the background, no windows, lamp posts, railings, signs or parked cars behind the heads; if any building appears it is small, far away, low in the frame and fully out of focus. Nothing in the background competes with the people.`;
+function settingRule(){ return S.setting==="Studio"?STUDIO_RULE:LOCATION_BG.trim()+"\n"+(S.look==="Bold"?`SETTING LOCK — ON-LOCATION: the real, modern, upscale place the brief names (in modern Amman), bright and clean; when outdoors, a bright open sky behind the subjects.`:`SETTING LOCK — ON-LOCATION: the real, modern, upscale place the brief names (modern Amman), with depth layers and foreground bokeh.`); }
 const REF_STYLE = CLIENT_RULES + "\n\n" + `REFERENCE PHOTOGRAPHER STYLE (Mari Juliano, lifestyle): bright, clean natural daylight (window light or open sun); crisp, sharp subjects with true-to-life colour; candid, genuine laughter and interaction captured mid-action; tidy, styled but lived-in real homes, cafés and parks; colour-coordinated wardrobe against the set; occasional low angles against open sky and overhead tabletop views. Blend: keep the clean natural light and candid energy, shift the palette to BAE warmth, add BAE depth layers and foreground bokeh, and place it in Jordan.`;
 
 /* ---------------- state ---------------- */
@@ -838,7 +840,7 @@ const genKey=()=>S.mode==="icon"?"icon":"nano";
 /* Icons render with GPT 2.5 only; photography with Seedream 5.5 */
 const genKeys=()=>S.mode==="icon"?["icon"]:["nano"];
 const isIconKey=k=>k==="icon"||k==="iconNano";
-function negativeNow(){ if(S.mode==="icon") return ICON_NEG; return [S.negative||"logos, text, watermark, signage, oversaturated, HDR, extra fingers",CLIENT_NEG,COMPOSITION_NEG,S.setting==="Studio"?STUDIO_NEG:"",S.look==="Bold"?LOOK_BOLD_NEG:LOOK_CALM_NEG].filter(Boolean).join(", "); }
+function negativeNow(){ if(S.mode==="icon") return ICON_NEG; return [S.negative||"logos, text, watermark, signage, oversaturated, HDR, extra fingers",CLIENT_NEG,COMPOSITION_NEG,S.setting==="Studio"?STUDIO_NEG:"sharp detailed background, building dominating the background, busy architecture behind the subject, deep focus, cluttered background, lamp posts, signage",S.look==="Bold"?LOOK_BOLD_NEG:LOOK_CALM_NEG].filter(Boolean).join(", "); }
 const STEPS=["Upload references","Render in 2K","2K check","Ready"];
 function aspectVal(){ if(S.mode==="icon") return "16:9"; const v=$("aspect").value; if(v==="custom"){ const w=parseInt($("cw").value,10)||0,h=parseInt($("ch").value,10)||0; return w&&h?{width:w,height:h}:"auto"; } return v; }
 function aspectText(){ const a=aspectVal(); return typeof a==="string"?a:`${a.width}×${a.height}px`; }
@@ -1343,21 +1345,43 @@ $("presets").addEventListener("click",e=>{ const p=e.target.closest("button[data
 
 const HKEY="bae_history_v1";
 function loadHist(){ try{ return JSON.parse(localStorage.getItem(HKEY)||"[]"); }catch{ return []; } }
-function saveHist(h){ try{ localStorage.setItem(HKEY,JSON.stringify(h.slice(0,12))); }catch{ try{ localStorage.setItem(HKEY,JSON.stringify(h.slice(0,4).map(x=>({...x,thumb:null})))); }catch{} } }
+const HMAX=40;
+function saveHist(h){ try{ localStorage.setItem(HKEY,JSON.stringify(h.slice(0,HMAX))); }catch{ try{ localStorage.setItem(HKEY,JSON.stringify(h.slice(0,HMAX).map((x,i)=>i<8?x:{...x,thumb:null,prompt:String(x.prompt||"").slice(0,1500)}))); }catch{ try{ localStorage.setItem(HKEY,JSON.stringify(h.slice(0,6).map(x=>({...x,thumb:null})))); }catch{} } } }
 async function thumbOf(dataUrl){ try{ const bmp=await createImageBitmap(await (await fetch(dataUrl)).blob()); const k=240/Math.max(bmp.width,bmp.height); const c=document.createElement("canvas"); c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k); c.getContext("2d").drawImage(bmp,0,0,c.width,c.height); return c.toDataURL("image/jpeg",.78); }catch{ return null; } }
-async function addHistory(o){
-  const h=loadHist(); h.unshift({thumb:o.img?await thumbOf(o.img):null,url:o.url||null,res:o.long>=2000?"2K":(o.long?o.long+"px":""),aspect:aspectText(),look:S.look,setting:S.setting,brief:$("brief").value.slice(0,140),t:Date.now()});
-  saveHist(h); renderHistory();
+async function addHistory(o,key){
+  const k=key||Object.keys(cards).find(q=>cards[q]?.outs?.includes(o))||(S.mode==="icon"?"icon":"nano");
+  const x={hid:"h"+Date.now().toString(36)+Math.random().toString(36).slice(2,5),id:o.id||null,thumb:o.img?await thumbOf(o.img):null,url:o.url||null,webUrl:o.webUrl||null,res:o.long>=2000?"2K":(o.long?o.long+"px":""),long:o.long||0,aspect:aspectText(),aspectVal:$("aspect")?.value||"",look:S.look,setting:S.setting,mode:S.mode,key:k,
+    brief:String($("brief").value||"").slice(0,2000),prompt:String($(MODELS[k]?.prompt||"pNano")?.value||"").slice(0,7000),note:o.edit?("Edit: "+String(o.edit).slice(0,80)):(o.angle||""),t:Date.now()};
+  const h=loadHist(); h.unshift(x); saveHist(h); renderHistory(); histCloud(x);
+}
+/* the list also lives in the user's private space, so it follows them to another device */
+async function histCloud(x){ try{ await rlStoreInit(); if(!RLS.db||!RLS.uid) return; await RLS.db.collection(`data/users/${RLS.uid}/hist`).doc(x.hid).set(JSON.parse(JSON.stringify(x))); }catch{} }
+async function histPull(){ try{ await rlStoreInit(); if(!RLS.db||!RLS.uid) return; const sn=await RLS.db.collection(`data/users/${RLS.uid}/hist`).get(); const cloud=sn.docs.map(d=>JSON.parse(JSON.stringify(d.data()))).filter(x=>x&&x.hid);
+    const h=loadHist(), have=new Set(h.map(x=>x.hid)); let add=0; for(const x of cloud){ if(!have.has(x.hid)){ h.push(x); add++; } } if(add){ h.sort((p,q)=>(q.t||0)-(p.t||0)); saveHist(h); renderHistory(); }
+    const old=cloud.sort((p,q)=>(q.t||0)-(p.t||0)).slice(HMAX); for(const x of old) RLS.db.collection(`data/users/${RLS.uid}/hist`).doc(x.hid).delete().catch(()=>{}); }catch{} }
+/* open a past image again: the brief, the prompt and the image come back, ready to change or regenerate */
+async function histOpen(x){
+  try{ if(x.mode&&S.mode!==x.mode) setMode(x.mode);
+    if(x.mode!=="icon"){ if(x.setting) document.querySelector(`.seg[data-key="setting"] button[data-v="${x.setting}"]`)?.click(); if(x.look) document.querySelector(`.seg[data-key="look"] button[data-v="${x.look}"]`)?.click();
+      const as=$("aspect"); if(as&&x.aspectVal&&[...as.options].some(p=>p.value===x.aspectVal)){ as.value=x.aspectVal; as.dispatchEvent(new Event("change",{bubbles:true})); } }
+    const b=$("brief"); b.value=x.brief||""; b.dispatchEvent(new Event("input",{bubbles:true}));
+    const k=MODELS[x.key]?x.key:(S.mode==="icon"?"icon":"nano"); const pf=$(MODELS[k].prompt); if(pf&&x.prompt){ pf.value=x.prompt; pf.dispatchEvent(new Event("input",{bubbles:true})); }
+    const o={id:x.id||null,url:x.url||null,img:x.thumb||null,blob:null,long:x.long||0,webUrl:x.webUrl||null,pending:false};
+    cards[k]={busy:false,done:true,t0:x.t||Date.now(),steps:["ok","ok","ok","ok"],stepNote:["from Recent","","",""],outs:[o],sel:0,editMsg:x.id?"Opened from Recent. Change one thing, or regenerate.":""}; renderCard(k,cards[k]); syncButtons?.();
+    $(MODELS[k].el)?.scrollIntoView({behavior:"smooth",block:"center"});
+    if(x.id&&mcp&&S.connected){ try{ const pv=await preview(x.id); if(pv?.image&&cards[k]?.outs?.[0]===o){ o.img=`data:${pv.image.mime};base64,${pv.image.data}`; o.blob=b64Blob(pv.image.data,pv.image.mime); o.url=o.url||pv.urls?.[0]||null; renderCard(k,cards[k]); } }catch{} }
+  }catch(e){ log("✕","open recent",{message:e?.message}); }
 }
 function renderHistory(){
   const h=loadHist(), box=$("history");
   $("btnClearHist").hidden=!h.length;
-  if(!h.length){ box.innerHTML='<div class="empty" style="grid-column:1/-1">Images you create appear here with their PNG links, so you can find them again after reloading.</div>'; return; }
-  box.innerHTML=h.map((x,i)=>`<div class="hist"><button type="button" class="im" data-i="${i}" title="${esc(x.brief)}" aria-label="Open image ${i+1}">${x.thumb?`<img src="${x.thumb}" alt="">`:`<span>${esc(x.aspect)} · ${esc(x.res||"")}</span>`}</button><div class="meta"><span>${esc(x.res||"")} · ${esc(x.aspect)}</span>${x.url?`<a href="${esc(x.url)}" target="_blank" rel="noopener">PNG</a>`:""}</div></div>`).join("");
+  if(!h.length){ box.innerHTML='<div class="empty" style="grid-column:1/-1">Images you create appear here. Open one to change it or carry on from it.</div>'; return; }
+  box.innerHTML=h.map((x,i)=>`<div class="hist"><button type="button" class="im" data-i="${i}" title="${esc(String(x.brief||"").slice(0,200))}" aria-label="Open image ${i+1} to continue">${x.thumb?`<img src="${x.thumb}" alt="">`:`<span>${esc(x.aspect)} · ${esc(x.res||"")}</span>`}</button><div class="meta"><span>${esc(new Date(x.t||Date.now()).toLocaleDateString("en-GB",{day:"numeric",month:"short"}))} · ${esc(x.res||"")}</span>${x.url?`<a href="${esc(x.url)}" target="_blank" rel="noopener">PNG</a>`:""}</div>${x.note?`<span class="t12 muted" data-noi18n>${esc(x.note)}</span>`:""}<button type="button" class="btn small" data-open="${i}">Open to edit</button></div>`).join("");
   box.querySelectorAll(".im").forEach(b=>b.onclick=()=>{ const x=h[+b.dataset.i]; if(x.thumb) openLightbox(x.thumb); else if(x.url) window.open(x.url,"_blank","noopener"); });
+  box.querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>histOpen(h[+b.dataset.open]));
 }
-$("btnClearHist").onclick=()=>{ saveHist([]); renderHistory(); };
-renderHistory();
+$("btnClearHist").onclick=()=>{ const b=$("btnClearHist"); if(b.dataset.sure){ delete b.dataset.sure; b.textContent="Clear"; const old=loadHist(); saveHist([]); renderHistory(); rlStoreInit().then(()=>{ if(RLS.db&&RLS.uid) old.forEach(x=>x.hid&&RLS.db.collection(`data/users/${RLS.uid}/hist`).doc(x.hid).delete().catch(()=>{})); }).catch(()=>{}); } else { b.dataset.sure="1"; b.textContent="Clear all? Press again"; setTimeout(()=>{ if(b.dataset.sure){ delete b.dataset.sure; b.textContent="Clear"; } },4000); } };
+renderHistory(); setTimeout(()=>histPull(),2500);
 
 /* ================= WEB RUNTIME (GitHub Pages and any page outside claude.ai) =================
    Claude via the Anthropic Messages API and Nano Banana 2.1 via the Google Gemini API, called
