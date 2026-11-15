@@ -4972,13 +4972,114 @@ function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span
     return (BF.busy?`<p class="t12" role="status">${esc(BF.busy)}</p>`:"")+(BF.err?`<p class="t12 bad" role="alert">${esc(BF.err)}</p>`:"")+SHELVES.map(([k,title,note])=>{ const L=BF.list.filter(f=>f.shelf===k); if(!L.length&&!BF.canEdit) return "";
       return `<div class="bi-shelf"><div class="bi-shelfhead"><div><b>${title}</b><span class="t12 muted">${note}</span></div>${BF.canEdit?`<label class="btn small">Add files<input type="file" multiple class="sr" data-bfadd="${k}"></label>`:""}</div>
         ${L.length?`<div class="bi-files">${L.map(f=>`<div class="bi-file"><div class="pv">${f.prev?`<img src="${f.prev}" alt="">`:`<span>${esc((f.name.split(".").pop()||"file").toUpperCase().slice(0,4))}</span>`}</div><div class="tx"><b dir="auto" data-noi18n>${esc(f.name)}</b><span class="t12 muted">${kb(f.size)}</span></div><div class="rl-btns"><button type="button" class="btn small primary" data-bfdl="${esc(f.id)}">Download</button>${BF.canEdit?`<button type="button" class="bi-x" data-bfrm="${esc(f.id)}">Remove</button>`:""}</div></div>`).join("")}</div>`:`<p class="t12 muted">Nothing here yet. Add the official files from the asset library.</p>`}</div>`; }).join("")||`<p class="muted">No files yet. The studio owner adds the official assets.</p>`; }
+  /* ---------- Templates and gradients: every digital size, built from points, saved as SVG that opens as editable layers in Figma ---------- */
+  const FORMATS=[["Social",[["Instagram post 1:1",1080,1080],["Instagram portrait 4:5",1080,1350],["BAE portrait 3:4",1080,1440],["Story / Reel 9:16",1080,1920],["Facebook post",1200,630],["LinkedIn post",1200,627],["LinkedIn square",1200,1200],["X post 16:9",1600,900],["YouTube thumbnail",1280,720],["WhatsApp status",1080,1920]]],
+    ["Covers",[["LinkedIn cover",1584,396],["Facebook cover",1640,624],["X header",1500,500],["YouTube banner",2560,1440],["Email header",1200,400]]],
+    ["Display ads",[["Medium rectangle",300,250],["Large rectangle",336,280],["Leaderboard",728,90],["Billboard",970,250],["Half page",300,600],["Wide skyscraper",160,600],["Mobile banner",320,50],["Mobile large",320,100]]],
+    ["Screens",[["Presentation 16:9",1920,1080],["Web hero",1440,600],["App splash",1170,2532],["Digital screen portrait",1080,1920],["Digital screen landscape",3840,2160]]]];
+  const FLAT=FORMATS.flatMap(g=>g[1].map(f=>({g:g[0],name:f[0],w:f[1],h:f[2]})));
+  const TBG={orange:{name:"Orange",base:"#FA6428",ink:"#FFFFFF",blobs:["#C13A23","#FB9A75","#FDCBB4","#A33755","#FFFAF4"]},
+    ink:{name:"Ink",base:"#19181E",ink:"#FFFAF4",blobs:["#4F4E62","#A33755","#C13A23","#196E78","#FA6428"]},
+    stone:{name:"Stone",base:"#ECE8DF",ink:"#19181E",blobs:["#CCC3B4","#FFFAF4","#FDCBB4","#F1C0B6","#FB9A75"]}};
+  const SHAPES=[["field","Full field"],["frame","Frame"],["corner","Corner"],["glow","Centre glow"],["wave","Diagonal wave"],["band","Bottom band"]];
+  const LAYOUTS=[["grad","Gradient only"],["logo","Logo"],["copy","Logo + copy"],["image","Image + copy"]];
+  const TP={fmt:0,bg:"orange",layout:"grad",lang:"en",shape:"field",seed:1,pts:null,sel:-1,head:"",sub:"",ask:"",busy:"",err:""};
+  const rng=s=>{ let a=(s*2654435761)>>>0; return ()=>{ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; };
+  /* points are stored in 0..1 of the frame, so one gradient fits every size; r is a share of the frame's mean side */
+  function makePoints(bg,shape,seed){ const R=rng(seed*97+shape.length*13+bg.length), c=TBG[bg].blobs, j=(v,a)=>v+(R()-.5)*a, P=(x,y,r,i)=>({x:Math.max(-.15,Math.min(1.15,x)),y:Math.max(-.15,Math.min(1.15,y)),r,c:c[i%c.length]});
+    if(shape==="frame") return [P(j(.05,.1),j(.1,.1),.34,0),P(j(.95,.1),j(.08,.1),.3,3),P(j(1,.1),j(.9,.1),.36,1),P(j(.05,.1),j(.95,.1),.3,2),P(j(.5,.2),j(1.05,.05),.26,0)];
+    if(shape==="corner") return [P(j(.92,.08),j(.9,.08),.42,0),P(j(.72,.1),j(1,.06),.3,3),P(j(1.02,.05),j(.62,.1),.28,1),P(j(.8,.1),j(.74,.1),.18,2)];
+    if(shape==="glow") return [P(j(.5,.08),j(.52,.08),.44,1),P(j(.38,.1),j(.4,.1),.24,2),P(j(.64,.1),j(.66,.1),.26,0),P(j(.56,.1),j(.42,.1),.16,4)];
+    if(shape==="wave") return [P(j(.05,.08),j(.85,.08),.34,0),P(j(.3,.08),j(.62,.08),.3,1),P(j(.55,.08),j(.45,.08),.28,2),P(j(.8,.08),j(.24,.08),.3,3),P(j(1,.06),j(.05,.08),.26,4)];
+    if(shape==="band") return [P(j(.12,.1),j(.98,.05),.34,0),P(j(.4,.1),j(1.02,.05),.3,3),P(j(.68,.1),j(.96,.05),.32,1),P(j(.95,.08),j(1,.05),.3,2)];
+    return [P(j(.15,.15),j(.2,.15),.36,0),P(j(.82,.15),j(.18,.15),.3,1),P(j(.55,.15),j(.55,.15),.34,2),P(j(.18,.15),j(.85,.15),.3,3),P(j(.88,.12),j(.86,.12),.34,0),P(j(.5,.2),j(.05,.1),.2,4)]; }
+  const pts=()=>TP.pts||(TP.pts=makePoints(TP.bg,TP.shape,TP.seed));
+  const xml=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  function tplSVG(o){ const {w,h}=o, bg=TBG[o.bg], P=o.pts, mean=Math.sqrt(w*h), blur=Math.max(4,mean*.085), m=Math.round(w*.07), rowH=(h-2*m)/12, colW=(w-2*m)/12, ar=o.lang==="ar", tiny=h<220||w<220, id="g"+Math.abs((w*31+h*17+o.seed*7)|0);
+    const font=ar?"'Avenir Arabic', 'IBM Plex Sans Arabic', Arial, sans-serif":"'GT Walsheim', 'Figtree', Arial, sans-serif";
+    let s=`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" fill="none">\n<defs><clipPath id="${id}c"><rect width="${w}" height="${h}"/></clipPath><filter id="${id}b" x="-100%" y="-100%" width="300%" height="300%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="${blur.toFixed(1)}"/></filter></defs>\n<g id="Gradient" clip-path="url(#${id}c)">\n<rect id="Base ${bg.name}" width="${w}" height="${h}" fill="${bg.base}"/>\n`;
+    P.forEach((p,i)=>{ s+=`<circle id="Point ${i+1}" cx="${(p.x*w).toFixed(1)}" cy="${(p.y*h).toFixed(1)}" r="${(p.r*mean).toFixed(1)}" fill="${p.c}" filter="url(#${id}b)"/>\n`; }); s+=`</g>\n`;
+    if(o.layout==="grad") return s+`</svg>`;
+    const e=emblem(), inner=e?e.innerHTML:"", vb=(e?.getAttribute("viewBox")||"0 0 84.53 82.12").split(/\s+/).map(Number), lg=Math.max(18,Math.min(tiny?h*.5:rowH*1.5,colW*2.4,h*.5)), k=lg/vb[3], lw=vb[2]*k;
+    const side=ar?w-m:m, anchor=ar?"end":"start", dir="";
+    const wide=w/h>2.4, fs=Math.round(tiny?Math.min(h*.34,w*.07):wide?Math.min(h*.2,w*.05):Math.min(w*.092,h*.085)), fs2=Math.round(fs*.4), head=o.head||(ar?"عنوان رئيسي":"Headline goes here"), sub=o.sub||(ar?"عنوان فرعي قصير":"A short supporting line");
+    if(o.layout==="image"&&!tiny){ const land=w>=h*1.15, iw=land?(w-2*m)*.46:w-2*m, ih=land?h-2*m:(h-2*m)*.48, ix=land?(ar?m:w-m-iw):m, iy=land?m:h-m-ih, rad=Math.round(Math.min(iw,ih)*.06);
+      s+=`<g id="Image"><rect id="Image frame (replace the fill)" x="${ix.toFixed(0)}" y="${iy.toFixed(0)}" width="${iw.toFixed(0)}" height="${ih.toFixed(0)}" rx="${rad}" fill="#CCC3B4"/><text x="${(ix+iw/2).toFixed(0)}" y="${(iy+ih/2).toFixed(0)}" font-family="${font}" font-size="${Math.round(fs2*.8)}" fill="#4F4E62" text-anchor="middle">Image</text></g>\n`; }
+    /* signature position: logo at the bottom on the language's side; the address sits in the opposite bottom corner */
+    const ly=tiny?(h-lg)/2:h-m-lg, lx=tiny?(ar?m:w-m-lw):(ar?w-m-lw:m);
+    s+=`<g id="Logo symbol" transform="translate(${lx.toFixed(1)} ${ly.toFixed(1)}) scale(${k.toFixed(4)})" fill="${bg.ink}">${inner}</g>\n`;
+    if(o.layout!=="logo"){ const ty=tiny?h/2+fs*.34:m+fs;
+      s+=`<text id="Headline" x="${tiny?(ar?w-m:m):side}" y="${ty.toFixed(0)}" font-family="${font}" font-size="${fs}" font-weight="400" letter-spacing="${ar?0:(-fs*.04).toFixed(1)}" fill="${bg.ink}" text-anchor="${anchor}"${dir}>${xml(head)}</text>\n`;
+      if(!tiny) s+=`<text id="Subhead" x="${side}" y="${(m+fs+fs2*1.9).toFixed(0)}" font-family="${font}" font-size="${fs2}" font-weight="400" fill="${bg.ink}" text-anchor="${anchor}"${dir}>${xml(sub)}</text>\n`;
+      if(!tiny&&!wide) s+=`<text id="Address" x="${ar?m:w-m}" y="${(h-m-2).toFixed(0)}" font-family="'GT Walsheim', 'Figtree', Arial, sans-serif" font-size="${Math.max(11,Math.round(fs2*.5))}" fill="${bg.ink}" text-anchor="${ar?"start":"end"}">www.bankaletihad.com</text>\n`; }
+    return s+`</svg>`; }
+  const cur=()=>({...FLAT[TP.fmt],bg:TP.bg,layout:TP.layout,lang:TP.lang,seed:TP.seed,pts:pts(),head:TP.head,sub:TP.sub});
+  const tplName=(o)=>`BAE_${o.name.replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"")}_${o.w}x${o.h}_${TBG[o.bg].name}_${TP.shape}${o.layout==="grad"?"":"_"+o.layout+"_"+o.lang.toUpperCase()}`;
+  async function svgPng(svg,w,h){ const u=URL.createObjectURL(new Blob([svg],{type:"image/svg+xml"})); try{ const im=new Image(); await new Promise((res,rej)=>{ im.onload=res; im.onerror=rej; im.src=u; }); const k=Math.min(1,8000/Math.max(w,h)), c=document.createElement("canvas"); c.width=Math.round(w*k); c.height=Math.round(h*k); c.getContext("2d").drawImage(im,0,0,c.width,c.height); return await new Promise(r=>c.toBlob(r,"image/png")); } finally{ URL.revokeObjectURL(u); } }
+  function tplDraw(){ const box=$("biTplBody"); if(!box) return; const o=cur(), P=o.pts, sel=P[TP.sel];
+    box.innerHTML=`
+      <div class="tp-ask"><label class="lbl" for="tpAsk">Ask for a file</label><div class="row"><input class="rl-field" id="tpAsk" dir="auto" value="${esc(TP.ask)}" placeholder="e.g. a dark gradient background for a story, glow in the bottom corner"><button type="button" class="btn small primary" data-tp="ask" ${TP.busy?"disabled":""}>${TP.busy||"Make it"}</button></div>${TP.err?`<span class="t12 bad" role="alert">${esc(TP.err)}</span>`:""}</div>
+      <div class="tp-grid">
+        <div class="tp-side">
+          <label class="lbl" for="tpFmt">Size</label><select class="rl-field" id="tpFmt">${FORMATS.map(g=>`<optgroup label="${g[0]}">${g[1].map(f=>{ const i=FLAT.findIndex(x=>x.name===f[0]&&x.g===g[0]); return `<option value="${i}" ${i===TP.fmt?"selected":""}>${f[0]} · ${f[1]}×${f[2]}</option>`; }).join("")}</optgroup>`).join("")}</select>
+          <span class="lbl">Colour</span><div class="a-seg" role="group" aria-label="Colour">${Object.entries(TBG).map(([k,v])=>`<button type="button" data-tpbg="${k}" aria-pressed="${TP.bg===k}">${v.name}</button>`).join("")}</div>
+          <span class="lbl">Gradient shape</span><div class="tp-chips">${SHAPES.map(([k,l])=>`<button type="button" class="br-topic" data-tpshape="${k}" aria-pressed="${TP.shape===k&&!TP.custom}">${l}</button>`).join("")}<button type="button" class="br-topic" data-tp="shuffle">Shuffle</button></div>
+          <span class="lbl">Content</span><div class="tp-chips">${LAYOUTS.map(([k,l])=>`<button type="button" class="br-topic" data-tplay="${k}" aria-pressed="${TP.layout===k}">${l}</button>`).join("")}</div>
+          ${TP.layout!=="grad"?`<div class="a-seg" role="group" aria-label="Language"><button type="button" data-tplang="en" aria-pressed="${TP.lang==="en"}">English</button><button type="button" data-tplang="ar" aria-pressed="${TP.lang==="ar"}">العربية</button></div>`:""}
+          ${TP.layout==="copy"||TP.layout==="image"?`<input class="rl-field" id="tpHead" dir="auto" value="${esc(TP.head)}" placeholder="Headline (optional)" aria-label="Headline"><input class="rl-field" id="tpSub" dir="auto" value="${esc(TP.sub)}" placeholder="Subhead (optional)" aria-label="Subhead">`:""}
+        </div>
+        <div class="tp-main">
+          <div class="tp-stage" id="tpStage" style="aspect-ratio:${o.w}/${o.h};max-width:min(100%,calc(62vh * ${(o.w/o.h).toFixed(4)}))"><div class="tp-svg" id="tpSvg">${tplSVG(o)}</div>${P.map((p,i)=>`<button type="button" class="tp-pt${i===TP.sel?" on":""}" data-tppt="${i}" style="left:${Math.max(0,Math.min(100,p.x*100))}%;top:${Math.max(0,Math.min(100,p.y*100))}%;background:${p.c}" aria-label="Point ${i+1}, drag to move"></button>`).join("")}</div>
+          <p class="t12 muted">${o.w} × ${o.h} px · ${P.length} points. Drag a point to move the colour. Select one to change it.</p>
+          <div class="tp-pt-ed">${sel?`<span class="t12">Point ${TP.sel+1}</span><div class="tp-sw">${[...new Set([...TBG[TP.bg].blobs,TBG[TP.bg].base])].map(c=>`<button type="button" data-tpcol="${c}" style="background:${c}" aria-label="Colour ${c}" aria-pressed="${sel.c===c}"></button>`).join("")}</div><label class="t12">Size <input type="range" min="8" max="70" value="${Math.round(sel.r*100)}" id="tpR"></label><button type="button" class="bi-x" data-tp="del">Remove point</button>`:`<span class="t12 muted">No point selected.</span>`}<button type="button" class="btn small" data-tp="add">Add point</button></div>
+          <div class="rl-btns"><button type="button" class="btn small primary" data-tp="copy">Copy for Figma</button><button type="button" class="btn small" data-tp="svg">Download SVG</button><button type="button" class="btn small" data-tp="png">Download PNG</button><button type="button" class="btn small" data-tp="zip">All sizes as ZIP</button></div>
+          <p class="t12 muted">In Figma: press <b>Copy for Figma</b>, then paste (⌘V / Ctrl+V) on the canvas. You get a frame with the base, one blurred circle per point, the logo symbol and live text, all editable. Use only the official lockups from Assets for final work.</p>
+        </div>
+      </div>`;
+    if(typeof uxT==="function") uxT(box); }
+  const tplRefresh=()=>{ const o=cur(), sv=$("tpSvg"); if(sv) sv.innerHTML=tplSVG(o); };
+  async function tplAsk(){ const q=($("tpAsk")?.value||"").trim(); TP.ask=q; if(!q) return; if(!sample){ TP.err="This needs Claude, which isn't connected in this view."; tplDraw(); return; } TP.busy="Thinking…"; TP.err=""; tplDraw();
+    try{ const r=await rlAsk(`You set up a Bank al Etihad brand template from a request (any language): "${q.slice(0,500)}".
+Sizes (use the exact name): ${FLAT.map(f=>`${f.name} ${f.w}x${f.h}`).join("; ")}.
+bg: orange (hero, external), ink (dark, internal and corporate), stone (light, calm).
+layout: grad (gradient only, a background file), logo, copy (logo + headline + subhead), image (image frame + copy).
+The gradient is built from 3 to 7 soft blurred colour points, never a linear or radial blend. Each point: x and y from 0 to 1 (0,0 = top left), r from 0.12 to 0.5 (size), c = one colour of the chosen bg. Colours — orange: #C13A23 #FB9A75 #FDCBB4 #A33755 #FFFAF4 · ink: #4F4E62 #A33755 #C13A23 #196E78 #FA6428 · stone: #CCC3B4 #FFFAF4 #FDCBB4 #F1C0B6 #FB9A75. Place the points to match what was asked (for example "glow in the bottom corner", "calm, colour only at the edges", "leave the centre clean for text"). Keep where copy will sit calm.
+Return ONLY JSON: {"size":"exact size name","bg":"orange|ink|stone","layout":"grad|logo|copy|image","lang":"en|ar","headline":"","subhead":"","points":[{"x":0,"y":0,"r":0.3,"c":"#"}],"note":"one short sentence in the user's language on what you made"}`,{modelTier:"quick",cache:false});
+      const i=FLAT.findIndex(f=>f.name.toLowerCase()===String(r?.size||"").toLowerCase()); if(i>=0) TP.fmt=i; if(TBG[r?.bg]) TP.bg=r.bg; if(LAYOUTS.some(l=>l[0]===r?.layout)) TP.layout=r.layout; if(r?.lang==="ar"||r?.lang==="en") TP.lang=r.lang; TP.head=String(r?.headline||""); TP.sub=String(r?.subhead||"");
+      const ok=new Set([...TBG[TP.bg].blobs,TBG[TP.bg].base].map(c=>c.toUpperCase())), P=(Array.isArray(r?.points)?r.points:[]).filter(p=>isFinite(+p?.x)&&isFinite(+p?.y)).slice(0,8).map((p,k)=>({x:Math.max(-.15,Math.min(1.15,+p.x)),y:Math.max(-.15,Math.min(1.15,+p.y)),r:Math.max(.08,Math.min(.7,+p.r||.3)),c:ok.has(String(p.c||"").toUpperCase())?String(p.c).toUpperCase():TBG[TP.bg].blobs[k%5]}));
+      if(P.length>=2){ TP.pts=P; TP.custom=true; } else { TP.pts=null; TP.custom=false; } TP.sel=-1; TP.note=String(r?.note||"");
+    }catch(e){ TP.err=e?.code==="rate_limited"?"Too many requests. Try again in a minute.":"Couldn't set that up. Try again."; }
+    TP.busy=""; tplDraw(); }
+  P.addEventListener("click",async e=>{ const t=e.target; if(!t.closest("#biTplBody")) return;
+    const bgb=t.closest("[data-tpbg]"); if(bgb){ TP.bg=bgb.dataset.tpbg; TP.pts=null; TP.custom=false; TP.sel=-1; tplDraw(); return; }
+    const sh=t.closest("[data-tpshape]"); if(sh){ TP.shape=sh.dataset.tpshape; TP.pts=null; TP.custom=false; TP.sel=-1; tplDraw(); return; }
+    const la=t.closest("[data-tplay]"); if(la){ TP.layout=la.dataset.tplay; tplDraw(); return; }
+    const lg=t.closest("[data-tplang]"); if(lg){ TP.lang=lg.dataset.tplang; tplDraw(); return; }
+    const col=t.closest("[data-tpcol]"); if(col){ const p=pts()[TP.sel]; if(p){ p.c=col.dataset.tpcol; TP.custom=true; tplDraw(); } return; }
+    const pt=t.closest("[data-tppt]"); if(pt){ if(TP.dragged){ TP.dragged=false; return; } TP.sel=+pt.dataset.tppt; tplDraw(); return; }
+    const a=t.closest("[data-tp]"); if(!a) return; const k=a.dataset.tp, o=cur();
+    if(k==="shuffle"){ TP.seed=(TP.seed%999)+1; TP.pts=null; TP.custom=false; TP.sel=-1; tplDraw(); }
+    else if(k==="add"){ const b=TBG[TP.bg].blobs; pts().push({x:.5,y:.5,r:.25,c:b[pts().length%b.length]}); TP.sel=pts().length-1; TP.custom=true; tplDraw(); }
+    else if(k==="del"){ if(pts().length>1){ pts().splice(TP.sel,1); TP.sel=-1; TP.custom=true; tplDraw(); } }
+    else if(k==="ask") tplAsk();
+    else if(k==="copy"){ try{ await navigator.clipboard.writeText(tplSVG(o)); a.textContent="Copied. Paste in Figma"; }catch{ a.textContent="Copy blocked. Use Download SVG"; } setTimeout(()=>{ if(a.isConnected) a.textContent="Copy for Figma"; },2500); }
+    else if(k==="svg") saveText(tplSVG(o),tplName(o)+".svg","image/svg+xml");
+    else if(k==="png"){ a.disabled=true; try{ const b=await svgPng(tplSVG(o),o.w,o.h); if(b) await save(b,tplName(o)+".png"); }catch{ TP.err="Couldn't make the PNG in this browser. Download the SVG instead."; tplDraw(); } a.disabled=false; }
+    else if(k==="zip"){ if(!window.JSZip){ TP.err="The zip library didn't load."; tplDraw(); return; } a.disabled=true; a.textContent="Packing…"; try{ const z=new JSZip(); for(const f of FLAT){ const x={...o,...f}; z.folder(f.g).file(tplName(x)+".svg",tplSVG(x)); } await save(await z.generateAsync({type:"blob",compression:"DEFLATE"}),`BAE_templates_${TBG[TP.bg].name}_${TP.shape}_${TP.layout}.zip`); }catch{ TP.err="Couldn't build the ZIP."; } a.disabled=false; a.textContent="All sizes as ZIP"; } });
+  P.addEventListener("change",e=>{ if(e.target.id==="tpFmt"){ TP.fmt=+e.target.value; tplDraw(); } else if(e.target.id==="tpHead"||e.target.id==="tpSub"){ TP.head=$("tpHead")?.value||""; TP.sub=$("tpSub")?.value||""; tplRefresh(); } });
+  P.addEventListener("input",e=>{ if(e.target.id==="tpR"){ const p=pts()[TP.sel]; if(p){ p.r=+e.target.value/100; TP.custom=true; tplRefresh(); } } else if(e.target.id==="tpAsk") TP.ask=e.target.value; else if(e.target.id==="tpHead"||e.target.id==="tpSub"){ TP.head=$("tpHead")?.value||""; TP.sub=$("tpSub")?.value||""; tplRefresh(); } });
+  P.addEventListener("keydown",e=>{ if(e.target.id==="tpAsk"&&e.key==="Enter"){ e.preventDefault(); tplAsk(); } const pt=e.target.closest?.("[data-tppt]"); if(pt&&/^Arrow/.test(e.key)){ e.preventDefault(); const p=pts()[+pt.dataset.tppt], d=e.shiftKey?.05:.01; if(e.key==="ArrowLeft") p.x-=d; if(e.key==="ArrowRight") p.x+=d; if(e.key==="ArrowUp") p.y-=d; if(e.key==="ArrowDown") p.y+=d; TP.custom=true; pt.style.left=Math.max(0,Math.min(100,p.x*100))+"%"; pt.style.top=Math.max(0,Math.min(100,p.y*100))+"%"; tplRefresh(); } });
+  P.addEventListener("pointerdown",e=>{ const pt=e.target.closest?.("[data-tppt]"); if(!pt) return; const i=+pt.dataset.tppt, st=$("tpStage"), p=pts()[i]; if(!st||!p) return; pt.setPointerCapture(e.pointerId); let moved=false;
+    const mv=ev=>{ const r=st.getBoundingClientRect(); p.x=Math.max(-.1,Math.min(1.1,(ev.clientX-r.left)/r.width)); p.y=Math.max(-.1,Math.min(1.1,(ev.clientY-r.top)/r.height)); pt.style.left=Math.max(0,Math.min(100,p.x*100))+"%"; pt.style.top=Math.max(0,Math.min(100,p.y*100))+"%"; moved=true; TP.custom=true; tplRefresh(); };
+    const up=()=>{ pt.removeEventListener("pointermove",mv); pt.removeEventListener("pointerup",up); pt.removeEventListener("pointercancel",up); if(moved){ TP.dragged=true; TP.sel=i; setTimeout(()=>{ TP.dragged=false; tplDraw(); },0); } };
+    pt.addEventListener("pointermove",mv); pt.addEventListener("pointerup",up); pt.addEventListener("pointercancel",up); });
   /* ---------- page ---------- */
   const G={w:1080,h:1920,mode:"rgb"};
   function gridHTML(){ const m=Math.round(G.w*.07), cw=(G.w-2*m)/12, rh=(G.h-2*m)/12; return `<div class="bi-gridres"><div><b>${m} px</b><span>Margin (7% of width)</span></div><div><b>${cw.toFixed(1)} px</b><span>Column width (12)</span></div><div><b>${rh.toFixed(1)} px</b><span>Row height (12)</span></div><div><b>${Math.round(G.w-2*m)} × ${Math.round(G.h-2*m)}</b><span>Safe area</span></div></div>`; }
   function draw(){
     const sc=P.scrollTop;
     body.innerHTML=`
-    <nav class="bi-nav" aria-label="Sections">${[["biColour","Colour"],["biLogo","Logo"],["biType","Typography"],["biGrid","Grid"],["biRules","Gradient, illustration, photo"],["biMotion","Motion"],["biAssets","Assets"]].map(([id,l])=>`<a href="#${id}" data-jump="${id}">${l}</a>`).join("")}</nav>
+    <nav class="bi-nav" aria-label="Sections">${[["biColour","Colour"],["biLogo","Logo"],["biType","Typography"],["biGrid","Grid"],["biRules","Gradient, illustration, photo"],["biMotion","Motion"],["biTpl","Templates"],["biAssets","Assets"]].map(([id,l])=>`<a href="#${id}" data-jump="${id}">${l}</a>`).join("")}</nav>
     <section class="bi-card bi-concept"><div><span class="t12 muted">Creative concept</span><h3>Deep Clarity</h3><p>Three layers of structured intelligence, moving from depth to surface, from indistinct to certain.</p></div><div class="bi-pillars"><div><b>Intelligence</b><span>Proactive · precise · adaptive · clear</span></div><div><b>Warmth</b><span>Present · generous · familiar · celebratory</span></div></div></section>
 
     <section class="bi-sec" id="biColour"><div class="bi-h"><div><h3>Colour</h3><p>Click any value to copy it.</p></div>
@@ -5022,11 +5123,15 @@ function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span
         <tr><td>Frame gradient reveal</td><td>1200 ms</td><td>—</td><td>Opacity or position</td></tr><tr><td>Gradient loop</td><td>30 s (or 15, 8, 6 s)</td><td>—</td><td>Linear, no easing, each shape 360° clockwise</td></tr></tbody></table></div>
     </section>
 
+    <section class="bi-sec" id="biTpl"><div class="bi-h"><div><h3>Templates and gradients</h3><p>Every digital size, in Orange, Ink or Stone. The gradient is made of colour points you can move, never a linear or radial blend. Each file opens in Figma as editable layers.</p></div></div>
+      <div id="biTplBody"></div>
+    </section>
+
     <section class="bi-sec" id="biAssets"><div class="bi-h"><div><h3>Assets</h3><p>${BF.canEdit?"Add the official files once. Everyone on the team downloads them from here.":"Official files, ready to download."}</p></div></div>
       <div id="biShelves">${shelvesHTML()}</div>
       <p class="t12 muted">Questions, asset requests and approvals go to the brand team.</p>
     </section>`;
-    P.scrollTop=sc; if(typeof uxT==="function") uxT(P);
+    tplDraw(); P.scrollTop=sc; if(typeof uxT==="function") uxT(P);
   }
   P.addEventListener("click",async e=>{
     const c=e.target.closest("[data-copy]"); if(c){ try{ await navigator.clipboard.writeText(c.dataset.copy); c.classList.add("done"); setTimeout(()=>c.classList.remove("done"),1200); }catch{} return; }
