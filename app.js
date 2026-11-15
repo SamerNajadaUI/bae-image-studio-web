@@ -5015,8 +5015,22 @@ Return ONLY JSON: {"copy":"…","copy_load":"light|medium|heavy","empty_area":"�
   LV.busy=false; lvDraw(); }
 function lvDraw(){ const box=$("lvOut"); if(!box) return; const o=LV.out;
   box.innerHTML=LV.busy?`<div class="lv-wait"><img src="${LV.thumb}" alt=""><span role="status">Reading your layout…</span></div>`:LV.err?`<p class="t12 bad" role="alert">${esc(LV.err)}</p>`:!o?"":`<div class="lv-res"><div class="lv-top"><img src="${LV.thumb}" alt="Your layout"><div><span class="t12 muted">Copy</span><p dir="auto" data-noi18n>${esc(String(o.copy||"").slice(0,240))}</p><p class="lv-verdict" dir="auto" data-noi18n>${esc(o.verdict||"")}</p></div><button type="button" class="bi-x" data-lvx aria-label="Close the suggestions">Close</button></div>
-    <div class="lv-opts">${o.options.map((x,i)=>{ const [label,mode]=LV_TYPES[x.type]; return `<div class="lv-opt${i===0?" best":""}"><div class="h"><b>${label}</b><span class="sc">${Math.round(+x.score||0)}%</span>${i===0?`<span class="tag">Best fit</span>`:""}</div><p class="t12" dir="auto" data-noi18n>${esc(x.why||"")}</p>${mode!=="none"&&x.brief?`<p class="br" dir="auto" data-noi18n>${esc(x.brief)}</p><button type="button" class="btn small ${i===0?"primary":""}" data-lvuse="${i}">Use this brief</button>`:`<p class="t12 muted">No image. Let the copy lead.</p>`}</div>`; }).join("")}</div></div>`;
+    <div class="lv-opts">${o.options.map((x,i)=>{ const [label,mode]=LV_TYPES[x.type]; return `<div class="lv-opt${i===0?" best":""}"><div class="h"><b>${label}</b><span class="sc">${Math.round(+x.score||0)}%</span>${i===0?`<span class="tag">Best fit</span>`:""}</div><p class="t12" dir="auto" data-noi18n>${esc(x.why||"")}</p>${mode!=="none"&&x.brief?`<p class="br" dir="auto" data-noi18n>${esc(x.brief)}</p><div class="rl-btns"><button type="button" class="btn small ${i===0?"primary":""}" data-lvuse="${i}">Use this brief</button><button type="button" class="btn small" data-lvmore="${i}" ${x.busy?"disabled":""}>${x.busy?"Thinking…":"Another idea"}</button></div><form class="lv-say" data-lvsay="${i}"><input class="rl-field" name="q" dir="auto" placeholder="Or tell me what you have in mind…" aria-label="Your own idea for ${label}" ${x.busy?"disabled":""}><button type="submit" class="btn small" ${x.busy?"disabled":""}>Rewrite</button></form>${x.err?`<p class="t12 bad" role="alert">${esc(x.err)}</p>`:""}`:`<p class="t12 muted">No image. Let the copy lead.</p>`}</div>`; }).join("")}</div></div>`;
   if(typeof uxT==="function") uxT(box); }
+/* a different scene for one option: a fresh idea, or the user's own idea turned into a brief */
+async function lvRedo(i,say){ const o=LV.out, x=o?.options?.[i]; if(!x||x.busy) return; const [label]=LV_TYPES[x.type]; say=String(say||"").trim();
+  x.busy=true; x.err=""; x.past=x.past||[]; if(x.brief&&!x.past.includes(x.brief)) x.past.push(x.brief); lvDraw();
+  try{ const r=await rlAsk(`You are the senior art director for Bank al Etihad (Jordan). A design layout needs a visual of this type: ${label} (${x.type==="photo_studio"?"one person on a plain warm cream wall, minimal, tailored, calm; at most one piece of light-oak furniture and two small props":x.type==="photo_lifestyle"?"real people in a real modern place in Amman, candid daily life":"one BAE 3D glass icon with a single focal object, no people"}).
+LAYOUT COPY: "${String(o.copy||"").slice(0,400)}"
+EMPTY AREA FOR THE VISUAL: ${o.empty_area||"unknown"} · BACKGROUND: ${o.background||"unknown"}
+BRIEFS ALREADY PROPOSED AND REJECTED — do not repeat their scene, person, action or object:
+${x.past.map((b,k)=>`${k+1}. ${b}`).join("\n")}
+${say?`THE USER'S OWN IDEA (any language) — build the brief on exactly this, keep everything they asked for, only add what is missing: "${say}"`:"Propose a clearly DIFFERENT scene that still expresses the copy: change who it is (age, gender), what they do, the object or prop, or the mood."}
+Write ONE brief in English for the image generator, 25–45 words, concrete, Jordanian context: who or what, doing what, wardrobe or object, mood, and where the subject sits so it fills the empty area and never collides with the copy. No text in the image, no other brands.
+Return ONLY JSON: {"brief":"…","why":"one short sentence in ${UX.lang==="ar"?"Arabic":"the language of the layout copy"} on how this fits the copy"}`,{modelTier:"quick",cache:false});
+    const b=String(r?.brief||"").trim(); if(!b) throw {code:"bad_answer"}; x.brief=b; if(r.why) x.why=String(r.why); }
+  catch(e){ log("✕","layout idea",{code:e?.code}); x.err=e?.code==="rate_limited"?"Too many requests. Try again in a minute.":"Couldn't write another idea. Try again."; }
+  x.busy=false; lvDraw(); }
 function lvUse(i){ const o=LV.out, x=o?.options?.[i]; if(!x) return; const mode=LV_TYPES[x.type][1]; if(mode==="none") return;
   if(S.mode!==mode) setMode(mode);
   if(mode==="photo"){ const want=x.type==="photo_studio"?"Studio":"On-location"; document.querySelector(`.seg[data-key="setting"] button[data-v="${want}"]`)?.click(); }
@@ -5028,7 +5042,8 @@ function lvUse(i){ const o=LV.out, x=o?.options?.[i]; if(!x) return; const mode=
   card.addEventListener("dragover",e=>{ if(e.dataTransfer?.types?.includes("Files")){ e.preventDefault(); d.classList.add("over"); } });
   card.addEventListener("dragleave",e=>{ if(!card.contains(e.relatedTarget)) d.classList.remove("over"); });
   card.addEventListener("drop",e=>{ const x=[...(e.dataTransfer?.files||[])].find(y=>/^image\//.test(y.type)); d.classList.remove("over"); if(x){ e.preventDefault(); e.stopPropagation(); lvRun(x); } });
-  $("lvOut").addEventListener("click",e=>{ const u=e.target.closest("[data-lvuse]"); if(u){ lvUse(+u.dataset.lvuse); return; } if(e.target.closest("[data-lvx]")){ LV.out=null; lvDraw(); } });
+  $("lvOut").addEventListener("submit",e=>{ const f=e.target.closest("[data-lvsay]"); if(!f) return; e.preventDefault(); const q=String(new FormData(f).get("q")||"").trim(); if(q) lvRedo(+f.dataset.lvsay,q); else f.querySelector("input")?.focus(); });
+  $("lvOut").addEventListener("click",e=>{ const u=e.target.closest("[data-lvuse]"); if(u){ lvUse(+u.dataset.lvuse); return; } const mo=e.target.closest("[data-lvmore]"); if(mo){ lvRedo(+mo.dataset.lvmore,""); return; } if(e.target.closest("[data-lvx]")){ LV.out=null; lvDraw(); } });
 })();
 
 boot();
