@@ -5139,6 +5139,12 @@ function lvUse(i){ const o=LV.out, x=o?.options?.[i]; if(!x) return; const mode=
   const PK=Object.fromEntries(PROBLEMS.map(p=>[p[0],p]));
   const NUM=["sharp","grain","faith"], ZERO=()=>({sharp:0,grain:0,faith:0});
   const CHAIN={"2x":[2],"4x":[4],"8x":[2,4],"10x":[2,4],"16x":[4,4]}, MAXSIDE=12000;
+  /* phones and tablets have little graphics memory and a small canvas limit: smaller tiles, smaller results */
+  const PHONE=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)||(navigator.maxTouchPoints>1&&/Mac/i.test(navigator.platform||""));
+  const MAXAREA=PHONE?12e6:140e6, TILE=PHONE?64:128;
+  const tooBig=k=>{ const m=+k.replace("x",""), w=U.w*m, h=U.h*m; return Math.max(w,h)>MAXSIDE||w*h>MAXAREA; };
+  /* open any picture the browser can show, also formats createImageBitmap refuses (HEIC on iPhone) */
+  async function decode(src){ try{ return await createImageBitmap(src); }catch{} const u=URL.createObjectURL(src); try{ const im=new Image(); im.decoding="async"; await new Promise((res,rej)=>{ im.onload=res; im.onerror=rej; im.src=u; }); const c=document.createElement("canvas"); c.width=im.naturalWidth; c.height=im.naturalHeight; c.getContext("2d").drawImage(im,0,0); return c; } finally{ setTimeout(()=>URL.revokeObjectURL(u),2000); } }
   const U={file:null,url:"",w:0,h:0,scan:null,target:"4x",tune:ZERO(),runs:[],sel:-1,busy:"",prog:0,err:"",msg:"",marks:new Set(),note:"",auto:null,autoBusy:false,team:{clean:ZERO(),blurry:ZERO(),n:0,lessons:[]},teamLoaded:false,canTeach:false,split:50,zoom:{x:.5,y:.35},stop:false};
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,Math.round(v)));
   const bucket=()=>/blurry|very_low/.test(U.scan?.quality||"")?"blurry":"clean";
@@ -5157,7 +5163,7 @@ function lvUse(i){ const o=LV.out, x=o?.options?.[i]; if(!x) return; const mode=
   let TF=null; const MODELS={};
   async function engine(){ if(TF) return TF;
     if(!window.tf) await new Promise((res,rej)=>{ const s=document.createElement("script"); s.src="up/tf.min.js"; s.onload=res; s.onerror=()=>rej({message:"The upscale engine didn't load. Reload the page and try again."}); document.head.appendChild(s); });
-    const tf=window.tf; try{ await tf.setBackend("webgl"); }catch{} await tf.ready();
+    const tf=window.tf; try{ await tf.setBackend("webgl"); }catch{} await tf.ready(); try{ tf.env().set("WEBGL_DELETE_TEXTURE_THRESHOLD",0); if(PHONE) tf.env().set("WEBGL_FORCE_F16_TEXTURES",true); }catch{}
     if(tf.getBackend()!=="webgl") throw {message:"This browser has no graphics acceleration (WebGL), which BAE Upscale needs. Try Chrome on a computer."};
     const one=i=>Array.isArray(i)?i[0]:i;
     class MultiplyBeta extends tf.layers.Layer{ constructor(){ super({}); } call(i){ return tf.mul(one(i),0.2); } static className="MultiplyBeta"; }
@@ -5171,7 +5177,7 @@ function lvUse(i){ const o=LV.out, x=o?.options?.[i]; if(!x) return; const mode=
   const mk=(w,h)=>{ const c=document.createElement("canvas"); c.width=w; c.height=h; return c; };
   /* one network pass over the whole picture, tile by tile with overlap so no seams show */
   async function pass(src,s,label,from,to){ const tf=await engine(), net=await model(s); const W=src.width, H=src.height, out=mk(W*s,H*s), og=out.getContext("2d"), sg=src.getContext("2d",{willReadFrequently:true});
-    let T=128; const PAD=12; const cols=Math.ceil(W/T), rows=Math.ceil(H/T), total=cols*rows; let done=0;
+    const T=TILE, PAD=PHONE?8:12; const cols=Math.ceil(W/T), rows=Math.ceil(H/T), total=cols*rows; let done=0;
     for(let ty=0;ty<rows;ty++) for(let tx=0;tx<cols;tx++){ if(U.stop) throw {code:"stopped"};
       const x0=tx*T, y0=ty*T, x1=Math.min(W,x0+T), y1=Math.min(H,y0+T), sx=Math.max(0,x0-PAD), sy=Math.max(0,y0-PAD), ex=Math.min(W,x1+PAD), ey=Math.min(H,y1+PAD), w=ex-sx, h=ey-sy;
       const id=sg.getImageData(sx,sy,w,h);
@@ -5186,7 +5192,7 @@ function lvUse(i){ const o=LV.out, x=o?.options?.[i]; if(!x) return; const mode=
     const o=mk(w,h), g=o.getContext("2d"); g.imageSmoothingQuality="high"; g.drawImage(c,0,0,w,h); return o; }
   /* finishing: blend toward the plain enlargement (faithfulness), unsharp mask, fine luminance grain */
   async function finish(raw,f){ const W=raw.width, H=raw.height, out=mk(W,H), g=out.getContext("2d",{willReadFrequently:true}); g.drawImage(raw,0,0);
-    if(f.faith>0){ const base=await createImageBitmap(U.file); g.globalAlpha=f.faith/100; g.imageSmoothingQuality="high"; g.drawImage(base,0,0,W,H); g.globalAlpha=1; }
+    if(f.faith>0){ const base=await decode(U.file); g.globalAlpha=f.faith/100; g.imageSmoothingQuality="high"; g.drawImage(base,0,0,W,H); g.globalAlpha=1; }
     if(f.sharp<=0&&f.grain<=0) return out;
     const k=Math.max(1,mult()), rad=Math.max(.6,k*.28), amt=f.sharp/100*1.6, sig=f.grain/100*22, cell=Math.max(1,Math.round(k/3));
     const bl=mk(W,H), bg=bl.getContext("2d",{willReadFrequently:true}); if(amt>0){ bg.filter=`blur(${rad}px)`; bg.drawImage(out,0,0); bg.filter="none"; }
@@ -5202,14 +5208,16 @@ function lvUse(i){ const o=LV.out, x=o?.options?.[i]; if(!x) return; const mode=
   let tickAt=0; const tick=()=>{ const n=Date.now(); if(n-tickAt<250) return; tickAt=n; const el=$("upBusy"); if(el) el.textContent=U.busy; const pb=$("upProg"); if(pb) pb.value=Math.round(U.prog*100); };
   /* the chosen image is kept in this browser, so a page reload (for example when the studio updates) does not lose it */
   const idb=()=>new Promise((res,rej)=>{ const r=indexedDB.open("bae_upscale",1); r.onupgradeneeded=()=>r.result.createObjectStore("k"); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); });
-  async function keep(f){ try{ const d=await idb(); await new Promise((res,rej)=>{ const t=d.transaction("k","readwrite"); f?t.objectStore("k").put({blob:f,name:f.name,type:f.type,target:U.target},"last"):t.objectStore("k").delete("last"); t.oncomplete=res; t.onerror=()=>rej(t.error); }); d.close(); }catch{} }
-  async function restore(){ if(U.file) return; try{ const d=await idb(); const v=await new Promise((res,rej)=>{ const q=d.transaction("k").objectStore("k").get("last"); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); d.close(); if(v?.blob&&!U.file){ await setFile(new File([v.blob],v.name||"image",{type:v.type||v.blob.type}),true); if(v.target&&CHAIN[v.target]){ U.target=v.target; draw(); } U.msg0="Your last image is back. The enlarged versions are not kept after a reload, so press Upscale again."; draw(); } }catch{} }
+  async function keep(f){ try{ if(f&&!f._buf) f._buf=await f.arrayBuffer(); const d=await idb(); await new Promise((res,rej)=>{ const t=d.transaction("k","readwrite"); f?t.objectStore("k").put({buf:f._buf,name:f.name,type:f.type,target:U.target},"last"):t.objectStore("k").delete("last"); t.oncomplete=res; t.onerror=()=>rej(t.error); }); d.close(); }catch{} }
+  async function restore(){ if(U.file) return; try{ const d=await idb(); const v=await new Promise((res,rej)=>{ const q=d.transaction("k").objectStore("k").get("last"); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); d.close(); if(v?.buf&&!U.file){ const ok=await setFile(new File([v.buf],v.name||"image",{type:v.type||"image/jpeg"}),true); if(!ok){ U.err=""; draw(); keep(null); return; } if(v.target&&CHAIN[v.target]&&!tooBig(v.target)){ U.target=v.target; } U.msg0="Your last image is back. The enlarged versions are not kept after a reload, so press Upscale again."; draw(); } }catch{} }
   /* ---------- reading the picture ---------- */
   async function setFile(f,quiet){ if(!f||!/^image\//.test(f.type)){ U.err="That file isn't an image. Use JPEG, PNG or WebP."; draw(); return; } if(U.busy) return; U.msg0="";
-    try{ if(U.url) URL.revokeObjectURL(U.url); }catch{} const bmp=await createImageBitmap(f).catch(()=>null); if(!bmp){ U.err="Couldn't open that image."; draw(); return; }
+    let bmp=await decode(f).catch(()=>null); if(!bmp||!bmp.width){ U.err="Couldn't open that image. Try a JPEG or PNG."; draw(); return false; }
+    if(!/^image\/(jpeg|png|webp)$/.test(f.type)||!(await createImageBitmap(f).catch(()=>null))){ const c=mk(bmp.width,bmp.height); c.getContext("2d").drawImage(bmp,0,0); const b=await toBlob(c,"image/png"); if(b) f=new File([b],String(f.name||"image").replace(/\.[a-z0-9]+$/i,"")+".png",{type:"image/png"}); }
+    try{ if(U.url) URL.revokeObjectURL(U.url); }catch{}
     for(const r of U.runs){ try{ URL.revokeObjectURL(r.url); }catch{} }
     Object.assign(U,{file:f,url:URL.createObjectURL(f),w:bmp.width,h:bmp.height,scan:null,tune:ZERO(),runs:[],sel:-1,err:"",msg:"",marks:new Set(),note:"",auto:null});
-    const L=Math.max(bmp.width,bmp.height); U.target=L<=500?"10x":L<=800?"8x":L<=1600?"4x":"2x"; draw(); if(!quiet) keep(f); scan(); }
+    const L=Math.max(bmp.width,bmp.height); const want=L<=500?"10x":L<=800?"8x":L<=1600?"4x":"2x", keys=Object.keys(CHAIN); U.target=[...keys.slice(0,keys.indexOf(want)+1)].reverse().find(k=>!tooBig(k))||"2x"; draw(); if(!quiet) keep(f); scan(); return true; }
   async function scan(){ const blank={quality:"soft",noise:"none",face:"none",faces:0,facebox:null,marks:[],describe:"",risk:""}; if(!sample||!U.file){ U.scan=blank; draw(); return; } const f=U.file; U.scanBusy=true; draw();
     try{ const o=await rlAsk(`You are a photo restoration specialist preparing an image for a faithful enlargement. Look at the attached image (${U.w}×${U.h} px) and report only what is really there.
 Return ONLY JSON:
@@ -5224,18 +5232,18 @@ Return ONLY JSON:
     }catch(e){ log("✕","upscale scan",{code:e?.code}); if(U.file===f) U.scan=blank; }
     U.scanBusy=false; if(!U.busy) draw(); }
   /* ---------- run ---------- */
-  async function run(){ if(U.busy||!U.file) return; const [ow,oh]=outPx(); if(Math.max(ow,oh)>MAXSIDE){ U.err="That is larger than a browser can hold. Choose a smaller size."; draw(); return; }
+  async function run(){ if(U.busy||!U.file) return; const [ow,oh]=outPx(); if(tooBig(U.target)){ U.err=PHONE?"That is too large for a phone. Choose a smaller size, or use a computer.":"That is larger than a browser can hold. Choose a smaller size."; draw(); return; }
     U.err=""; U.auto=null; U.stop=false; U.prog=0; U.busy="Starting the engine…"; draw(); const t0=Date.now(), target=U.target, chain=CHAIN[target];
-    try{ await engine(); const bmp=await createImageBitmap(U.file); let c=mk(bmp.width,bmp.height); c.getContext("2d").drawImage(bmp,0,0);
+    try{ await engine(); const bmp=await decode(U.file); let c=mk(bmp.width,bmp.height); c.getContext("2d").drawImage(bmp,0,0);
       /* weight each pass by its pixel count so the bar moves evenly */ let px=bmp.width*bmp.height; const wts=chain.map(s=>{ const v=px; px*=s*s; return v; }), sum=wts.reduce((a,b)=>a+b,0); let acc=0;
       for(let i=0;i<chain.length;i++){ const a=acc/sum; acc+=wts[i]; c=await pass(c,chain[i],`Pass ${i+1} of ${chain.length} · ${chain[i]}×`,a*.94,acc/sum*.94); }
       const raw=resize(c,ow,oh); U.busy="Finishing…"; U.prog=.96; draw();
       await addRun(raw,target,Math.round((Date.now()-t0)/1000)); U.busy=""; draw(); check();
-    }catch(e){ log("✕","upscale",{code:e?.code,message:e?.message}); U.busy=""; U.err=e?.code==="stopped"?"Stopped.":(e?.message&&!/[{<]/.test(e.message)?String(e.message).slice(0,200):"The upscale didn't finish. Try a smaller size, or close other heavy tabs."); draw(); } }
+    }catch(e){ log("✕","upscale",{code:e?.code,message:e?.message}); U.busy=""; U.msg0=""; U.err=e?.code==="stopped"?"Stopped.":(e?.message&&!/[{<]/.test(e.message)?String(e.message).slice(0,200):"The upscale didn't finish. Try a smaller size, or close other heavy tabs."); draw(); } }
   async function addRun(raw,target,secs){ const f=fin(), out=await finish(raw,f), blob=await toBlob(out,"image/jpeg",.95); const run={raw,canvas:out,blob,url:URL.createObjectURL(blob),fin:{...f},target,w:out.width,h:out.height,secs,label:`v${U.runs.length+1} · ${target.replace("x","×")}`,marks:[],note:""};
     U.runs.push(run); U.sel=U.runs.length-1; U.marks=new Set(); U.note=""; return run; }
   /* ---------- checking ---------- */
-  async function crop(src,box,size){ const bmp=await createImageBitmap(src); const b=box||{x:.25,y:.15,w:.5,h:.5}, pad=.25; const x=Math.max(0,(b.x-b.w*pad))*bmp.width, y=Math.max(0,(b.y-b.h*pad))*bmp.height, w=Math.min(bmp.width-x,b.w*(1+2*pad)*bmp.width), h=Math.min(bmp.height-y,b.h*(1+2*pad)*bmp.height);
+  async function crop(src,box,size){ const bmp=await decode(src); const b=box||{x:.25,y:.15,w:.5,h:.5}, pad=.25; const x=Math.max(0,(b.x-b.w*pad))*bmp.width, y=Math.max(0,(b.y-b.h*pad))*bmp.height, w=Math.min(bmp.width-x,b.w*(1+2*pad)*bmp.width), h=Math.min(bmp.height-y,b.h*(1+2*pad)*bmp.height);
     const k=Math.min(1,size/Math.max(w,h))||1, c=mk(Math.max(1,Math.round(w*k)),Math.max(1,Math.round(h*k))); const g=c.getContext("2d"); g.imageSmoothingQuality="high"; g.drawImage(bmp,x,y,w,h,0,0,c.width,c.height); return await toBlob(c,"image/jpeg",.92); }
   async function check(){ const o=U.runs[U.sel]; if(!o||U.autoBusy) return; if(!sample){ U.auto={error:"The automatic check needs Claude. Mark the problems yourself below."}; draw(); return; } U.autoBusy=true; draw();
     try{ const fb=U.scan?.facebox; const imgs=[await crop(U.file,fb,900),await crop(o.blob,fb,1400),await toJpeg(U.file,900),await toJpeg(o.blob,1200)];
@@ -5262,12 +5270,12 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
   /* ---------- page ---------- */
   const QN={clean:"Sharp, just small",soft:"Slightly soft",blurry:"Blurry or compressed",very_low:"Very low quality"};
   const SL=[["sharp","Sharpness",0,100],["grain","Skin grain",0,60],["faith","Stay close to the original",0,70]];
-  function draw(){ const o=U.runs[U.sel]||null, [ow,oh]=outPx(), big=Math.max(ow,oh)>MAXSIDE, f=fin(), mp=ow*oh/1e6;
+  function draw(){ const o=U.runs[U.sel]||null, [ow,oh]=outPx(), big=!!U.file&&tooBig(U.target), f=fin(), mp=ow*oh/1e6;
     body.innerHTML=`
     <section class="rl-card up-top">
       <label class="pg-drop up-drop${U.file?" has":""}" id="upDrop"><input type="file" accept="image/*" id="upFile" ${U.busy?"disabled":""}>${U.file?`<img src="${U.url}" alt="Your image"><span><b data-noi18n>${esc(U.file.name)}</b><span class="t12 muted">${U.w} × ${U.h} px · click, drop or paste to replace</span></span>`:`<span><b>Drop, paste or choose an image</b><span class="t12 muted">It is enlarged here on your own computer. Nothing is uploaded and nothing is charged.</span></span>`}</label>
       ${U.file?`<div class="up-set">
-        <div><span class="lbl">Enlarge</span><div class="a-seg" role="group" aria-label="Scale">${Object.keys(CHAIN).map(k=>`<button type="button" data-upscale="${k}" aria-pressed="${U.target===k}" ${U.busy?"disabled":""}>${k.replace("x","×")}</button>`).join("")}</div><span class="t12 ${big?"bad":"muted"}">${ow.toLocaleString()} × ${oh.toLocaleString()} px · ${mp<10?mp.toFixed(1):Math.round(mp)} MP${big?" · too large for a browser":mp>40?" · large: this can take several minutes":""}</span></div>
+        <div><span class="lbl">Enlarge</span><div class="a-seg" role="group" aria-label="Scale">${Object.keys(CHAIN).map(k=>`<button type="button" data-upscale="${k}" aria-pressed="${U.target===k}" ${U.busy||tooBig(k)?"disabled":""}>${k.replace("x","×")}</button>`).join("")}</div><span class="t12 ${big?"bad":"muted"}">${ow.toLocaleString()} × ${oh.toLocaleString()} px · ${mp<10?mp.toFixed(1):Math.round(mp)} MP${big?(PHONE?" · too large for a phone":" · too large for a browser"):mp>40?" · large: this can take several minutes":""}</span>${PHONE?`<span class="t12 muted">On a phone the result is limited to 12 MP and it is slow. A computer does the big sizes.</span>`:""}</div>
         <div class="up-scan"><span class="lbl">What I see</span>${U.scan?`<p><b>${QN[U.scan.quality]}</b>${U.scan.face!=="none"?` · face: ${esc(U.scan.face)}`:" · no face"}${U.scan.noise!=="none"?` · ${esc(U.scan.noise)} noise`:""}</p>${U.scan.marks.length?`<p class="t12">Real marks to keep: <span data-noi18n dir="auto">${esc(U.scan.marks.join(" · "))}</span></p>`:""}${/blurry|very_low/.test(U.scan.quality)?`<p class="t12 bad">This image is blurred. The engine enlarges and cleans it without inventing a face, so detail that is not in the picture will not come back.</p>`:U.scan.risk?`<p class="t12 muted" data-noi18n dir="auto">${esc(U.scan.risk)}</p>`:""}`:`<p class="t12 muted">${U.scanBusy?"Looking at your image…":"—"}</p>`}</div>
         <div class="up-plan"><span class="lbl">Plan</span><ol>${CHAIN[U.target].map(s=>`<li><b>BAE Upscale ${s}× pass</b><span class="t12 muted">Rebuilds edges and texture from the pixels that are there</span></li>`).join("")}${U.target==="10x"?`<li><b>Resample to 10×</b><span class="t12 muted">From 8× with a high-quality resize</span></li>`:""}<li><b>Finishing</b><span class="t12 muted">sharpness ${f.sharp} · skin grain ${f.grain} · close to original ${f.faith}%</span></li></ol></div>
       </div>
