@@ -29,7 +29,7 @@ function atMake(id,enterSends){ const ta=$(id); if(!ta||ta.tagName!=="TEXTAREA")
   Object.defineProperty(el,"placeholder",{get:()=>el.dataset.ph,set:v=>{ el.dataset.ph=v; }});
   Object.defineProperty(el,"selectionStart",{get:()=>atVal(el).length}); el.setSelectionRange=()=>atEnd(el); el.select=()=>atEnd(el);
   ta.replaceWith(el); AT.fields.push(el);
-  el.addEventListener("paste",e=>{ e.preventDefault(); const t=(e.clipboardData||window.clipboardData)?.getData("text/plain")||""; if(t) document.execCommand("insertText",false,t); });
+  el.addEventListener("paste",e=>{ const im=[...(e.clipboardData?.files||[])].find(f=>/^image\//.test(f.type)); if(im&&id==="brief"){ e.preventDefault(); lvRun(im); return; } if(im) return; e.preventDefault(); const t=(e.clipboardData||window.clipboardData)?.getData("text/plain")||""; if(t) document.execCommand("insertText",false,t); });
   el.addEventListener("drop",e=>{ if(e.dataTransfer?.types?.includes("Files")) return; e.preventDefault(); });
   el.addEventListener("keydown",e=>{ if(AT.open&&AT.open.el===el){ const O=AT.open;
       if(e.key==="Escape"){ e.preventDefault(); e.stopImmediatePropagation(); atHide(); return; }
@@ -4914,6 +4914,46 @@ function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span
   const open=()=>{ P.hidden=false; P.scrollTop=0; draw(); if(!BF.loaded) bfLoad().then(draw); };
   const close=()=>{ P.hidden=true; $("openBrand")?.focus(); };
   $("openBrand")?.addEventListener("click",open); $("closeBrand")?.addEventListener("click",close);
+})();
+
+
+/* ================= Layout advisor: drop a layout, Claude reads the copy and proposes the right visual (photo, 3D icon or copy-led) ================= */
+const LV={busy:false,out:null,err:"",thumb:""};
+const LV_TYPES={photo_studio:["Photo · Studio","photo"],photo_lifestyle:["Photo · Lifestyle","photo"],icon:["3D icon","icon"],copy_led:["Copy-led","none"]};
+async function lvRun(file){ if(LV.busy||!file) return; const box=$("lvOut"); if(!box) return;
+  if(!sample){ LV.err="Claude isn't connected in this view."; lvDraw(); return; }
+  LV.busy=true; LV.err=""; LV.out=null; try{ if(LV.thumb) URL.revokeObjectURL(LV.thumb); }catch{} LV.thumb=URL.createObjectURL(file); lvDraw();
+  try{ const small=await toJpeg(file,1600).catch(()=>file);
+    const o=await rlAsk(`You are the senior art director for Bank al Etihad (Jordan). The attached image is a design layout that still has NO visual: copy, logo and an empty area. Decide which visual belongs in the empty area.
+THE THREE CHOICES
+1. PHOTO — a person or people. "photo_lifestyle" = real place in modern Amman, candid, daily life. "photo_studio" = one person on a plain warm cream wall, minimal, tailored, calm. Best when the message is human: welcome, care, relationship, trust, a life moment, a customer or employee speaking. Lifestyle when the copy is about a moment of life; studio when the copy speaks directly to the reader, is corporate, or the layout is very clean.
+2. ICON — one BAE 3D glass icon with a single focal object. Best when the message is a product, feature, service, number, offer, security or an abstract idea, and the copy is short.
+3. COPY_LED — no image at all. Best when there is a lot of copy (long paragraph, terms, lists, announcement) or the empty area is too small for a visual.
+BRAND: concept "Deep Clarity"; pillars Intelligence (precise, clear) and Warmth (present, familiar). One focal point. Never put text inside a visual.
+READ the layout: transcribe the copy exactly, judge how heavy it is, find where the empty area is and its shape, note the background colour and whether the layout is Arabic (text on the right) or English.
+THEN score all four types 0–100 for THIS copy and write, for each type except copy_led, a ready brief in English for the image generator: who or what, doing what, wardrobe or object, mood, and where the subject must sit so it fills the empty area and never collides with the copy (e.g. "subject on the left third, clean space on the right"). For a photo to sit on a flat coloured card, say the background should match or blend with the card colour. Briefs: 25–45 words, concrete, Jordanian context, no brand names of others, no text in the image.
+Write "why" lines in ${UX.lang==="ar"?"Arabic":"the language of the layout's copy"}, one short sentence each.
+Return ONLY JSON: {"copy":"…","copy_load":"light|medium|heavy","empty_area":"…","background":"…","aspect":"16:9|9:16|21:9|3:4|1:1|4:5","best":"photo_studio|photo_lifestyle|icon|copy_led","verdict":"one short sentence","options":[{"type":"photo_studio","score":0,"why":"…","brief":"…"},{"type":"photo_lifestyle","score":0,"why":"…","brief":"…"},{"type":"icon","score":0,"why":"…","brief":"…"},{"type":"copy_led","score":0,"why":"…","brief":""}]}`,{images:[small],cache:false});
+    if(!o||!Array.isArray(o.options)) throw {code:"bad_answer"};
+    o.options=o.options.filter(x=>LV_TYPES[x?.type]).sort((x,y)=>(+y.score||0)-(+x.score||0)); LV.out=o;
+  }catch(e){ log("✕","layout advisor",{code:e?.code,message:e?.message}); LV.err=e?.code==="rate_limited"?"Too many requests. Try again in a minute.":"Couldn't read the layout. Try again."; }
+  LV.busy=false; lvDraw(); }
+function lvDraw(){ const box=$("lvOut"); if(!box) return; const o=LV.out;
+  box.innerHTML=LV.busy?`<div class="lv-wait"><img src="${LV.thumb}" alt=""><span role="status">Reading your layout…</span></div>`:LV.err?`<p class="t12 bad" role="alert">${esc(LV.err)}</p>`:!o?"":`<div class="lv-res"><div class="lv-top"><img src="${LV.thumb}" alt="Your layout"><div><span class="t12 muted">Copy</span><p dir="auto" data-noi18n>${esc(String(o.copy||"").slice(0,240))}</p><p class="lv-verdict" dir="auto" data-noi18n>${esc(o.verdict||"")}</p></div><button type="button" class="bi-x" data-lvx aria-label="Close the suggestions">Close</button></div>
+    <div class="lv-opts">${o.options.map((x,i)=>{ const [label,mode]=LV_TYPES[x.type]; return `<div class="lv-opt${i===0?" best":""}"><div class="h"><b>${label}</b><span class="sc">${Math.round(+x.score||0)}%</span>${i===0?`<span class="tag">Best fit</span>`:""}</div><p class="t12" dir="auto" data-noi18n>${esc(x.why||"")}</p>${mode!=="none"&&x.brief?`<p class="br" dir="auto" data-noi18n>${esc(x.brief)}</p><button type="button" class="btn small ${i===0?"primary":""}" data-lvuse="${i}">Use this brief</button>`:`<p class="t12 muted">No image. Let the copy lead.</p>`}</div>`; }).join("")}</div></div>`;
+  if(typeof uxT==="function") uxT(box); }
+function lvUse(i){ const o=LV.out, x=o?.options?.[i]; if(!x) return; const mode=LV_TYPES[x.type][1]; if(mode==="none") return;
+  if(S.mode!==mode) setMode(mode);
+  if(mode==="photo"){ const want=x.type==="photo_studio"?"Studio":"On-location"; document.querySelector(`.seg[data-key="setting"] button[data-v="${want}"]`)?.click(); }
+  const as=$("aspect"); if(as&&[...as.options].some(p=>p.value===o.aspect)){ as.value=o.aspect; as.dispatchEvent(new Event("change",{bubbles:true})); }
+  const b=$("brief"); b.value=x.brief; b.dispatchEvent(new Event("input",{bubbles:true})); b.scrollIntoView({block:"center",behavior:"smooth"}); b.focus(); }
+(function(){ const d=$("lvDrop"), f=$("lvFile"); if(!d||!f) return;
+  f.addEventListener("change",()=>{ const x=f.files?.[0]; f.value=""; if(x) lvRun(x); });
+  const card=d.closest(".brief-card")||d;
+  card.addEventListener("dragover",e=>{ if(e.dataTransfer?.types?.includes("Files")){ e.preventDefault(); d.classList.add("over"); } });
+  card.addEventListener("dragleave",e=>{ if(!card.contains(e.relatedTarget)) d.classList.remove("over"); });
+  card.addEventListener("drop",e=>{ const x=[...(e.dataTransfer?.files||[])].find(y=>/^image\//.test(y.type)); d.classList.remove("over"); if(x){ e.preventDefault(); e.stopPropagation(); lvRun(x); } });
+  $("lvOut").addEventListener("click",e=>{ const u=e.target.closest("[data-lvuse]"); if(u){ lvUse(+u.dataset.lvuse); return; } if(e.target.closest("[data-lvx]")){ LV.out=null; lvDraw(); } });
 })();
 
 boot();
