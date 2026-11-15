@@ -4839,5 +4839,30 @@ function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span
   $("openBrand")?.addEventListener("click",open); $("closeBrand")?.addEventListener("click",close);
 })();
 
+/* ================= @ mentions: type @ in a brief or the Director chat and pick a character from the library ================= */
+(function(){
+  const M={ta:null,start:0,items:[],i:0,el:null};
+  const menu=()=>{ if(M.el) return M.el; const d=document.createElement("div"); d.className="at-menu"; d.hidden=true; d.setAttribute("role","listbox"); d.setAttribute("aria-label","Characters"); document.body.appendChild(d);
+    d.addEventListener("mousedown",e=>{ const b=e.target.closest("[data-ati]"); if(!b) return; e.preventDefault(); pick(+b.dataset.ati); }); return M.el=d; };
+  const hide=()=>{ if(M.el) M.el.hidden=true; M.ta=null; };
+  const list=q=>{ q=q.toLowerCase(); return CHAR_REFS.map(r=>({name:charName(r.id),src:r.src||"",cat:r.lib?(CL_CATS.find(c=>c[0]===r.cat)||[])[1]||"":"Yours"})).filter(x=>x.name&&(!q||x.name.toLowerCase().includes(q))).sort((x,y)=>x.name.localeCompare(y.name)).slice(0,30); };
+  function draw(){ const d=menu(), r=M.ta.getBoundingClientRect();
+    d.innerHTML=`<div class="at-head">Characters</div>`+(M.items.length?M.items.map((x,i)=>`<button type="button" role="option" aria-selected="${i===M.i}" data-ati="${i}">${x.src?`<img src="${esc(x.src)}" alt="">`:`<span class="ph" aria-hidden="true"></span>`}<span class="nm" dir="auto" data-noi18n>${esc(x.name)}</span><span class="t12 muted">${esc(x.cat)}</span></button>`).join(""):`<p class="t12 muted">${CHAR_REFS.length?"No character with that name.":"No characters yet. Add them in the character library."}</p>`);
+    d.hidden=false; d.style.left=Math.max(8,Math.min(r.left,innerWidth-d.offsetWidth-8))+"px"; d.style.width=Math.min(340,innerWidth-16)+"px";
+    const below=innerHeight-r.bottom, h=d.offsetHeight; d.style.top=(below>h+12||r.top<h+12?r.bottom+6:r.top-h-6)+"px";
+    d.querySelector('[aria-selected="true"]')?.scrollIntoView({block:"nearest"}); }
+  function check(ta){ const v=ta.value.slice(0,ta.selectionStart), m=v.match(/(^|[\s(،,.:])@([^\s@]{0,24})$/); if(!m){ hide(); return; }
+    M.ta=ta; M.start=v.length-m[2].length-1; M.items=list(m[2]); M.i=0; draw(); if(!CL.loaded) clLoad().then(()=>{ if(M.ta===ta){ M.items=list(m[2]); draw(); } }); }
+  function pick(i){ const x=M.items[i], ta=M.ta; if(!x||!ta) return; const end=ta.selectionStart, ins="@"+x.name+" "; ta.value=ta.value.slice(0,M.start)+ins+ta.value.slice(end); const p=M.start+ins.length; ta.focus(); ta.setSelectionRange(p,p); hide(); ta.dispatchEvent(new Event("input",{bubbles:true})); }
+  for(const id of ["brief","rlInput"]){ const ta=$(id); if(!ta) continue;
+    ta.addEventListener("input",()=>check(ta)); ta.addEventListener("click",()=>check(ta)); ta.addEventListener("blur",()=>setTimeout(()=>{ if(document.activeElement!==ta) hide(); },120));
+    ta.addEventListener("keydown",e=>{ if(M.ta!==ta||!M.el||M.el.hidden) return;
+      if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); hide(); }
+      else if(!M.items.length) return;
+      else if(e.key==="ArrowDown"||e.key==="ArrowUp"){ e.preventDefault(); e.stopImmediatePropagation(); M.i=(M.i+(e.key==="ArrowDown"?1:-1)+M.items.length)%M.items.length; draw(); }
+      else if((e.key==="Enter"||e.key==="Tab")&&!e.isComposing){ e.preventDefault(); e.stopImmediatePropagation(); pick(M.i); } },true); }
+  addEventListener("resize",hide); addEventListener("scroll",e=>{ if(M.el&&!M.el.hidden&&!M.el.contains(e.target)) hide(); },true);
+})();
+
 boot();
 })();
