@@ -6004,11 +6004,19 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
       if(FAIL.test(st)) throw {code:"tool_error",message:"Magnific could not extend this picture ("+st+")."}; if(DONE.test(st)) return; }
     throw {code:"tool_error",message:"Magnific is still working on the extension. Open BAE Resize again in a few minutes and press Create: the finished extension is reused, free."}; }
   const rtxt=r=>{ const p=r?.payload; return (typeof p==="string"?p:JSON.stringify(p??""))+"\n"+(r?.content||[]).map(c=>c.text||"").join("\n"); };
-  /* the size Magnific really made: its reply can be text rather than an object, and it caps the picture at about 5.2 MP */
-  async function dims(id,fw,fh){ for(let a=0;a<2;a++){ try{ const r=await callMag("creations_get",{creationIdentifier:id}), p=r?.payload, m=p&&typeof p==="object"?(p.metadata||p.creations?.[0]?.metadata||{}):{};
-        let w=+m.width, h=+m.height; if(!(w>31&&h>31)){ const t=rtxt(r), x=t.match(/\bwidth["'\s:=]+(\d{2,5})/i), y=t.match(/\bheight["'\s:=]+(\d{2,5})/i); w=+x?.[1]; h=+y?.[1]; }
-        if(w>31&&h>31) return [w,h]; }catch(e){ log("✕","resize size",{code:e?.code,message:e?.message}); } }
-    const k=Math.min(1,Math.sqrt(5.2e6/(fw*fh))); return [Math.floor(fw*k),Math.floor(fh*k)]; }
+  /* the size Magnific really made. Its reply can be text or an object, and it shrinks big requests by its own rule
+     (1265×6325 came back as 700×3504), so the size is read from the reply and then PROVED with a tiny free crop in the far corner;
+     if the reply is missing or wrong, the size is found by halving with such crops (the ratio is always kept). */
+  async function corner(id,W,H){ try{ const c=await callMag("images_crop",{creationIdentifier:id,aspectRatio:"1:1",customWidth:32,customHeight:32,cropX:W-32,cropY:H-32}); return !!pid(c); }catch{ return false; } }
+  async function dims(id,fw,fh){ let w=0,h=0;
+    for(let a=0;a<3&&!(w>31&&h>31);a++){ try{ const r=await callMag("creations_get",{creationIdentifier:id}), p=r?.payload, m=p&&typeof p==="object"?(p.metadata||p.creation?.metadata||p.creations?.[0]?.metadata||{}):{};
+        w=+m.width; h=+m.height; if(!(w>31&&h>31)){ const t=rtxt(r), x=t.match(/\bwidth["'\s:=]+(\d{2,5})/i), y=t.match(/\bheight["'\s:=]+(\d{2,5})/i); w=+x?.[1]||0; h=+y?.[1]||0; } }
+      catch(e){ log("✕","resize size",{code:e?.code,message:e?.message}); } if(!(w>31&&h>31)) await new Promise(r=>setTimeout(r,1500)); }
+    if(w>31&&h>31&&Math.abs(w/h-fw/fh)<.03&&await corner(id,w,h)) return [w,h];
+    status("Measuring the extended picture…"); let lo=.05, hi=1;
+    if(await corner(id,fw,fh)) return [fw,fh];
+    for(let n=0;n<11;n++){ const k=(lo+hi)/2; if(await corner(id,Math.floor(fw*k),Math.floor(fh*k))) lo=k; else hi=k; }
+    const out=[Math.floor(fw*lo),Math.floor(fh*lo)]; log("·","resize measured",{reply:[w,h],measured:out}); return out; }
   /* one square piece of Magnific's picture as pixels. The bytes are decoded in the page (a data: fetch is blocked by the page's security);
      if the read returns no bytes, the piece is loaded from its file link instead. */
   const imgFromUrl=u=>new Promise((res,rej)=>{ const im=new Image(); im.crossOrigin="anonymous"; im.onload=()=>createImageBitmap(im).then(res,rej); im.onerror=()=>rej(new Error("link blocked")); im.src=u; });
