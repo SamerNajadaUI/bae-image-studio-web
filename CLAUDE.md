@@ -14,7 +14,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 133 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 134 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openBrand`):
 
@@ -41,7 +41,7 @@ After every change: commit and push here, then copy `app.js` and `index.html` (a
 ```
 index.html   ~1750 lines. All markup and ALL CSS (one <style> block; new CSS goes before the last </style>)
 app.js       ~5500 lines. One outer IIFE. All logic.
-refs/        photography references, studio references (st_minimal_01/02), outfit sheets (of_01..of_15) + _t.jpg thumbs
+refs/        photography references, studio references (st_minimal_01/02), outfit sheets (of_01..of_17) + _t.jpg thumbs
 grad/        the six OFFICIAL gradient elements: BAE_gradient_{circle_1,circle_2,lozenge_h_1,lozenge_h_2,lozenge_v_1,lozenge_v_2}.png + _preview.webp
 ai/          freeform.gz.txt: the Illustrator freeform-gradient template (see section 9)
 up/          BAE Upscale engine: tf.min.js, x2/ and x4/ model weights as base64 text parts (net.json, w0.txt, w1.txt)
@@ -52,7 +52,7 @@ anim/        animation template previews (v/*.mp4, p/*.jpg)
 
 | Around line | Block |
 |---|---|
-| 7 | Rich fields and the `@` picker: `AT`, `AT_SHOTS` (20 camera angles), `AT_OUTFITS` (15 outfit sheets), `atMake`, `atVal/atRead/atWrite`. Chips serialise as `@Name`, `[shot: Name]`, `[outfit: Name]` |
+| 7 | Rich fields and the `@` picker: `AT`, `AT_SHOTS` (20 camera angles), `AT_OUTFITS` (17 outfit sheets), `atMake`, `atVal/atRead/atWrite`. Chips serialise as `@Name`, `[shot: Name]`, `[outfit: Name]` |
 | 210 | References: `MAX_REFS=10`, `REF_USES` (colour + light / colour grading / lighting / style) |
 | 280–360 | **The brand locks**: `JO_CANDID`, `CLIENT_RULES`, `COMPOSITION_RULE`, `STUDIO_RULE`, `LOCATION_BG` |
 | 1314 | `ANGLES4` — the "Create image, different angles" button (4 candid angles) |
@@ -108,7 +108,7 @@ A mock proves the UI and the wiring only. Always tell Samer what was tested with
 - Never copy a real person's face. Do not download photos of public figures.
 - Do not embed copyrighted reference images (his camera-angle guide image was deliberately not used).
 - **Never redraw or recolour the BAE logo.** Only the symbol already shipped in the page may be placed; final work uses the official lockups.
-- Outfit sheets are unbranded (no logos).
+- Outfit sheets are unbranded (no logos). The one exception, added by Samer himself: `of_16` / `of_17`, the official BAE staff uniform (black polo with the white emblem on the chest and the lockup on the back), whose prompt says to keep the marks exactly as on the sheet.
 - For the upscaler: he wants it **his own, free, named "BAE Upscale"**, never a paid service. Do not route it through Magnific. Avoid non-commercial licences (CodeFormer was rejected for that reason).
 - A new public GitHub repo needs his explicit yes.
 
