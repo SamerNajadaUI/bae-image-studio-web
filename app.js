@@ -4972,132 +4972,248 @@ function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span
     return (BF.busy?`<p class="t12" role="status">${esc(BF.busy)}</p>`:"")+(BF.err?`<p class="t12 bad" role="alert">${esc(BF.err)}</p>`:"")+SHELVES.map(([k,title,note])=>{ const L=BF.list.filter(f=>f.shelf===k); if(!L.length&&!BF.canEdit) return "";
       return `<div class="bi-shelf"><div class="bi-shelfhead"><div><b>${title}</b><span class="t12 muted">${note}</span></div>${BF.canEdit?`<label class="btn small">Add files<input type="file" multiple class="sr" data-bfadd="${k}"></label>`:""}</div>
         ${L.length?`<div class="bi-files">${L.map(f=>`<div class="bi-file"><div class="pv">${f.prev?`<img src="${f.prev}" alt="">`:`<span>${esc((f.name.split(".").pop()||"file").toUpperCase().slice(0,4))}</span>`}</div><div class="tx"><b dir="auto" data-noi18n>${esc(f.name)}</b><span class="t12 muted">${kb(f.size)}</span></div><div class="rl-btns"><button type="button" class="btn small primary" data-bfdl="${esc(f.id)}">Download</button>${BF.canEdit?`<button type="button" class="bi-x" data-bfrm="${esc(f.id)}">Remove</button>`:""}</div></div>`).join("")}</div>`:`<p class="t12 muted">Nothing here yet. Add the official files from the asset library.</p>`}</div>`; }).join("")||`<p class="muted">No files yet. The studio owner adds the official assets.</p>`; }
-  /* ---------- Templates and gradients: every digital size, built from points, saved as SVG that opens as editable layers in Figma ---------- */
+  /* ---------- Templates and gradients (v128): the guideline's five steps, rendered on a canvas ----------
+     1 solid brand colour · 2 an organic brand shape · 3 linear gradient fill #C13A23 0% → #FA6428 61% → #C13A23 100% at an angle · 4 layer blur 75 ·
+     5 more shapes, lighter shades on top. Three uses: Background (full bleed), Frame (a soft L from two adjacent sides), Shape (circle / lozenges with
+     a progressive blur, sharp on one side). The organic shapes are drawn here, close to the guideline: the official library shapes were not supplied.
+     Everything is computed in floating point at a small size, then scaled up with a fine dither, so a 4K or 8K file never bands. */
   const FORMATS=[["Social",[["Instagram post 1:1",1080,1080],["Instagram portrait 4:5",1080,1350],["BAE portrait 3:4",1080,1440],["Story / Reel 9:16",1080,1920],["Facebook post",1200,630],["LinkedIn post",1200,627],["LinkedIn square",1200,1200],["X post 16:9",1600,900],["YouTube thumbnail",1280,720],["WhatsApp status",1080,1920]]],
     ["Covers",[["LinkedIn cover",1584,396],["Facebook cover",1640,624],["X header",1500,500],["YouTube banner",2560,1440],["Email header",1200,400]]],
     ["Display ads",[["Medium rectangle",300,250],["Large rectangle",336,280],["Leaderboard",728,90],["Billboard",970,250],["Half page",300,600],["Wide skyscraper",160,600],["Mobile banner",320,50],["Mobile large",320,100]]],
     ["Screens",[["Presentation 16:9",1920,1080],["Web hero",1440,600],["App splash",1170,2532],["Digital screen portrait",1080,1920],["Digital screen landscape",3840,2160]]]];
   const FLAT=FORMATS.flatMap(g=>g[1].map(f=>({g:g[0],name:f[0],w:f[1],h:f[2]})));
-  /* Studied from the six official gradient elements (circle 01/02, lozenge horizontal and vertical 01/02): the gradient is TONAL, one colour family only.
-     A darker patch sits upper-left, a lighter one upper-right, a second darker one low-centre, over the base colour; contrast is low and every transition is long.
-     The element has one crisp side and one side that melts away (deep clarity: from indistinct to certain). No second hue, no white streaks. */
-  const TBG={orange:{name:"Orange",base:"#FA6428",ink:"#FFFFFF",page:"#FFFAF4",pageInk:"#19181E",D:"#C13A23",L:"#FB9A75",H:"#FDCBB4"},
-    ink:{name:"Ink",base:"#19181E",ink:"#FFFAF4",page:"#19181E",pageInk:"#FFFAF4",D:"#0E0D12",L:"#4F4E62",H:"#75738D"},
-    stone:{name:"Stone",base:"#ECE8DF",ink:"#19181E",page:"#ECE8DF",pageInk:"#19181E",D:"#CCC3B4",L:"#FFFAF4",H:"#FDCBB4"}};
-  const swatches=k=>{ const b=TBG[k]; return [b.D,b.L,b.H,b.base]; };
-  const SHAPES=[["field","Background"],["frame","Frame"],["circle","Circle"],["loz_h","Lozenge horizontal"],["loz_v","Lozenge vertical"]];
   const LAYOUTS=[["grad","Gradient only"],["logo","Logo"],["copy","Logo + copy"],["image","Image + copy"]];
-  const TP={fmt:0,bg:"orange",layout:"grad",lang:"en",shape:"field",seed:1,pts:null,sel:-1,head:"",sub:"",ask:"",busy:"",err:""};
-  const rng=s=>{ let a=(s*2654435761)>>>0; return ()=>{ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; };
-  /* the house recipe: positions are 0..1 of the gradient's own area, r is a share of its mean side, o is the point's strength */
-  function makePoints(bg,shape,seed){ const R=rng(seed*97+shape.length*13+bg.length), b=TBG[shape==="field"||shape==="frame"?bg:"orange"], flip=seed%2===0, j=(v,a)=>v+(R()-.5)*a, fx=x=>flip?1-x:x;
-    const P=(x,y,r,c,o)=>({x:Math.max(-.2,Math.min(1.2,fx(j(x,.08)))),y:Math.max(-.2,Math.min(1.2,j(y,.08))),r:r*(.92+R()*.16),c,o});
-    const strong=bg==="orange"||shape==="circle"||shape==="loz_h"||shape==="loz_v";
-    return [P(.2,.24,.36,b.D,strong?.62:.7),P(.8,.14,.38,b.L,strong?.7:.75),P(.56,.9,.36,b.D,strong?.5:.6),P(.5,.5,.34,b.base,.55),P(.86,.34,.18,b.H,strong?.38:.5)]; }
-  const pts=()=>TP.pts||(TP.pts=makePoints(TP.bg,TP.shape,TP.seed));
-  const xml=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-  /* where the gradient lives inside the frame, in pixels: the whole frame, or the circle / lozenge element */
-  function geom(o){ const {w,h}=o, m=Math.round(w*.07), mn=Math.min(w,h), ar=o.lang==="ar", solo=o.layout==="grad";
-    if(o.shape!=="circle"&&o.shape!=="loz_h"&&o.shape!=="loz_v") return {x:0,y:0,w,h,r:0};
+  /* a tone is the fill of one shape: colour at 0%, at 61%, at 100% */
+  const TONES={deep:["Dark Orange","#C13A23","#FA6428","#C13A23"],mid:["Orange","#FA6428","#FB9A75","#FA6428"],light:["Medium Orange","#FB9A75","#FDCBB4","#FB9A75"],glow:["Soft Orange","#FDCBB4","#FFFAF4","#FDCBB4"],cream:["Light Orange","#FFFAF4","#FFFAF4","#FFFAF4"],flat:["Orange flat","#FA6428","#FA6428","#FA6428"],
+    sdark:["Dark Stone","#CCC3B4","#DDD6CA","#CCC3B4"],stone:["Stone","#ECE8DF","#F6F1E9","#ECE8DF"],
+    ndeep:["Deep navy","#06051A","#0E0C26","#06051A"],nmid:["Navy violet","#0E0C26","#2C2A48","#0E0C26"],nlight:["Grey violet","#24223F","#4B4964","#24223F"],nglow:["Light grey violet","#4B4964","#626079","#4B4964"]};
+  const FAMS={orange:{name:"Orange",tones:["deep","mid","light","glow","cream","flat"]},stone:{name:"Stone",tones:["sdark","stone","cream","glow"]},dark:{name:"Dark",tones:["ndeep","nmid","nlight","nglow"]}};
+  /* organic shapes: a closed smooth curve through points at even angles, radius 0..1 */
+  const BLOBS=[[1,.8,.93,.68,.86,.98,.74],[.9,1,.7,.82,.62,.9,.76,.96],[1,.86,.6,.76,1,.8,.56,.72],[.76,.96,1,.8,.6,.72,.92,.66,.86],[1,.62,.95,.6,1,.58],[1,.9,.72,.64,.74,.92,1,.82,.62,.8]].map(R=>{ const n=R.length, p=R.map((r,i)=>[Math.cos(i/n*2*Math.PI)*r,Math.sin(i/n*2*Math.PI)*r]), f=v=>v.toFixed(4); let d=`M${f(p[0][0])} ${f(p[0][1])}`;
+    for(let i=0;i<n;i++){ const a=p[(i+n-1)%n], b=p[i], c=p[(i+1)%n], e=p[(i+2)%n]; d+=`C${f(b[0]+(c[0]-a[0])/6)} ${f(b[1]+(c[1]-a[1])/6)} ${f(c[0]-(e[0]-b[0])/6)} ${f(c[1]-(e[1]-b[1])/6)} ${f(c[0])} ${f(c[1])}`; } return d+"Z"; });
+  /* one shape: b organic shape, x y centre (0..1 of the gradient's own area), s size (share of the mean side), r rotation, e stretch, t tone, a fill angle, bl layer blur (Figma units at 1080), o strength */
+  const B=(b,x,y,s,r,e,t,a,bl,o)=>({b,x,y,s,r,e:e||1,t,a:a??35,bl:bl??75,o:o??1});
+  const mir=L=>L.map(q=>({...q,x:1-q.x,r:-q.r,a:180-q.a}));
+  const F01=[B(5,.5,1.06,.6,0,3,"deep",0,120),B(5,1.07,.5,.6,90,3,"deep",180,120),B(1,.42,.86,.3,4,2.8,"mid",0,120,.9),B(1,.88,.4,.3,94,2.8,"mid",0,120,.9),B(4,.3,.8,.16,0,2.6,"light",0,110,.8),B(4,.83,.24,.16,90,2.6,"light",0,110,.8)];
+  const F02=[B(5,.4,.4,1.2,45,1.4,"deep",0,110),B(1,.45,.8,.34,4,2.8,"light",0,120,.8),B(1,.82,.42,.34,94,2.8,"light",0,120,.8),B(5,.5,1.08,.62,0,3,"cream",0,120),B(5,1.09,.5,.62,90,3,"cream",0,120)];
+  const S01=[B(5,.5,1.06,.6,0,3,"sdark",0,120),B(5,1.07,.5,.6,90,3,"sdark",180,120),B(1,.42,.86,.3,4,2.8,"stone",0,120,.9),B(1,.88,.4,.3,94,2.8,"stone",0,120,.9)];
+  const S02=[B(5,.4,.4,1.2,45,1.4,"sdark",0,110),B(5,.5,1.08,.62,0,3,"cream",0,120),B(5,1.09,.5,.62,90,3,"cream",0,120)];
+  const BG=(d,m,l,g)=>[
+    [B(5,.5,.5,1.15,45,1.4,d,0,100),B(2,.06,.08,.6,30,1.4,d,200,100,.8),B(0,.96,.94,.6,60,1.5,d,20,100,.8),B(4,1.04,.3,.28,80,1.5,l,90,90,.9),B(3,1.06,.29,.12,0,1.2,g,0,80,.6)],
+    [B(5,.5,.5,1.15,-45,1.4,d,0,100),B(2,.94,.08,.6,-30,1.4,d,200,100,.8),B(0,.04,.94,.6,-60,1.5,d,20,100,.8),B(4,.3,-.03,.28,5,1.6,l,0,90,.9),B(3,.29,-.05,.12,0,1.2,g,0,80,.6)],
+    [B(5,.5,.5,1.15,80,1.35,d,0,100),B(2,.1,1.02,.75,-10,1.6,d,200,100,.85),B(0,.9,.02,.6,20,1.5,d,20,100,.8),B(4,-.04,.6,.28,85,1.5,l,90,90,.9),B(3,-.06,.61,.12,0,1.2,g,0,80,.6)]];
+  const BO=BG("deep","mid","light","glow"), BD=BG("nmid","nmid","nlight","nglow").map(L=>L.map((q,i)=>i===3?{...q,s:.4,o:1}:i===4?{...q,s:.18,o:.8}:q));
+  const SH=(b,file,name,form,dir,blobs)=>({k:b,g:"Shape · image-led layouts",name,fam:"orange",kind:"shape",form,dir,base:"#FA6428",file,blobs});
+  const LIB=[
+    ...BO.map((L,i)=>({k:"orange_0"+(i+1),g:"Background · Orange",name:"Orange 0"+(i+1),fam:"orange",kind:"bg",base:"#FA6428",file:"gr_orange_{r}_0"+(i+1),blobs:L})),
+    {k:"frame_01_en",g:"Frame · Orange",name:"Frame gradient 01 · English",fam:"orange",kind:"frame",base:"#FFFAF4",file:"Frame_gradient_01_English_{r}",blobs:F01},
+    {k:"frame_01_ar",g:"Frame · Orange",name:"Frame gradient 01 · Arabic",fam:"orange",kind:"frame",base:"#FFFAF4",file:"Frame_gradient_01_Arabic_{r}",blobs:mir(F01)},
+    {k:"frame_02_en",g:"Frame · Orange",name:"Frame gradient 02 · English",fam:"orange",kind:"frame",base:"#FA6428",file:"Frame_gradient_02_English_{r}",blobs:F02},
+    {k:"frame_02_ar",g:"Frame · Orange",name:"Frame gradient 02 · Arabic",fam:"orange",kind:"frame",base:"#FA6428",file:"Frame_gradient_02_Arabic_{r}",blobs:mir(F02)},
+    {k:"stone_01",g:"Frame · Stone",name:"Stone frame 01",fam:"stone",kind:"frame",base:"#FFFAF4",file:"gr_frame_{r}_01",blobs:S01},
+    {k:"stone_02",g:"Frame · Stone",name:"Stone frame 02",fam:"stone",kind:"frame",base:"#ECE8DF",file:"gr_frame_{r}_02",blobs:S02},
+    ...BD.map((L,i)=>({k:"dark_0"+(i+1),g:"Dark · internal and corporate only",name:"Dark 0"+(i+1),fam:"dark",kind:"bg",base:"#0E0C26",file:"gr_dark_{r}_0"+(i+1),blobs:L})),
+    SH("circle_1","BAE_gradient_circle_1","Circle · sharp top","circle","top",[B(0,.14,.3,.7,-40,1.3,"deep",0,170,.9),B(1,.82,.14,.75,20,1.3,"light",30,170,.8),B(2,.6,.92,.7,10,1.5,"deep",0,170,.7)]),
+    SH("circle_2","BAE_gradient_circle_2","Circle · sharp right","circle","right",[B(0,.2,.26,.7,-40,1.3,"deep",0,170,.95),B(1,.82,.18,.7,20,1.3,"light",30,170,.8),B(2,.64,.9,.65,10,1.5,"deep",0,170,.75)]),
+    SH("loz_h_1","BAE_gradient_lozenge_h_1","Lozenge horizontal · sharp top","loz_h","top",[B(0,.04,.42,.6,-20,1.2,"deep",0,170,.9),B(1,.58,.5,.5,0,1.5,"mid",30,170,.6),B(3,.92,.15,.4,20,1.2,"light",30,170,.55),B(2,.8,1.05,.5,0,1.6,"deep",0,170,.6)]),
+    SH("loz_h_2","BAE_gradient_lozenge_h_2","Lozenge horizontal · sharp right","loz_h","right",[B(0,.06,.38,.6,-20,1.2,"deep",0,170,.95),B(1,.62,.5,.5,0,1.5,"mid",30,170,.5),B(3,.9,.15,.4,20,1.2,"light",30,170,.55),B(2,.3,1.05,.5,0,1.6,"deep",0,170,.55)]),
+    SH("loz_v_1","BAE_gradient_lozenge_v_1","Lozenge vertical · sharp top","loz_v","top",[B(1,.28,.06,.7,20,1.3,"light",30,170,.8),B(0,1.02,.42,.55,80,1.3,"deep",0,170,.9),B(2,.45,1.0,.65,10,1.3,"deep",0,170,.7)]),
+    SH("loz_v_2","BAE_gradient_lozenge_v_2","Lozenge vertical · sharp right","loz_v","right",[B(1,.28,.08,.7,20,1.3,"light",30,170,.75),B(0,1.04,.44,.55,80,1.3,"deep",0,170,.95),B(2,.4,1.0,.65,10,1.3,"deep",0,170,.7)])];
+  const item=k=>LIB.find(i=>i.k===k)||LIB[0];
+  const QUAL=[["x1","Standard",0],["4k","4K",3840],["8k","8K",7680]];
+  const TP={fmt:3,item:"orange_01",layout:"grad",lang:"en",blobs:null,sel:-1,q:"x1",head:"",sub:"",ask:"",busy:"",err:"",note:"",custom:false,seed:0};
+  const clone=L=>L.map(q=>({...q}));
+  const blobs=()=>TP.blobs||(TP.blobs=clone(item(TP.item).blobs));
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const ratioKey=(w,h)=>{ const r=w/h, K=[["9x16",9/16],["3x4",3/4],["1x1",1],["16x9",16/9]].find(x=>Math.abs(x[1]-r)<.006); return K?K[0]:`${w}x${h}`; };
+  /* where the gradient lives inside the frame, in pixels: the whole frame, or the circle / lozenge */
+  function geom(o){ const {w,h}=o, it=o.it, m=Math.round(w*.07), mn=Math.min(w,h), ar=o.lang==="ar", solo=o.layout==="grad", sh=it.form;
+    if(it.kind!=="shape") return {x:0,y:0,w,h,r:0};
     const box=(x,y,bw,bh)=>({x,y,w:bw,h:bh,r:Math.min(bw,bh)/2});
-    if(solo){ if(o.shape==="circle"){ const d=mn*.74; return box((w-d)/2,(h-d)/2,d,d); }
-      if(o.shape==="loz_h"){ const lw=w*.82, lh=Math.min(h*.74,lw*.38); return box((w-lw)/2,(h-lh)/2,lw,lh); }
-      const lh=h*.82, lw=Math.min(w*.74,lh*.42); return box((w-lw)/2,(h-lh)/2,lw,lh); }
+    if(solo){ if(sh==="circle"){ const d=mn*.78; return box((w-d)/2,(h-d)/2,d,d); }
+      if(sh==="loz_h"){ const lw=w*.84, lh=Math.min(h*.76,lw*.5); return box((w-lw)/2,(h-lh)/2,lw,lh); }
+      const lh=h*.84, lw=Math.min(w*.76,lh*.5); return box((w-lw)/2,(h-lh)/2,lw,lh); }
     /* with a logo or copy: the element keeps clear of the headline block above it and the signature row below it */
-    if(h<220||w/h>2.4){ const eh=h*.7, ew=o.shape==="circle"?eh:o.shape==="loz_h"?Math.min(w*.3,eh*2.6):eh*.5, cx=ar?w*.4:w*.6, eh2=o.shape==="loz_h"?Math.min(eh,ew*.4):eh; return box(cx-ew/2,(h-eh2)/2,ew,eh2); }
-    const sig=(h-2*m)/12*1.5+h*.035, T=m+(o.layout==="logo"?0:Math.min(w*.092,h*.085)*1.9+h*.03), B=h-m-sig, bh=Math.max(40,B-T), bw=w-2*m;
-    if(o.shape==="circle"){ const d=Math.min(bw,bh); return box(ar?m:w-m-d,T+(bh-d)/2,d,d); }
-    if(o.shape==="loz_h"){ const lh=Math.min(bh,bw*.4); return box(m,T+(bh-lh)/2,bw,lh); }
-    const lw=Math.min(bw,bh*.44); return box(ar?m:w-m-lw,T,lw,bh); }
-  function tplSVG(o){ const {w,h}=o, bg=TBG[o.bg], P=o.pts, m=Math.round(w*.07), rowH=(h-2*m)/12, colW=(w-2*m)/12, ar=o.lang==="ar", tiny=h<220||w<220, id="g"+Math.abs((w*31+h*17+o.seed*7)|0);
-    const el=o.shape==="circle"||o.shape==="loz_h"||o.shape==="loz_v", G=geom(o), mean=Math.sqrt(G.w*G.h), blur=Math.max(4,mean*.11), fam=el?TBG.orange:bg;
-    const font=ar?"'Avenir Arabic', 'IBM Plex Sans Arabic', Arial, sans-serif":"'GT Walsheim', 'Figtree', Arial, sans-serif";
-    const dots=P.map((p,i)=>`<circle id="Point ${i+1}" cx="${(G.x+p.x*G.w).toFixed(1)}" cy="${(G.y+p.y*G.h).toFixed(1)}" r="${(p.r*mean).toFixed(1)}" fill="${p.c}" fill-opacity="${(p.o??.7).toFixed(2)}" filter="url(#${id}b)"/>`).join("\n");
-    let s=`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" fill="none">\n<defs><clipPath id="${id}c"><rect width="${w}" height="${h}"/></clipPath><filter id="${id}b" x="-100%" y="-100%" width="300%" height="300%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="${blur.toFixed(1)}"/></filter>`;
-    let tc=bg.ink;
-    if(el){ const soft=o.seed%2===0?"left":"all", edge=Math.max(3,mean*(soft==="all"?.03:.075));
-      s+=`<clipPath id="${id}s"><rect x="${G.x.toFixed(1)}" y="${G.y.toFixed(1)}" width="${G.w.toFixed(1)}" height="${G.h.toFixed(1)}" rx="${G.r.toFixed(1)}"/></clipPath><filter id="${id}e" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="${edge.toFixed(1)}"/></filter><linearGradient id="${id}f" x1="${G.x.toFixed(1)}" y1="0" x2="${(G.x+G.w).toFixed(1)}" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="0.5" stop-color="#fff" stop-opacity="1"/></linearGradient><mask id="${id}m" maskUnits="userSpaceOnUse" x="0" y="0" width="${w}" height="${h}"><rect width="${w}" height="${h}" fill="url(#${id}f)"/></mask></defs>\n<rect id="Page ${bg.name}" width="${w}" height="${h}" fill="${bg.page}"/>\n<g id="Gradient element" clip-path="url(#${id}c)">\n`;
-      const body=`<g clip-path="url(#${id}s)"><rect id="Base Orange" x="${G.x.toFixed(1)}" y="${G.y.toFixed(1)}" width="${G.w.toFixed(1)}" height="${G.h.toFixed(1)}" fill="${fam.base}"/>\n${dots}\n</g>`;
-      /* a soft copy underneath gives the melting side; the crisp copy on top is faded out toward that side */
-      s+=`<g id="Soft edge" filter="url(#${id}e)">${body.replace(/id="Point /g,'id="Soft point ').replace('id="Base Orange"','id="Soft base"')}</g>\n`+(soft==="left"?`<g id="Crisp side" mask="url(#${id}m)">${body}</g>\n`:"")+`</g>\n`; tc=bg.pageInk; }
-    else { s+=`</defs>\n<g id="Gradient" clip-path="url(#${id}c)">\n<rect id="Base ${bg.name}" width="${w}" height="${h}" fill="${bg.base}"/>\n${dots}\n</g>\n`;
-      if(o.shape==="frame"){ const fm=Math.round(Math.min(w,h)*.06), card=o.bg==="ink"?"#19181E":o.bg==="stone"?"#FFFFFF":"#FFFAF4"; s+=`<rect id="Content card" x="${fm}" y="${fm}" width="${w-2*fm}" height="${h-2*fm}" rx="${Math.round(Math.min(w,h)*.035)}" fill="${card}"/>\n`; tc=o.bg==="ink"?"#FFFAF4":"#19181E"; } }
-    if(o.layout==="grad") return s+`</svg>`;
-    const pad=o.shape==="frame"?Math.round(Math.min(w,h)*.06)+Math.round(w*.045):m;
-    const e=emblem(), inner=e?e.innerHTML:"", vb=(e?.getAttribute("viewBox")||"0 0 84.53 82.12").split(/\s+/).map(Number), lg=Math.max(18,Math.min(tiny?h*.5:rowH*1.5,colW*2.4,h*.5)), k=lg/vb[3], lw=vb[2]*k;
-    const side=ar?w-pad:pad, anchor=ar?"end":"start";
-    const wide=w/h>2.4, fs=Math.round(tiny?Math.min(h*.34,w*.07):wide?Math.min(h*.2,w*.05):Math.min(w*.092,h*.085)), fs2=Math.round(fs*.4), head=o.head||(ar?"عنوان رئيسي":"Headline goes here"), sub=o.sub||(ar?"عنوان فرعي قصير":"A short supporting line");
-    if(o.layout==="image"&&!tiny&&!el){ const land=w>=h*1.15, iw=land?(w-2*pad)*.46:w-2*pad, ih=land?h-2*pad:(h-2*pad)*.48, ix=land?(ar?pad:w-pad-iw):pad, iy=land?pad:h-pad-ih, rad=Math.round(Math.min(iw,ih)*.06);
-      s+=`<g id="Image"><rect id="Image frame (replace the fill)" x="${ix.toFixed(0)}" y="${iy.toFixed(0)}" width="${iw.toFixed(0)}" height="${ih.toFixed(0)}" rx="${rad}" fill="#CCC3B4"/><text x="${(ix+iw/2).toFixed(0)}" y="${(iy+ih/2).toFixed(0)}" font-family="${font}" font-size="${Math.round(fs2*.8)}" fill="#4F4E62" text-anchor="middle">Image</text></g>\n`; }
+    if(h<220||w/h>2.4){ const eh=h*.7, ew=sh==="circle"?eh:sh==="loz_h"?Math.min(w*.3,eh*2):eh*.5, cx=ar?w*.4:w*.6, eh2=sh==="loz_h"?Math.min(eh,ew*.5):eh; return box(cx-ew/2,(h-eh2)/2,ew,eh2); }
+    const sig=(h-2*m)/12*1.5+h*.035, T=m+(o.layout==="logo"?0:Math.min(w*.092,h*.085)*1.9+h*.03), Bm=h-m-sig, bh=Math.max(40,Bm-T), bw=w-2*m;
+    if(sh==="circle"){ const d=Math.min(bw,bh); return box(ar?m:w-m-d,T+(bh-d)/2,d,d); }
+    if(sh==="loz_h"){ const lh=Math.min(bh,bw*.5); return box(m,T+(bh-lh)/2,bw,lh); }
+    const lw=Math.min(bw,bh*.5); return box(ar?m:w-m-lw,T,lw,bh); }
+  /* ----- engine ----- */
+  const BLUR_K=1.6; /* layer blur 75 on the guideline's own artboard, carried to a 1080 frame */
+  function boxes(sig){ const wi=Math.sqrt(12*sig*sig/3+1); let wl=Math.floor(wi); if(wl%2===0) wl--; const m=Math.round((12*sig*sig-3*wl*wl-12*wl-9)/(-4*wl-4)); return [0,1,2].map(i=>Math.max(0,((i<m?wl:wl+2)-1)/2)); }
+  function boxH(s,d,w,h,r){ const iw=1/(2*r+1); for(let y=0;y<h;y++){ const row=y*w*4; for(let c=0;c<4;c++){ let acc=0; for(let x=0;x<=r&&x<w;x++) acc+=s[row+x*4+c]; for(let x=0;x<w;x++){ d[row+x*4+c]=acc*iw; const a=x+r+1, b=x-r; if(a<w) acc+=s[row+a*4+c]; if(b>=0) acc-=s[row+b*4+c]; } } } }
+  function boxV(s,d,w,h,r){ const iw=1/(2*r+1), st=w*4; for(let x=0;x<w;x++){ for(let c=0;c<4;c++){ const col=x*4+c; let acc=0; for(let y=0;y<=r&&y<h;y++) acc+=s[col+y*st]; for(let y=0;y<h;y++){ d[col+y*st]=acc*iw; const a=y+r+1, b=y-r; if(a<h) acc+=s[col+a*st]; if(b>=0) acc-=s[col+b*st]; } } } }
+  let gcv=null; const paths={};
+  const blobPath=i=>paths[i]||(paths[i]=new Path2D(BLOBS[i%BLOBS.length]));
+  /* the colour field of a gradient area fw × fh (small), as float RGB 0..255 */
+  function gField(it,L,Wf,Hf,res){ const k=Math.min(1,res/Math.max(Wf,Hf)), fw=Math.max(2,Math.round(Wf*k)), fh=Math.max(2,Math.round(Hf*k)), d=new Float32Array(fw*fh*3), bc=rgb(it.base);
+    for(let i=0;i<d.length;i+=3){ d[i]=bc[0]; d[i+1]=bc[1]; d[i+2]=bc[2]; }
+    const ref=Math.sqrt(fw*fh), ax=clamp(Math.pow(Wf/Hf,.25),.6,1.7); gcv=gcv||document.createElement("canvas");
+    for(const q of L){ const tn=TONES[q.t]||TONES.deep, sig=q.bl/2*ref/1080*BLUR_K, pad=Math.ceil(sig*3)+2, cw=fw+2*pad, ch=fh+2*pad; gcv.width=cw; gcv.height=ch; const c=gcv.getContext("2d",{willReadFrequently:true});
+      const R=q.s*ref/2, an=q.a*Math.PI/180, ca=Math.cos(an), sa=Math.sin(an); c.translate(pad+q.x*fw,pad+q.y*fh); c.scale(ax,1/ax); c.rotate(q.r*Math.PI/180); c.scale(R*q.e,R);
+      const g=c.createLinearGradient(-ca,-sa,ca,sa); g.addColorStop(0,tn[1]); g.addColorStop(.61,tn[2]); g.addColorStop(1,tn[3]); c.fillStyle=g; c.fill(blobPath(q.b));
+      const im=c.getImageData(0,0,cw,ch).data, n=cw*ch*4; let a=new Float32Array(n), b=new Float32Array(n); for(let i=0;i<n;i+=4){ const al=im[i+3]/255*q.o; a[i]=im[i]*al; a[i+1]=im[i+1]*al; a[i+2]=im[i+2]*al; a[i+3]=al; }
+      if(sig>.4) for(const r of boxes(sig)){ if(r<1) continue; boxH(a,b,cw,ch,r); boxV(b,a,cw,ch,r); }
+      for(let y=0;y<fh;y++){ let i=((y+pad)*cw+pad)*4, j=y*fw*3; for(let x=0;x<fw;x++,i+=4,j+=3){ const al=a[i+3]; if(al>.0004){ const u=1-al; d[j]=a[i]+d[j]*u; d[j+1]=a[i+1]+d[j+1]*u; d[j+2]=a[i+2]+d[j+2]*u; } } } }
+    return {w:fw,h:fh,d}; }
+  /* a prepared render: output size W × H for the format o */
+  function gPrep(o,W,H,res){ const it=o.it, K=W/o.w, g=geom(o), G={x:g.x*K,y:g.y*K,w:g.w*K,h:g.h*K}, F=gField(it,o.blobs,g.w,g.h,res), shape=it.kind==="shape";
+    const xi=new Int32Array(W), xw=new Float32Array(W); for(let x=0;x<W;x++){ const u=clamp(((x+.5)-G.x)/G.w*F.w-.5,0,F.w-1.001), i=Math.floor(u); xi[x]=i*3; xw[x]=u-i; }
+    return {o,it,W,H,K,G,F,xi,xw,shape,page:shape&&o.layout!=="grad"?rgb("#FFFAF4"):null,alpha:shape&&o.layout==="grad",smax:(it.form==="loz_v"?.09:.058)*Math.min(G.w,G.h)}; }
+  /* paint rows y0..y1 as RGBA bytes, with a fine dither */
+  function gRows(R,y0,y1,out){ const {W,G,F,xi,xw,it}=R, fw=F.w, fh=F.h, d=F.d, base=rgb(it.base), pg=R.page; let s=(y0*2654435761+W*40503+12345)>>>0||1, p=0;
+    const cx=G.x+G.w/2, cy=G.y+G.h/2, hw=G.w/2, hh=G.h/2, rr=Math.min(hw,hh), top=it.dir==="top", sm=R.smax;
+    for(let y=y0;y<y1;y++){ const v=clamp(((y+.5)-G.y)/G.h*fh-.5,0,fh-1.001), yi=Math.floor(v), wy=v-yi, r0=yi*fw*3, r1=r0+fw*3, py=y+.5;
+      for(let x=0;x<W;x++,p+=4){ let al=1;
+        if(R.shape){ const px=x+.5, qx=Math.abs(px-cx)-hw+rr, qy=Math.abs(py-cy)-hh+rr, sd=Math.hypot(Math.max(qx,0),Math.max(qy,0))+Math.min(Math.max(qx,qy),0)-rr, t=top?clamp((py-G.y)/G.h,0,1):clamp((G.x+G.w-px)/G.w,0,1), sg=t*sm;
+          al=sg<.6?clamp(.5-sd,0,1):sd>3.4*sg?0:sd<-3.4*sg?1:1/(1+Math.exp(1.702*sd/sg));
+          if(al<=0){ if(pg){ out[p]=pg[0]; out[p+1]=pg[1]; out[p+2]=pg[2]; out[p+3]=255; } else { out[p]=base[0]; out[p+1]=base[1]; out[p+2]=base[2]; out[p+3]=0; } continue; } }
+        const i=xi[x], wx=xw[x], a=r0+i, b=r1+i;
+        for(let c=0;c<3;c++){ const t0=d[a+c]+(d[a+3+c]-d[a+c])*wx, t1=d[b+c]+(d[b+3+c]-d[b+c])*wx; let val=t0+(t1-t0)*wy; if(pg) val=val*al+pg[c]*(1-al);
+          s^=s<<13; s^=s>>>17; s^=s<<5; out[p+c]=Math.floor(val+(s>>>0)/4294967296); }
+        if(pg||!R.shape) out[p+3]=255; else { s^=s<<13; s^=s>>>17; s^=s<<5; out[p+3]=Math.floor(al*255+(s>>>0)/4294967296); } } } }
+  /* brightness of the gradient under a point of the format, 0..1: decides ink or white for the logo and the copy */
+  function gLum(R,x,y){ if(R.shape) return 1; const F=R.F, i=(clamp(Math.round(y/R.o.h*F.h),0,F.h-1)*F.w+clamp(Math.round(x/R.o.w*F.w),0,F.w-1))*3; return (F.d[i]*.299+F.d[i+1]*.587+F.d[i+2]*.114)/255; }
+  /* logo, copy and image frame, drawn on a transparent layer over the gradient */
+  function tplOverlay(R,maxArea){ const o=R.o; if(o.layout==="grad") return null; const {w,h}=o, it=o.it, sc=R.K*Math.min(1,Math.sqrt((maxArea||16e6)/(R.W*R.H)));
+    const cv=document.createElement("canvas"); cv.width=Math.max(1,Math.round(w*sc)); cv.height=Math.max(1,Math.round(h*sc)); const c=cv.getContext("2d"); c.scale(cv.width/w,cv.height/h);
+    const m=Math.round(w*.07), rowH=(h-2*m)/12, colW=(w-2*m)/12, ar=o.lang==="ar", tiny=h<220||w<220, pad=m, dark=it.fam==="dark";
+    const font=ar?"'Avenir Arabic','IBM Plex Sans Arabic',Arial,sans-serif":"'GT Walsheim','Figtree',Arial,sans-serif";
+    const ink=(x,y)=>gLum(R,clamp(x,0,w),clamp(y,0,h))>.64?"#19181E":dark?"#FFFAF4":"#FFFFFF";
+    const e=emblem(), vb=(e?.getAttribute("viewBox")||"0 0 84.53 82.12").split(/\s+/).map(Number), lg=Math.max(18,Math.min(tiny?h*.5:rowH*1.5,colW*2.4,h*.5)), k=lg/vb[3], lw=vb[2]*k;
+    const side=ar?w-pad:pad, wide=w/h>2.4, fs=Math.round(tiny?Math.min(h*.34,w*.07):wide?Math.min(h*.2,w*.05):Math.min(w*.092,h*.085)), fs2=Math.round(fs*.4), head=o.head||(ar?"عنوان رئيسي":"Headline goes here"), sub=o.sub||(ar?"عنوان فرعي قصير":"A short supporting line");
+    if(o.layout==="image"&&!tiny&&it.kind!=="shape"){ const land=w>=h*1.15, iw=land?(w-2*pad)*.46:w-2*pad, ih=land?h-2*pad:(h-2*pad)*.48, ix=land?(ar?pad:w-pad-iw):pad, iy=land?pad:h-pad-ih, rad=Math.round(Math.min(iw,ih)*.06);
+      c.fillStyle="#CCC3B4"; c.beginPath(); if(c.roundRect) c.roundRect(ix,iy,iw,ih,rad); else c.rect(ix,iy,iw,ih); c.fill(); c.fillStyle="#4F4E62"; c.font=`400 ${Math.round(fs2*.8)}px ${font}`; c.textAlign="center"; c.direction="ltr"; c.fillText("Image",ix+iw/2,iy+ih/2); }
     /* signature position: logo at the bottom on the language's side; the address sits in the opposite bottom corner */
     const ly=tiny?(h-lg)/2:h-pad-lg, lx=tiny?(ar?pad:w-pad-lw):(ar?w-pad-lw:pad);
-    s+=`<g id="Logo symbol" transform="translate(${lx.toFixed(1)} ${ly.toFixed(1)}) scale(${k.toFixed(4)})" fill="${tc}">${inner}</g>\n`;
-    if(o.layout!=="logo"){ const ty=tiny?h/2+fs*.34:pad+fs;
-      s+=`<text id="Headline" x="${tiny?(ar?w-pad:pad):side}" y="${ty.toFixed(0)}" font-family="${font}" font-size="${fs}" font-weight="400" letter-spacing="${ar?0:(-fs*.04).toFixed(1)}" fill="${tc}" text-anchor="${anchor}">${xml(head)}</text>\n`;
-      if(!tiny) s+=`<text id="Subhead" x="${side}" y="${(pad+fs+fs2*1.9).toFixed(0)}" font-family="${font}" font-size="${fs2}" font-weight="400" fill="${tc}" text-anchor="${anchor}">${xml(sub)}</text>\n`;
-      if(!tiny&&!wide) s+=`<text id="Address" x="${ar?pad:w-pad}" y="${(h-pad-2).toFixed(0)}" font-family="'GT Walsheim', 'Figtree', Arial, sans-serif" font-size="${Math.max(11,Math.round(fs2*.5))}" fill="${tc}" text-anchor="${ar?"start":"end"}">www.bankaletihad.com</text>\n`; }
-    return s+`</svg>`; }
-  const cur=()=>({...FLAT[TP.fmt],bg:TP.bg,layout:TP.layout,lang:TP.lang,shape:TP.shape,seed:TP.seed,pts:pts(),head:TP.head,sub:TP.sub});
-  const hpos=(o,p)=>{ const G=geom(o); return [Math.max(0,Math.min(100,(G.x+p.x*G.w)/o.w*100)),Math.max(0,Math.min(100,(G.y+p.y*G.h)/o.h*100))]; };
-  const tplName=(o)=>`BAE_${o.name.replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"")}_${o.w}x${o.h}_${TBG[o.bg].name}_${TP.shape}${o.layout==="grad"?"":"_"+o.layout+"_"+o.lang.toUpperCase()}`;
-  async function svgPng(svg,w,h){ const u=URL.createObjectURL(new Blob([svg],{type:"image/svg+xml"})); try{ const im=new Image(); await new Promise((res,rej)=>{ im.onload=res; im.onerror=rej; im.src=u; }); const k=Math.min(1,8000/Math.max(w,h)), c=document.createElement("canvas"); c.width=Math.round(w*k); c.height=Math.round(h*k); c.getContext("2d").drawImage(im,0,0,c.width,c.height); return await new Promise(r=>c.toBlob(r,"image/png")); } finally{ URL.revokeObjectURL(u); } }
-  function tplDraw(){ const box=$("biTplBody"); if(!box) return; const o=cur(), P=o.pts, sel=P[TP.sel];
+    if(e){ c.save(); c.translate(lx,ly); c.scale(k,k); c.fillStyle=ink(lx+lw/2,ly+lg/2); for(const p of e.querySelectorAll("path")) c.fill(new Path2D(p.getAttribute("d"))); c.restore(); }
+    if(o.layout!=="logo"){ const ty=tiny?h/2+fs*.34:pad+fs, tx=tiny?(ar?w-pad:pad):side, dirx=ar?-1:1; c.direction=ar?"rtl":"ltr"; c.textAlign=ar?"right":"left"; c.fillStyle=ink(tx+dirx*fs*2.5,ty-fs*.35);
+      c.font=`400 ${fs}px ${font}`; try{ c.letterSpacing=ar?"0px":(-fs*.02).toFixed(2)+"px"; }catch{} c.fillText(head,tx,ty); try{ c.letterSpacing="0px"; }catch{}
+      if(!tiny){ c.font=`400 ${fs2}px ${font}`; c.fillText(sub,side,pad+fs+fs2*1.9); }
+      if(!tiny&&!wide){ const axp=ar?pad:w-pad; c.font=`400 ${Math.max(11,Math.round(fs2*.5))}px 'GT Walsheim','Figtree',Arial,sans-serif`; c.direction="ltr"; c.textAlign=ar?"left":"right"; c.fillStyle=ink(axp+(ar?1:-1)*fs2*3,h-pad-4); c.fillText("www.bankaletihad.com",axp,h-pad-2); } }
+    return cv; }
+  /* the overlay, resampled for rows y0..y1 of the output and laid over the gradient bytes */
+  function ovRows(R,ov,y0,y1,out,tmp){ const W=R.W, n=y1-y0, ky=ov.height/R.H; tmp.width=W; tmp.height=n; const c=tmp.getContext("2d",{willReadFrequently:true}); c.clearRect(0,0,W,n); c.imageSmoothingQuality="high"; c.drawImage(ov,0,y0*ky,ov.width,n*ky,0,0,W,n); const s=c.getImageData(0,0,W,n).data;
+    for(let i=0;i<s.length;i+=4){ const a=s[i+3]/255; if(!a) continue; const u=1-a; out[i]=s[i]*a+out[i]*u; out[i+1]=s[i+1]*a+out[i+1]*u; out[i+2]=s[i+2]*a+out[i+2]*u; out[i+3]=Math.min(255,s[i+3]+out[i+3]*u); } }
+  /* draw a format on a canvas (preview, thumbnails) */
+  function gCanvas(cv,o,W,H,res){ cv.width=W; cv.height=H; const R=gPrep(o,W,H,res), c=cv.getContext("2d"), im=c.createImageData(W,H); gRows(R,0,H,im.data); c.putImageData(im,0,0); const ov=tplOverlay(R); if(ov){ c.imageSmoothingQuality="high"; c.drawImage(ov,0,0,W,H); } return R; }
+  /* a PNG written row by row, so an 8K file never needs an 8K canvas and the transparent edge keeps its exact values */
+  const CRC=(()=>{ const t=new Uint32Array(256); for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c=c&1?0xEDB88320^(c>>>1):c>>>1; t[n]=c>>>0; } return t; })();
+  const crc=(parts)=>{ let c=0xFFFFFFFF; for(const u of parts) for(let i=0;i<u.length;i++) c=CRC[(c^u[i])&255]^(c>>>8); return (c^0xFFFFFFFF)>>>0; };
+  const chunk=(type,data)=>{ const t=new TextEncoder().encode(type), len=new Uint8Array(4), cc=new Uint8Array(4); new DataView(len.buffer).setUint32(0,data.length); new DataView(cc.buffer).setUint32(0,crc([t,data])); return [len,t,data,cc]; };
+  const tick=()=>new Promise(r=>setTimeout(r,0));
+  async function tplPNG(o,maxSide,onp){ const K=maxSide?Math.max(1,maxSide/Math.max(o.w,o.h)):1, W=Math.round(o.w*K), H=Math.round(o.h*K), R=gPrep(o,W,H,640), ov=tplOverlay(R), tmp=ov?document.createElement("canvas"):null, STRIP=96, bpp=R.alpha?4:3;
+    if(!window.CompressionStream){ const k2=Math.min(1,Math.sqrt(16e6/(W*H))), cv=document.createElement("canvas"); gCanvas(cv,o,Math.round(W*k2),Math.round(H*k2),640); return await new Promise(r=>cv.toBlob(r,"image/png")); }
+    const cs=new CompressionStream("deflate"), wr=cs.writable.getWriter(), z=[]; const rd=(async()=>{ const r=cs.readable.getReader(); for(;;){ const {done,value}=await r.read(); if(done) break; z.push(value); } })();
+    const px=new Uint8ClampedArray(W*STRIP*4);
+    for(let y0=0;y0<H;y0+=STRIP){ const y1=Math.min(H,y0+STRIP), n=y1-y0, view=px.subarray(0,n*W*4); gRows(R,y0,y1,view); if(ov) ovRows(R,ov,y0,y1,view,tmp);
+      const line=new Uint8Array(n*(W*bpp+1)); let q=0, p=0; for(let y=0;y<n;y++){ line[q++]=0; if(bpp===4){ line.set(view.subarray(p,p+W*4),q); q+=W*4; p+=W*4; } else for(let x=0;x<W;x++,p+=4){ line[q++]=view[p]; line[q++]=view[p+1]; line[q++]=view[p+2]; } }
+      await wr.write(line); if((y0/STRIP)%8===0){ onp?.(y1/H); await tick(); } }
+    await wr.close(); await rd;
+    const ih=new Uint8Array(13), dv=new DataView(ih.buffer); dv.setUint32(0,W); dv.setUint32(4,H); ih[8]=8; ih[9]=bpp===4?6:2;
+    const parts=[new Uint8Array([137,80,78,71,13,10,26,10]),...chunk("IHDR",ih),...chunk("sRGB",new Uint8Array([0]))]; for(const u of z) parts.push(...chunk("IDAT",u)); parts.push(...chunk("IEND",new Uint8Array(0)));
+    return new Blob(parts,{type:"image/png"}); }
+  /* ----- state, names ----- */
+  const cur=(over)=>{ const f=FLAT[TP.fmt], it=item(TP.item); return {...f,it,blobs:blobs(),layout:TP.layout,lang:TP.lang,head:TP.head,sub:TP.sub,...over}; };
+  const tplName=o=>{ const it=o.it, rk=ratioKey(o.w,o.h); let n=it.file.replace("{r}",rk); if(it.kind==="shape"&&!(o.layout==="grad")) n+="_"+rk; if(o.custom) n+="_custom"; if(o.layout!=="grad") n+="_"+o.layout+"_"+o.lang.toUpperCase(); return n; };
+  const qSide=()=>QUAL.find(q=>q[0]===TP.q)?.[2]||0;
+  const outSize=o=>{ const s=qSide(), K=s?Math.max(1,s/Math.max(o.w,o.h)):1; return [Math.round(o.w*K),Math.round(o.h*K)]; };
+  /* blob centre and outline, in format pixels */
+  function bGeo(o,q){ const G=geom(o), ref=Math.sqrt(G.w*G.h), ax=clamp(Math.pow(G.w/G.h,.25),.6,1.7), R=q.s*ref/2; return {cx:G.x+q.x*G.w,cy:G.y+q.y*G.h,tr:`translate(${(G.x+q.x*G.w).toFixed(1)} ${(G.y+q.y*G.h).toFixed(1)}) scale(${ax.toFixed(4)} ${(1/ax).toFixed(4)}) rotate(${q.r}) scale(${(R*q.e).toFixed(2)} ${R.toFixed(2)})`}; }
+  const toneCss=t=>{ const n=TONES[t]||TONES.deep; return `linear-gradient(135deg,${n[1]} 0%,${n[2]} 61%,${n[3]} 100%)`; };
+  /* ----- gallery thumbnails: the whole library side by side, in the chosen size ----- */
+  const thumbs=new Map(); let thumbRun=0;
+  function thumbQueue(){ const run=++thumbRun, f=FLAT[TP.fmt], k=180/Math.max(f.w,f.h), W=Math.max(24,Math.round(f.w*k)), H=Math.max(24,Math.round(f.h*k)); const todo=[...document.querySelectorAll("#biTplBody [data-tpthumb]")];
+    const step=()=>{ if(run!==thumbRun) return; const el=todo.shift(); if(!el) return; const it=item(el.dataset.tpthumb), key=it.k+"|"+f.w+"x"+f.h; let u=thumbs.get(key);
+      if(!u){ const cv=document.createElement("canvas"); gCanvas(cv,{...f,it,blobs:it.blobs,layout:"grad",lang:"en"},W*2,H*2,72); u=cv.toDataURL("image/png"); thumbs.set(key,u); if(thumbs.size>400) thumbs.delete(thumbs.keys().next().value); }
+      if(el.isConnected) el.src=u; (todo.length?setTimeout:()=>{})(step,0); }; step(); }
+  /* ----- stage ----- */
+  let paintT=0;
+  function tplPaint(fast){ const cv=$("tpCv"); if(!cv) return; const o=cur(), k=Math.min(1,(fast?640:1100)/Math.max(o.w,o.h)); gCanvas(cv,o,Math.max(16,Math.round(o.w*k)),Math.max(16,Math.round(o.h*k)),fast?150:300);
+    const ol=$("tpOl"), q=o.blobs[TP.sel]; if(ol) ol.innerHTML=q?`<path d="${BLOBS[q.b%BLOBS.length]}" transform="${bGeo(o,q).tr}" vector-effect="non-scaling-stroke" class="a"/><path d="${BLOBS[q.b%BLOBS.length]}" transform="${bGeo(o,q).tr}" vector-effect="non-scaling-stroke" class="b"/>`:""; }
+  const tplSoon=fast=>{ cancelAnimationFrame(paintT); paintT=requestAnimationFrame(()=>tplPaint(fast)); };
+  const hpos=(o,q)=>{ const g=bGeo(o,q); return [clamp(g.cx/o.w*100,1,99),clamp(g.cy/o.h*100,1,99)]; };
+  function tplDraw(){ const box=$("biTplBody"); if(!box) return; const o=cur(), it=o.it, L=o.blobs, sel=L[TP.sel], [ow,oh]=outSize(o), groups=[...new Set(LIB.map(i=>i.g))];
+    const rng=(id,label,min,max,val,unit)=>`<label class="t12">${label}<input type="range" id="${id}" min="${min}" max="${max}" value="${Math.round(val)}"><output>${Math.round(val)}${unit||""}</output></label>`;
     box.innerHTML=`
-      <div class="tp-ask"><label class="lbl" for="tpAsk">Ask for a file</label><div class="row"><input class="rl-field" id="tpAsk" dir="auto" value="${esc(TP.ask)}" placeholder="e.g. a dark gradient background for a story, glow in the bottom corner"><button type="button" class="btn small primary" data-tp="ask" ${TP.busy?"disabled":""}>${TP.busy||"Make it"}</button></div>${TP.err?`<span class="t12 bad" role="alert">${esc(TP.err)}</span>`:""}</div>
+      <div class="tp-ask"><label class="lbl" for="tpAsk">Ask for a file</label><div class="row"><input class="rl-field" id="tpAsk" dir="auto" value="${esc(TP.ask)}" placeholder="e.g. a dark gradient background for a story, light in the bottom corner"><button type="button" class="btn small primary" data-tp="ask" ${TP.busy?"disabled":""}>${TP.busy||"Make it"}</button></div>${TP.err?`<span class="t12 bad" role="alert">${esc(TP.err)}</span>`:""}${TP.note?`<span class="t12" dir="auto" data-noi18n>${esc(TP.note)}</span>`:""}</div>
+      <div class="tp-top"><div><label class="lbl" for="tpFmt">Size</label><select class="rl-field" id="tpFmt">${FORMATS.map(g=>`<optgroup label="${g[0]}">${g[1].map(f=>{ const i=FLAT.findIndex(x=>x.name===f[0]&&x.g===g[0]); return `<option value="${i}" ${i===TP.fmt?"selected":""}>${f[0]} · ${f[1]}×${f[2]}</option>`; }).join("")}</optgroup>`).join("")}</select></div><p class="t12 muted">The whole gradient library in this size. Pick one to edit and download it.</p></div>
+      <div class="tp-lib">${groups.map(g=>`<div class="tp-group"><span class="lbl">${g}</span><div class="tp-cards">${LIB.filter(i=>i.g===g).map(i=>`<button type="button" class="tp-card${i.kind==="shape"?" clear":""}" data-tpitem="${i.k}" aria-pressed="${i.k===TP.item}"><span class="pv" style="aspect-ratio:${o.w}/${o.h}"><img data-tpthumb="${i.k}" alt="" ${thumbs.get(i.k+"|"+o.w+"x"+o.h)?`src="${thumbs.get(i.k+"|"+o.w+"x"+o.h)}"`:""}></span><b>${i.name}</b></button>`).join("")}</div></div>`).join("")}</div>
       <div class="tp-grid">
         <div class="tp-side">
-          <label class="lbl" for="tpFmt">Size</label><select class="rl-field" id="tpFmt">${FORMATS.map(g=>`<optgroup label="${g[0]}">${g[1].map(f=>{ const i=FLAT.findIndex(x=>x.name===f[0]&&x.g===g[0]); return `<option value="${i}" ${i===TP.fmt?"selected":""}>${f[0]} · ${f[1]}×${f[2]}</option>`; }).join("")}</optgroup>`).join("")}</select>
-          <span class="lbl">Colour</span><div class="a-seg" role="group" aria-label="Colour">${Object.entries(TBG).map(([k,v])=>`<button type="button" data-tpbg="${k}" aria-pressed="${TP.bg===k}">${v.name}</button>`).join("")}</div>
-          <span class="lbl">Gradient shape</span><div class="tp-chips">${SHAPES.map(([k,l])=>`<button type="button" class="br-topic" data-tpshape="${k}" aria-pressed="${TP.shape===k&&!TP.custom}">${l}</button>`).join("")}<button type="button" class="br-topic" data-tp="shuffle">Shuffle</button></div>
           <span class="lbl">Content</span><div class="tp-chips">${LAYOUTS.map(([k,l])=>`<button type="button" class="br-topic" data-tplay="${k}" aria-pressed="${TP.layout===k}">${l}</button>`).join("")}</div>
           ${TP.layout!=="grad"?`<div class="a-seg" role="group" aria-label="Language"><button type="button" data-tplang="en" aria-pressed="${TP.lang==="en"}">English</button><button type="button" data-tplang="ar" aria-pressed="${TP.lang==="ar"}">العربية</button></div>`:""}
           ${TP.layout==="copy"||TP.layout==="image"?`<input class="rl-field" id="tpHead" dir="auto" value="${esc(TP.head)}" placeholder="Headline (optional)" aria-label="Headline"><input class="rl-field" id="tpSub" dir="auto" value="${esc(TP.sub)}" placeholder="Subhead (optional)" aria-label="Subhead">`:""}
+          <span class="lbl">Shapes in this gradient</span>
+          <div class="tp-layers">${L.map((q,i)=>`<button type="button" class="tp-layer" data-tpsel="${i}" aria-pressed="${i===TP.sel}"><i style="background:${toneCss(q.t)}"></i><span>${i+1} · ${(TONES[q.t]||TONES.deep)[0]}</span></button>`).join("")}</div>
+          <div class="tp-chips"><button type="button" class="br-topic" data-tp="add">Add shape</button><button type="button" class="br-topic" data-tp="shuffle">Shuffle</button><button type="button" class="br-topic" data-tp="mirror">Mirror</button><button type="button" class="br-topic" data-tp="reset" ${TP.custom?"":"disabled"}>Reset</button></div>
+          <p class="t12 muted">Step 1 is the solid ${it.base} base. The list goes from the bottom layer to the top: dark first, lighter on top.</p>
         </div>
         <div class="tp-main">
-          <div class="tp-stage" id="tpStage" style="aspect-ratio:${o.w}/${o.h};max-width:min(100%,calc(62vh * ${(o.w/o.h).toFixed(4)}))"><div class="tp-svg" id="tpSvg">${tplSVG(o)}</div>${P.map((p,i)=>{ const [hx,hy]=hpos(o,p); return `<button type="button" class="tp-pt${i===TP.sel?" on":""}" data-tppt="${i}" style="left:${hx}%;top:${hy}%;background:${p.c}" aria-label="Point ${i+1}, drag to move"></button>`; }).join("")}</div>
-          <p class="t12 muted">${o.w} × ${o.h} px · ${P.length} points. Drag a point to move the colour. Select one to change it.</p>
-          <div class="tp-pt-ed">${sel?`<span class="t12">Point ${TP.sel+1}</span><div class="tp-sw">${swatches(TP.shape==="field"||TP.shape==="frame"?TP.bg:"orange").map(c=>`<button type="button" data-tpcol="${c}" style="background:${c}" aria-label="Colour ${c}" aria-pressed="${sel.c===c}"></button>`).join("")}</div><label class="t12">Size <input type="range" min="8" max="70" value="${Math.round(sel.r*100)}" id="tpR"></label><label class="t12">Strength <input type="range" min="10" max="100" value="${Math.round((sel.o??.7)*100)}" id="tpO"></label><button type="button" class="bi-x" data-tp="del">Remove point</button>`:`<span class="t12 muted">No point selected.</span>`}<button type="button" class="btn small" data-tp="add">Add point</button></div>
-          <div class="rl-btns"><button type="button" class="btn small primary" data-tp="copy">Copy for Figma</button><button type="button" class="btn small" data-tp="svg">Download SVG</button><button type="button" class="btn small" data-tp="png">Download PNG</button><button type="button" class="btn small" data-tp="zip">All sizes as ZIP</button></div>
-          <p class="t12 muted">In Figma: press <b>Copy for Figma</b>, then paste (⌘V / Ctrl+V) on the canvas. You get a frame with the base, one blurred circle per point, the logo symbol and live text, all editable. Use only the official lockups from Assets for final work.</p>
+          <div class="tp-stage${it.kind==="shape"&&TP.layout==="grad"?" clear":""}" id="tpStage" style="aspect-ratio:${o.w}/${o.h};max-width:min(100%,calc(62vh * ${(o.w/o.h).toFixed(4)}))"><canvas id="tpCv"></canvas><svg id="tpOl" class="tp-ol" viewBox="0 0 ${o.w} ${o.h}" preserveAspectRatio="none" aria-hidden="true"></svg>${L.map((q,i)=>{ const [hx,hy]=hpos(o,q); return `<button type="button" class="tp-pt${i===TP.sel?" on":""}" data-tppt="${i}" style="left:${hx}%;top:${hy}%;background:${toneCss(q.t)}" aria-label="Shape ${i+1}, drag to move">${i+1}</button>`; }).join("")}</div>
+          <p class="t12 muted"><b data-noi18n>${esc(tplName({...o,custom:TP.custom}))}.png</b> · ${o.w} × ${o.h} px. Drag a numbered handle to move that shape. Select it to change the shape itself.</p>
+          <div class="tp-pt-ed">${sel?`<div class="tp-edrow"><span class="t12"><b>Shape ${TP.sel+1}</b></span><div class="tp-forms">${BLOBS.map((d,i)=>`<button type="button" data-tpform="${i}" aria-pressed="${sel.b%BLOBS.length===i}" aria-label="Organic shape ${i+1}"><svg viewBox="-1.1 -1.1 2.2 2.2"><path d="${d}"/></svg></button>`).join("")}</div><div class="tp-sw">${FAMS[it.fam].tones.map(t=>`<button type="button" data-tptone="${t}" style="background:${toneCss(t)}" title="${TONES[t][0]}" aria-label="${TONES[t][0]}" aria-pressed="${sel.t===t}"></button>`).join("")}</div></div>
+            <div class="tp-edrow">${rng("tpS","Size",5,220,sel.s*100,"%")}${rng("tpRot","Rotation",-180,180,sel.r,"°")}${rng("tpE","Stretch",50,300,sel.e*100,"%")}${rng("tpBl","Blur",0,200,sel.bl)}${rng("tpA","Fill angle",0,360,((sel.a%360)+360)%360,"°")}${rng("tpO","Strength",10,100,sel.o*100,"%")}</div>
+            <div class="tp-edrow"><button type="button" class="btn small" data-tp="up">Bring forward</button><button type="button" class="btn small" data-tp="down">Send back</button><button type="button" class="btn small" data-tp="dup">Duplicate</button><button type="button" class="bi-x" data-tp="del">Remove shape</button></div>`:`<span class="t12 muted">No shape selected. Pick a handle on the image or a layer in the list.</span>`}</div>
+          <div class="tp-out"><span class="lbl">PNG quality</span><div class="a-seg" role="group" aria-label="PNG quality">${QUAL.map(([k,l])=>`<button type="button" data-tpq="${k}" aria-pressed="${TP.q===k}">${l}</button>`).join("")}</div><span class="t12 muted">${ow} × ${oh} px${it.kind==="shape"&&TP.layout==="grad"?" · transparent background":""} · fine dither, no banding</span></div>
+          <div class="rl-btns"><button type="button" class="btn small primary" data-tp="png">Download PNG</button><button type="button" class="btn small" data-tp="copy">Copy for Figma</button><button type="button" class="btn small" data-tp="zip">All sizes as ZIP</button><button type="button" class="btn small" data-tp="set">Official set as ZIP</button></div>
+          <p class="t12 muted">Copy for Figma copies a finished PNG image: paste it on the canvas (⌘V / Ctrl+V). The organic shapes here are drawn close to the guideline; they are not the official library shapes. Use only the official logo lockups from Assets for final work.</p>
         </div>
       </div>`;
-    if(typeof uxT==="function") uxT(box); }
-  const tplRefresh=()=>{ const o=cur(), sv=$("tpSvg"); if(sv) sv.innerHTML=tplSVG(o); };
-  async function tplAsk(){ const q=($("tpAsk")?.value||"").trim(); TP.ask=q; if(!q) return; if(!sample){ TP.err="This needs Claude, which isn't connected in this view."; tplDraw(); return; } TP.busy="Thinking…"; TP.err=""; tplDraw();
-    try{ const r=await rlAsk(`You set up a Bank al Etihad brand template from a request (any language): "${q.slice(0,500)}".
+    tplPaint(); thumbQueue(); if(typeof uxT==="function") uxT(box); }
+  const pick=k=>{ TP.item=k; TP.blobs=null; TP.custom=false; TP.sel=-1; const it=item(k); if(TP.layout==="image"&&it.kind==="shape") TP.layout="copy"; if(/_ar$/.test(k)) TP.lang="ar"; else if(/_en$/.test(k)) TP.lang="en"; };
+  async function tplAsk(){ const q=($("tpAsk")?.value||"").trim(); TP.ask=q; if(!q) return; if(!sample){ TP.err="This needs Claude, which isn't connected in this view."; tplDraw(); return; } TP.busy="Thinking…"; TP.err=""; TP.note=""; tplDraw();
+    try{ const r=await rlAsk(`You set up a Bank al Etihad gradient file from a request (any language): "${q.slice(0,500)}".
 Sizes (use the exact name): ${FLAT.map(f=>`${f.name} ${f.w}x${f.h}`).join("; ")}.
-bg: orange (hero, external), ink (dark, internal and corporate), stone (light, calm). For circle and lozenges, bg is the page colour behind the orange element.
-layout: grad (gradient only, a background file), logo, copy (logo + headline + subhead), image (image frame + copy).
-shape: field (the gradient fills the whole frame), frame (gradient around a clean content card), circle, loz_h (horizontal lozenge), loz_v (vertical lozenge). Circle and lozenges are the orange gradient element sitting on the page colour.
-The BAE gradient is TONAL: one colour family, low contrast, long soft transitions, never a linear or radial blend and never a second hue. It is built from 4 to 6 soft blurred points over the base colour: a darker point upper-left, a lighter point upper-right, a darker point low-centre, a base-colour point in the middle, one small highlight. Each point: x and y from 0 to 1 inside the gradient's own area (0,0 = top left), r from 0.15 to 0.45, o = strength from 0.3 to 0.8, c = one colour of the family. Families — orange (also used inside circle and lozenges): dark #C13A23, light #FB9A75, highlight #FDCBB4, base #FA6428 · ink: dark #0E0D12, light #4F4E62, highlight #75738D, base #19181E · stone: dark #CCC3B4, light #FFFAF4, highlight #FDCBB4, base #ECE8DF. Move the points to match what was asked ("lighter at the top", "darker corner bottom right", "calm where the text sits") but keep it tonal and subtle.
-Return ONLY JSON: {"size":"exact size name","bg":"orange|ink|stone","layout":"grad|logo|copy|image","shape":"field|frame|circle|loz_h|loz_v","lang":"en|ar","headline":"","subhead":"","points":[{"x":0,"y":0,"r":0.3,"o":0.6,"c":"#"}],"note":"one short sentence in the user's language on what you made"}`,{modelTier:"quick",cache:false});
-      const i=FLAT.findIndex(f=>f.name.toLowerCase()===String(r?.size||"").toLowerCase()); if(i>=0) TP.fmt=i; if(TBG[r?.bg]) TP.bg=r.bg; if(LAYOUTS.some(l=>l[0]===r?.layout)) TP.layout=r.layout; if(r?.lang==="ar"||r?.lang==="en") TP.lang=r.lang; TP.head=String(r?.headline||""); TP.sub=String(r?.subhead||"");
-      if(SHAPES.some(x=>x[0]===r?.shape)) TP.shape=r.shape; const sw=swatches(TP.shape==="field"||TP.shape==="frame"?TP.bg:"orange"), ok=new Set(sw.map(c=>c.toUpperCase())), P=(Array.isArray(r?.points)?r.points:[]).filter(p=>isFinite(+p?.x)&&isFinite(+p?.y)).slice(0,8).map((p,k)=>({x:Math.max(-.2,Math.min(1.2,+p.x)),y:Math.max(-.2,Math.min(1.2,+p.y)),r:Math.max(.08,Math.min(.7,+p.r||.3)),o:Math.max(.15,Math.min(1,+p.o||.6)),c:ok.has(String(p.c||"").toUpperCase())?String(p.c).toUpperCase():sw[k%2]}));
-      if(P.length>=2){ TP.pts=P; TP.custom=true; } else { TP.pts=null; TP.custom=false; } TP.sel=-1; TP.note=String(r?.note||"");
+Library (use the exact key): ${LIB.map(i=>`${i.k} = ${i.name} (${i.g})`).join("; ")}.
+How to choose: orange_* is the hero full-bleed background (dark masses at corners and edges, clean orange middle, one small light highlight at an edge). frame_* is the soft L frame: 01 has the gradient on the bottom and one side with the light area at the top on the reading side, 02 is the inverse; _en for English layouts, _ar for Arabic. stone_* is the calm stone frame. dark_* is ONLY for internal communications and corporate or high-earning audiences. circle / loz_h / loz_v are shapes for image-led layouts on a transparent background: _1 is sharp at the top and soft at the bottom, _2 is sharp on the right and soft on the left.
+layout: grad (gradient only), logo, copy (logo + headline + subhead), image (image frame + copy, not for shapes).
+The gradient is built from blurred organic shapes filled with a linear gradient, darker shapes first and lighter on top, one colour family only. Return "shapes" ONLY when the request asks to move or change something (for example "light in the bottom corner", "darker at the top"); otherwise return an empty list and the library version is used. Each shape: b = organic shape 0 to ${BLOBS.length-1}, x and y = centre from 0 to 1 inside the gradient area (0,0 is top left, values slightly outside are allowed), s = size 0.15 to 1.5, r = rotation in degrees, e = stretch 1 to 2.2, t = tone, bl = blur 60 to 120, o = strength 0.4 to 1. Tones by family — orange: deep, mid, light, glow, cream · stone: sdark, stone, cream, glow · dark: ndeep, nmid, nlight, nglow. Use 3 to 6 shapes; big dark ones at corners and edges, small light ones last.
+Return ONLY JSON: {"size":"exact size name","item":"library key","layout":"grad|logo|copy|image","lang":"en|ar","headline":"","subhead":"","shapes":[{"b":0,"x":0,"y":0,"s":1,"r":0,"e":1.5,"t":"deep","bl":90,"o":1}],"note":"one short sentence in the user's language on what you made"}`,{modelTier:"quick",cache:false});
+      const i=FLAT.findIndex(f=>f.name.toLowerCase()===String(r?.size||"").toLowerCase()); if(i>=0) TP.fmt=i; if(LIB.some(x=>x.k===r?.item)) pick(r.item); if(LAYOUTS.some(l=>l[0]===r?.layout)) TP.layout=r.layout; if(r?.lang==="ar"||r?.lang==="en") TP.lang=r.lang; TP.head=String(r?.headline||""); TP.sub=String(r?.subhead||"");
+      const it=item(TP.item); if(TP.layout==="image"&&it.kind==="shape") TP.layout="copy"; const ok=FAMS[it.fam].tones, n=(v,a,b,d)=>isFinite(+v)?clamp(+v,a,b):d;
+      const L=(Array.isArray(r?.shapes)?r.shapes:[]).filter(s=>isFinite(+s?.x)&&isFinite(+s?.y)).slice(0,8).map((s,k)=>({b:Math.abs(Math.round(+s.b||0))%BLOBS.length,x:n(s.x,-.3,1.3,.5),y:n(s.y,-.3,1.3,.5),s:n(s.s,.05,2.2,.6),r:n(s.r,-180,180,0),e:n(s.e,.5,3,1.4),t:ok.includes(s.t)?s.t:ok[Math.min(k,1)],a:n(s.a,0,360,35),bl:n(s.bl,0,200,90),o:n(s.o,.1,1,1)}));
+      if(L.length>=2){ TP.blobs=L; TP.custom=true; } TP.note=String(r?.note||"").slice(0,240);
     }catch(e){ TP.err=e?.code==="rate_limited"?"Too many requests. Try again in a minute.":"Couldn't set that up. Try again."; }
     TP.busy=""; tplDraw(); }
+  const flash=(a,msg,back)=>{ a.textContent=msg; setTimeout(()=>{ if(a.isConnected) a.textContent=back; },2600); };
+  const OFFICIAL=[["9x16",1080,1920],["3x4",1080,1440],["1x1",1080,1080],["16x9",1920,1080]];
   P.addEventListener("click",async e=>{ const t=e.target; if(!t.closest("#biTplBody")) return;
-    const bgb=t.closest("[data-tpbg]"); if(bgb){ TP.bg=bgb.dataset.tpbg; TP.pts=null; TP.custom=false; TP.sel=-1; tplDraw(); return; }
-    const sh=t.closest("[data-tpshape]"); if(sh){ TP.shape=sh.dataset.tpshape; if(TP.layout==="image"&&/circle|loz/.test(TP.shape)) TP.layout="copy"; TP.pts=null; TP.custom=false; TP.sel=-1; tplDraw(); return; }
-    const la=t.closest("[data-tplay]"); if(la){ TP.layout=la.dataset.tplay; tplDraw(); return; }
+    const ib=t.closest("[data-tpitem]"); if(ib){ pick(ib.dataset.tpitem); tplDraw(); $("tpStage")?.scrollIntoView({block:"nearest",behavior:"smooth"}); return; }
+    const la=t.closest("[data-tplay]"); if(la){ TP.layout=la.dataset.tplay; if(TP.layout==="image"&&item(TP.item).kind==="shape") TP.layout="copy"; tplDraw(); return; }
     const lg=t.closest("[data-tplang]"); if(lg){ TP.lang=lg.dataset.tplang; tplDraw(); return; }
-    const col=t.closest("[data-tpcol]"); if(col){ const p=pts()[TP.sel]; if(p){ p.c=col.dataset.tpcol; TP.custom=true; tplDraw(); } return; }
+    const qb=t.closest("[data-tpq]"); if(qb){ TP.q=qb.dataset.tpq; tplDraw(); return; }
+    const sl=t.closest("[data-tpsel]"); if(sl){ TP.sel=TP.sel===+sl.dataset.tpsel?-1:+sl.dataset.tpsel; tplDraw(); return; }
+    const fm=t.closest("[data-tpform]"); if(fm){ const q=blobs()[TP.sel]; if(q){ q.b=+fm.dataset.tpform; TP.custom=true; tplDraw(); } return; }
+    const tn=t.closest("[data-tptone]"); if(tn){ const q=blobs()[TP.sel]; if(q){ q.t=tn.dataset.tptone; TP.custom=true; tplDraw(); } return; }
     const pt=t.closest("[data-tppt]"); if(pt){ if(TP.dragged){ TP.dragged=false; return; } TP.sel=+pt.dataset.tppt; tplDraw(); return; }
-    const a=t.closest("[data-tp]"); if(!a) return; const k=a.dataset.tp, o=cur();
-    if(k==="shuffle"){ TP.seed=(TP.seed%999)+1; TP.pts=null; TP.custom=false; TP.sel=-1; tplDraw(); }
-    else if(k==="add"){ const b=swatches(TP.shape==="field"||TP.shape==="frame"?TP.bg:"orange"); pts().push({x:.5,y:.5,r:.25,c:b[pts().length%2],o:.6}); TP.sel=pts().length-1; TP.custom=true; tplDraw(); }
-    else if(k==="del"){ if(pts().length>1){ pts().splice(TP.sel,1); TP.sel=-1; TP.custom=true; tplDraw(); } }
+    const a=t.closest("[data-tp]"); if(!a) return; const k=a.dataset.tp, L=blobs(), it=item(TP.item), o=cur({custom:TP.custom});
+    if(k==="shuffle"){ const R=(()=>{ let s=(++TP.seed*2654435761)>>>0||1; return ()=>{ s^=s<<13; s^=s>>>17; s^=s<<5; return (s>>>0)/4294967296-.5; }; })(); TP.blobs=clone(it.blobs).map(q=>({...q,b:Math.floor((R()+.5)*BLOBS.length)%BLOBS.length,x:q.x+R()*.1,y:q.y+R()*.1,r:q.r+R()*40,s:q.s*(1+R()*.2),e:clamp(q.e*(1+R()*.3),.6,2.6)})); TP.custom=true; TP.sel=-1; tplDraw(); }
+    else if(k==="mirror"){ TP.blobs=mir(L); TP.custom=true; tplDraw(); }
+    else if(k==="reset"){ TP.blobs=null; TP.custom=false; TP.sel=-1; tplDraw(); }
+    else if(k==="add"){ const tones=FAMS[it.fam].tones; L.push(B(L.length%BLOBS.length,.5,.5,.4,0,1.3,tones[Math.min(2,tones.length-1)],35,90,1)); TP.sel=L.length-1; TP.custom=true; tplDraw(); }
+    else if(k==="del"){ if(L.length>1&&L[TP.sel]){ L.splice(TP.sel,1); TP.sel=-1; TP.custom=true; tplDraw(); } }
+    else if(k==="dup"){ const q=L[TP.sel]; if(q&&L.length<12){ L.splice(TP.sel+1,0,{...q,x:q.x+.06,y:q.y+.06}); TP.sel++; TP.custom=true; tplDraw(); } }
+    else if(k==="up"||k==="down"){ const i=TP.sel, j=i+(k==="up"?1:-1); if(L[i]&&L[j]){ [L[i],L[j]]=[L[j],L[i]]; TP.sel=j; TP.custom=true; tplDraw(); } }
     else if(k==="ask") tplAsk();
-    else if(k==="copy"){ try{ await navigator.clipboard.writeText(tplSVG(o)); a.textContent="Copied. Paste in Figma"; }catch{ a.textContent="Copy blocked. Use Download SVG"; } setTimeout(()=>{ if(a.isConnected) a.textContent="Copy for Figma"; },2500); }
-    else if(k==="svg") saveText(tplSVG(o),tplName(o)+".svg","image/svg+xml");
-    else if(k==="png"){ a.disabled=true; try{ const b=await svgPng(tplSVG(o),o.w,o.h); if(b) await save(b,tplName(o)+".png"); }catch{ TP.err="Couldn't make the PNG in this browser. Download the SVG instead."; tplDraw(); } a.disabled=false; }
-    else if(k==="zip"){ if(!window.JSZip){ TP.err="The zip library didn't load."; tplDraw(); return; } a.disabled=true; a.textContent="Packing…"; try{ const z=new JSZip(); for(const f of FLAT){ const x={...o,...f}; z.folder(f.g).file(tplName(x)+".svg",tplSVG(x)); } await save(await z.generateAsync({type:"blob",compression:"DEFLATE"}),`BAE_templates_${TBG[TP.bg].name}_${TP.shape}_${TP.layout}.zip`); }catch{ TP.err="Couldn't build the ZIP."; } a.disabled=false; a.textContent="All sizes as ZIP"; } });
-  P.addEventListener("change",e=>{ if(e.target.id==="tpFmt"){ TP.fmt=+e.target.value; tplDraw(); } else if(e.target.id==="tpHead"||e.target.id==="tpSub"){ TP.head=$("tpHead")?.value||""; TP.sub=$("tpSub")?.value||""; tplRefresh(); } });
-  P.addEventListener("input",e=>{ if(e.target.id==="tpR"||e.target.id==="tpO"){ const p=pts()[TP.sel]; if(p){ if(e.target.id==="tpR") p.r=+e.target.value/100; else p.o=+e.target.value/100; TP.custom=true; tplRefresh(); } } else if(e.target.id==="tpAsk") TP.ask=e.target.value; else if(e.target.id==="tpHead"||e.target.id==="tpSub"){ TP.head=$("tpHead")?.value||""; TP.sub=$("tpSub")?.value||""; tplRefresh(); } });
-  P.addEventListener("keydown",e=>{ if(e.target.id==="tpAsk"&&e.key==="Enter"){ e.preventDefault(); tplAsk(); } const pt=e.target.closest?.("[data-tppt]"); if(pt&&/^Arrow/.test(e.key)){ e.preventDefault(); const p=pts()[+pt.dataset.tppt], d=e.shiftKey?.05:.01; if(e.key==="ArrowLeft") p.x-=d; if(e.key==="ArrowRight") p.x+=d; if(e.key==="ArrowUp") p.y-=d; if(e.key==="ArrowDown") p.y+=d; TP.custom=true; const [hx,hy]=hpos(cur(),p); pt.style.left=hx+"%"; pt.style.top=hy+"%"; tplRefresh(); } });
-  P.addEventListener("pointerdown",e=>{ const pt=e.target.closest?.("[data-tppt]"); if(!pt) return; const i=+pt.dataset.tppt, st=$("tpStage"), p=pts()[i]; if(!st||!p) return; pt.setPointerCapture(e.pointerId); let moved=false;
-    const mv=ev=>{ const r=st.getBoundingClientRect(), o=cur(), G=geom(o); p.x=Math.max(-.2,Math.min(1.2,((ev.clientX-r.left)/r.width*o.w-G.x)/G.w)); p.y=Math.max(-.2,Math.min(1.2,((ev.clientY-r.top)/r.height*o.h-G.y)/G.h)); const [hx,hy]=hpos(o,p); pt.style.left=hx+"%"; pt.style.top=hy+"%"; moved=true; TP.custom=true; tplRefresh(); };
-    const up=()=>{ pt.removeEventListener("pointermove",mv); pt.removeEventListener("pointerup",up); pt.removeEventListener("pointercancel",up); if(moved){ TP.dragged=true; TP.sel=i; setTimeout(()=>{ TP.dragged=false; tplDraw(); },0); } };
+    else if(k==="png"){ a.disabled=true; try{ const b=await tplPNG(o,qSide(),p=>{ a.textContent=`Rendering ${Math.round(p*100)}%`; }); if(b) await save(b,tplName(o)+".png"); }catch(err){ TP.err="Couldn't make the PNG in this browser. Try a smaller quality."; tplDraw(); return; } a.disabled=false; a.textContent="Download PNG"; }
+    else if(k==="copy"){ a.disabled=true; a.textContent="Rendering…"; let ok=false; try{ const b=await tplPNG(o,Math.min(qSide(),3840)); await navigator.clipboard.write([new ClipboardItem({"image/png":b})]); ok=true; }catch{} a.disabled=false; flash(a,ok?"Copied. Paste in Figma":"Copy blocked. Use Download PNG","Copy for Figma"); }
+    else if(k==="zip"||k==="set"){ if(!window.JSZip){ TP.err="The zip library didn't load."; tplDraw(); return; } const label=a.textContent; a.disabled=true;
+      try{ const z=new JSZip(), big=qSide()?2:1, jobs=[];
+        if(k==="zip") for(const f of FLAT) jobs.push([f.g,{...o,...f},0,f.name.replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"")+"_"]);
+        else for(const i of LIB){ if(i.kind==="shape"){ const d=i.form==="circle"?[1850,1850]:i.form==="loz_h"?[3200,1800]:[1300,2200]; jobs.push(["Shapes",{name:i.name,w:d[0],h:d[1],it:i,blobs:i.blobs,layout:"grad",lang:"en"},0]); } else for(const [rk,w,h] of OFFICIAL) jobs.push([i.g.split(" · ").reverse().join(" ").replace(/internal.*/,"Dark").trim()+"/"+rk,{name:i.name,w,h,it:i,blobs:i.blobs,layout:"grad",lang:"en"},Math.max(w,h)*big]); }
+        let n=0; for(const [dir,x,side,pre] of jobs){ a.textContent=`Rendering ${++n} of ${jobs.length}`; z.folder(dir).file((pre||"")+tplName(x)+".png",await tplPNG(x,side)); await tick(); }
+        a.textContent="Packing…"; await save(await z.generateAsync({type:"blob",compression:"STORE"}),k==="zip"?`${tplName({...o,w:0,h:0}).replace(/_0x0/,"")}_all_sizes.zip`:"BAE_gradients_official_set.zip"); }catch(err){ TP.err="Couldn't build the ZIP."; tplDraw(); return; }
+      a.disabled=false; a.textContent=label; } });
+  P.addEventListener("change",e=>{ const id=e.target.id; if(id==="tpFmt"){ TP.fmt=+e.target.value; tplDraw(); } else if(id==="tpHead"||id==="tpSub"){ TP.head=$("tpHead")?.value||""; TP.sub=$("tpSub")?.value||""; tplPaint(); } else if(/^tp(S|Rot|E|Bl|A|O)$/.test(id)) tplPaint(); });
+  P.addEventListener("input",e=>{ const id=e.target.id, q=blobs()[TP.sel];
+    if(/^tp(S|Rot|E|Bl|A|O)$/.test(id)&&q){ const v=+e.target.value; if(id==="tpS") q.s=v/100; else if(id==="tpRot") q.r=v; else if(id==="tpE") q.e=v/100; else if(id==="tpBl") q.bl=v; else if(id==="tpA") q.a=v; else q.o=v/100; TP.custom=true; const out=e.target.nextElementSibling; if(out) out.textContent=v+(id==="tpBl"?"":id==="tpRot"||id==="tpA"?"°":"%"); tplSoon(true); }
+    else if(id==="tpAsk") TP.ask=e.target.value; else if(id==="tpHead"||id==="tpSub"){ TP.head=$("tpHead")?.value||""; TP.sub=$("tpSub")?.value||""; tplSoon(true); } });
+  P.addEventListener("keydown",e=>{ if(e.target.id==="tpAsk"&&e.key==="Enter"){ e.preventDefault(); tplAsk(); } const pt=e.target.closest?.("[data-tppt]"); if(pt&&/^Arrow/.test(e.key)){ e.preventDefault(); const i=+pt.dataset.tppt, q=blobs()[i], d=e.shiftKey?.05:.01; if(e.key==="ArrowLeft") q.x-=d; if(e.key==="ArrowRight") q.x+=d; if(e.key==="ArrowUp") q.y-=d; if(e.key==="ArrowDown") q.y+=d; TP.custom=true; TP.sel=i; const [hx,hy]=hpos(cur(),q); pt.style.left=hx+"%"; pt.style.top=hy+"%"; tplSoon(true); } });
+  P.addEventListener("pointerdown",e=>{ const pt=e.target.closest?.("[data-tppt]"); if(!pt) return; const i=+pt.dataset.tppt, st=$("tpStage"), q=blobs()[i]; if(!st||!q) return; pt.setPointerCapture(e.pointerId); let moved=false; const sx=e.clientX, sy=e.clientY, x0=q.x, y0=q.y;
+    const mv=ev=>{ if(!moved&&Math.hypot(ev.clientX-sx,ev.clientY-sy)<3) return; const r=st.getBoundingClientRect(), o=cur(), G=geom(o); q.x=clamp(x0+(ev.clientX-sx)/r.width*o.w/G.w,-.5,1.5); q.y=clamp(y0+(ev.clientY-sy)/r.height*o.h/G.h,-.5,1.5); const [hx,hy]=hpos(o,q); pt.style.left=hx+"%"; pt.style.top=hy+"%"; moved=true; TP.custom=true; TP.sel=i; tplSoon(true); };
+    const up=()=>{ pt.removeEventListener("pointermove",mv); pt.removeEventListener("pointerup",up); pt.removeEventListener("pointercancel",up); if(moved){ TP.dragged=true; setTimeout(()=>{ TP.dragged=false; tplDraw(); },0); } };
     pt.addEventListener("pointermove",mv); pt.addEventListener("pointerup",up); pt.addEventListener("pointercancel",up); });
   /* ---------- page ---------- */
   const G={w:1080,h:1920,mode:"rgb"};
@@ -5149,7 +5265,7 @@ Return ONLY JSON: {"size":"exact size name","bg":"orange|ink|stone","layout":"gr
         <tr><td>Frame gradient reveal</td><td>1200 ms</td><td>—</td><td>Opacity or position</td></tr><tr><td>Gradient loop</td><td>30 s (or 15, 8, 6 s)</td><td>—</td><td>Linear, no easing, each shape 360° clockwise</td></tr></tbody></table></div>
     </section>
 
-    <section class="bi-sec" id="biTpl"><div class="bi-h"><div><h3>Templates and gradients</h3><p>Every digital size, in Orange, Ink or Stone. The gradient follows the official elements: tonal, one colour family, built from soft points you can move, never a linear or radial blend. Each file opens in Figma as editable layers.</p></div></div>
+    <section class="bi-sec" id="biTpl"><div class="bi-h"><div><h3>Templates and gradients</h3><p>Built the way the guideline builds it: a solid brand colour, blurred organic shapes filled with the brand gradient, lighter shades on top. Background, Frame, Dark and Shape, in every digital size, as a high-quality PNG up to 8K.</p></div></div>
       <div id="biTplBody"></div>
     </section>
 
