@@ -15,7 +15,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 147 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 148 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openResize`, `openBrand`):
 
@@ -248,6 +248,7 @@ The mock that copies all of this is in `dev/resize-mock-test.js` (Playwright; ru
 - A piece that continues an earlier piece (context = the picture built so far) stays calm and consistent: tested once for real.
 So `family()` no longer makes one call per master. `reach(cross)` = what one call can hold (`ADD`=1504 new px, `AREA`=4.0e6), `pieces(F,k)` = the pieces of one master per side. Each AI side of each piece is its own call (the two sides run at once), given the strip next to that side at the picture's own pixels (steps of 16; the tall family's width is now a multiple of 16). `F.aiSteps[k]` is now the NUMBER of calls of master k (cost = sum x 30). Cache: `reuse.ch["k.j.A|B"]={src,id,dims}`, signature `v7` (older saved runs are redone). If Magnific ever shrinks a piece the page still places it correctly (`ka`) and logs "resize shrunk".
 - Tiles: `creations_read` returns a JPEG of at most 800 px (quality about 80, 4:2:0), which left 8 px blocks. Now each 400 px tile is enlarged x2 with `images_resize` (free), read at 800 and reduced in the page: the blocks are gone (measured). `images_resize` was added to the manifest (39 Magnific tools); if it is refused the page falls back to 768 px tiles (`R.noFine`).
+- **Call limit (v148).** Samer's first real run of v147 (iPhone, 210 credits spent) stopped with "Too many MCP tool calls this minute. Retry after 20 seconds": claude.ai limits connector calls per minute and the fine tiles had tripled them. Now every Magnific call of the module goes through `paced()` / `mag()`: calls are spaced (`PACE.gap`, learned and kept in localStorage `bae_rz_pace`), a refusal is waited out and the same call repeated (up to 10 times; the call never ran, so nothing is paid twice). And the result is enlarged x2 ONCE per piece (`images_resize`, verified with `realSize`), then read in 800 px tiles (`readBack(..., z=2)`): 2 calls per tile instead of 3. A both-sides picture is about 240 calls, 4 to 5 minutes. The real limit per minute is not known; the pace finds it.
 - Still mock-tested only inside the page: the whole new flow end to end. The size rule and the look of a second piece are real.
 - Known content limit: when the picture cuts a person at the bottom, a long extension downward makes the model imagine legs and shoes. The note field ("keep the blurred foreground, no legs") steers it.
 

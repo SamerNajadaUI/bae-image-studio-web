@@ -6016,24 +6016,37 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
 
   /* ---------- Magnific: extend, wait, read the result back in tiles ---------- */
   const pid=r=>r?.payload?.creation?.identifier||r?.payload?.creations?.[0]?.identifier||r?.payload?.identifier||readResult(r).ids[0]||null;
-  async function waitDone(id){ for(let i=0;i<14;i++){ if(R.stop) throw {code:"stopped"}; const r=await callMag("creations_wait",{identifiers:[id],timeoutSeconds:55});
+  async function waitDone(id){ for(let i=0;i<14;i++){ if(R.stop) throw {code:"stopped"}; const r=await mag("creations_wait",{identifiers:[id],timeoutSeconds:55});
       const x=r?.payload?.results?.[0]||r?.payload?.creations?.[0]||{}, st=String(x.status||readResult(r).status||"").toLowerCase();
       if(FAIL.test(st)) throw {code:"tool_error",message:"Magnific could not extend this picture ("+st+")."}; if(DONE.test(st)) return; }
     throw {code:"tool_error",message:"Magnific is still working on the extension. Open BAE Resize again in a few minutes and press Create: the finished extension is reused, free."}; }
   const rtxt=r=>{ const p=r?.payload; return (typeof p==="string"?p:JSON.stringify(p??""))+"\n"+(r?.content||[]).map(c=>c.text||"").join("\n"); };
+  /* claude.ai allows only so many connector calls a minute ("Too many MCP tool calls this minute. Retry after 20 seconds").
+     Every Magnific call of this module goes through one pace: calls are spaced, a refusal is waited out and the same call repeated
+     (it never ran, so nothing is paid twice), and the pace learns: slower after a refusal, a little faster after a calm stretch. */
+  const PACE={gap:750,next:0,hold:0,ok:0}; try{ PACE.gap=clamp(+localStorage.getItem("bae_rz_pace")||750,450,2500); }catch{}
+  const BUSY=/too many|rate.?limit|retry after|try again in \d|\b429\b/i;
+  async function paced(fn){ for(let a=0;;a++){ if(R.stop) throw {code:"stopped"};
+      const now=Date.now(), at=Math.max(now,PACE.next,PACE.hold); PACE.next=at+PACE.gap; if(at>now) await new Promise(r=>setTimeout(r,at-now)); if(R.stop) throw {code:"stopped"};
+      try{ const r=await fn(); if(++PACE.ok>=30){ PACE.ok=0; PACE.gap=Math.max(450,PACE.gap*.92); } return r; }
+      catch(e){ const t=errText(e); if(!(BUSY.test(t)||e?.code==="rate_limited")||a>=9) throw e;
+        const sec=clamp((+(t.match(/after\s+(\d+)\s*s/i)||[])[1]||20)+2,5,90); PACE.ok=0; PACE.gap=Math.min(2500,PACE.gap*1.4); PACE.hold=Date.now()+sec*1000; PACE.waits=(PACE.waits||0)+1;
+        try{ localStorage.setItem("bae_rz_pace",String(Math.round(PACE.gap))); }catch{} log("·","resize pace",{wait:sec,gap:Math.round(PACE.gap)});
+        R.pause=`claude.ai asked for a short pause · continuing in ${sec} s`; status(R.pause); } } }
+  const mag=(tool,args)=>paced(()=>callMag(tool,args));
   const errText=e=>{ let s=""; try{ s=String(e?.message||"")+" "+JSON.stringify(e?.result??"")+" "+JSON.stringify(e?.data??""); }catch{} return s; };
   /* THE REAL SIZE of a Magnific picture. Measured on real results (Nov 2026):
      · the size in the creation's details is NOT the file's size (details said 711×3556, the file is 704×3552: the model works in steps of 16);
      · a big request is shrunk by Magnific's own rule (1264×6320 came back 704×3584, also when 4k is asked);
      · a crop LARGER than the file is refused, and the refusal states the true size ("up to 704 x 3552 px"); a crop POSITION past the edge is silently moved back in.
      So: ask for an impossible crop and read the true size from the refusal; if the refusal's text does not reach the page, find the size with size probes (never position probes). */
-  async function fits(id,w,h){ try{ const c=await callMag("images_crop",{creationIdentifier:id,aspectRatio:"1:1",customWidth:w,customHeight:h,cropX:0,cropY:0}), t=pid(c); if(t) R.trash.push(t); return !!t; }catch(e){ if(e?.code==="stopped") throw e; return false; } }
+  async function fits(id,w,h){ try{ const c=await mag("images_crop",{creationIdentifier:id,aspectRatio:"1:1",customWidth:w,customHeight:h,cropX:0,cropY:0}), t=pid(c); if(t) R.trash.push(t); return !!t; }catch(e){ if(e?.code==="stopped") throw e; return false; } }
   async function edge(test,lo,hi){ /* largest value that still fits, lo is known to fit */ while(hi-lo>1){ if(R.stop) throw {code:"stopped"}; const m=(lo+hi)>>1; if(await test(m)) lo=m; else hi=m; } return lo; }
   async function realSize(id,hw,hh){
-    try{ await callMag("images_crop",{creationIdentifier:id,aspectRatio:"1:1",customWidth:10000,customHeight:10000,cropX:0,cropY:0}); }
+    try{ await mag("images_crop",{creationIdentifier:id,aspectRatio:"1:1",customWidth:10000,customHeight:10000,cropX:0,cropY:0}); }
     catch(e){ if(e?.code==="stopped") throw e; const m=errText(e).match(/up to\s+(\d{2,5})\s*[x×]\s*(\d{2,5})/i); if(m&&+m[1]>31&&+m[2]>31) return [+m[1],+m[2]]; }
     status("Measuring the extended picture…"); let w=0,h=0;
-    try{ const r=await callMag("creations_get",{creationIdentifier:id}), p=r?.payload, m=p&&typeof p==="object"?(p.metadata||p.creation?.metadata||p.creations?.[0]?.metadata||{}):{};
+    try{ const r=await mag("creations_get",{creationIdentifier:id}), p=r?.payload, m=p&&typeof p==="object"?(p.metadata||p.creation?.metadata||p.creations?.[0]?.metadata||{}):{};
       w=+m.width; h=+m.height; if(!(w>31&&h>31)){ const t=rtxt(r), x=t.match(/\bwidth["'\s:=]+(\d{2,5})/i), y=t.match(/\bheight["'\s:=]+(\d{2,5})/i); w=+x?.[1]||0; h=+y?.[1]||0; } }catch(e){ log("✕","resize size",{code:e?.code,message:e?.message}); }
     if(w>31&&h>31){ const c=[Math.floor(w/16)*16,Math.floor(h/16)*16]; if(await fits(id,c[0],c[1])&&!(await fits(id,c[0]+1,32))&&!(await fits(id,32,c[1]+1))) return c; }
     if(!(await fits(id,32,32))) throw {code:"tool_error",message:"Magnific did not let the page read the extended picture. Try again in a minute."};
@@ -6043,29 +6056,26 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
   const imgFromUrl=u=>new Promise((res,rej)=>{ const im=new Image(); im.crossOrigin="anonymous"; im.onload=()=>createImageBitmap(im).then(res,rej); im.onerror=()=>rej(new Error("link blocked")); im.src=u; });
   async function tile(id,x,y,T){ let why="";
     for(let a=0;a<3;a++){ try{ x=Math.max(0,Math.round(x)); y=Math.max(0,Math.round(y)); if(R.stop) throw {code:"stopped"};
-        const c=await callMag("images_crop",{creationIdentifier:id,aspectRatio:"1:1",customWidth:T,customHeight:T,cropX:x,cropY:y}), tid=pid(c); if(!tid){ why="the crop returned no id"; throw 0; } R.trash.push(tid);
+        const c=await mag("images_crop",{creationIdentifier:id,aspectRatio:"1:1",customWidth:T,customHeight:T,cropX:x,cropY:y}), tid=pid(c); if(!tid){ why="the crop returned no id"; throw 0; } R.trash.push(tid);
         const st=String(c?.payload?.creation?.status||"").toLowerCase(); if(st&&!DONE.test(st)) await waitDone(tid);
-        /* The piece is read as a JPEG of at most 800 px. Enlarged x2 first (a free resize) and reduced here, its 8 px blocks and soft colour vanish. */
-        let rid=tid, want=T;
-        if(!R.noFine&&T*2<=800){ try{ const z=await callMag("images_resize",{creationIdentifier:tid,width:T*2,height:T*2}), zid=pid(z); if(!zid) throw {message:"no id"}; R.trash.push(zid);
-            const zs=String(z?.payload?.creation?.status||"").toLowerCase(); if(zs&&!DONE.test(zs)) await waitDone(zid); rid=zid; want=T*2; }
-          catch(e){ if(e?.code==="stopped") throw e; R.noFine=true; log("·","resize fine tiles off",{code:e?.code,message:e?.message}); } }
-        const r=await callMag("creations_read",{creationIdentifier:rid,hq:"medium"}), rr=readResult(r), im=rr.images[0];
-        if(im){ const bmp=await createImageBitmap(b64Blob(im.data,im.mime||"image/jpeg")); if(bmp.width>=want*.9){ if(bmp.width<=T+2) return bmp; const c2=scaled(bmp,0,0,bmp.width,bmp.height,T,T); bmp.close?.(); return c2; }
+        const r=await mag("creations_read",{creationIdentifier:tid,hq:"medium"}), rr=readResult(r), im=rr.images[0];
+        if(im){ const bmp=await createImageBitmap(b64Blob(im.data,im.mime||"image/jpeg")); if(bmp.width>=T*.9) return bmp;
           why=`the piece came back at ${bmp.width} px`; if(bmp.width>16){ const c2=mk(T,T), g2=c2.getContext("2d"); g2.imageSmoothingQuality="high"; g2.drawImage(bmp,0,0,T,T); return c2; } }
         else why="the read returned no image ("+(r?.content||[]).map(b=>b.type).join(",")+")";
-        const urls=[...rr.urls]; if(!urls.length){ try{ urls.push(...readResult(await callMag("creations_get",{creationIdentifier:tid})).urls); }catch{} }
+        const urls=[...rr.urls]; if(!urls.length){ try{ urls.push(...readResult(await mag("creations_get",{creationIdentifier:tid})).urls); }catch{} }
         for(const u of urls.filter(u=>!/conversions|preview/i.test(u)).concat(urls)){ try{ return await imgFromUrl(u); }catch(e){ why+=" · link blocked"; } }
         throw 0;
       }catch(e){ if(e?.code==="stopped") throw e; if(e&&e!==0) why=why||String(e?.message||"").replace(/\(request_id[^)]*\)/i,"").trim()||e?.code||String(e); log("✕","resize tile",{x,y,T,why,code:e?.code,message:e?.message});
         if(a===2) throw {code:"tool_error",message:`Magnific did not return a part of the extended picture (${String(why).slice(0,120)}). Press Create again: the extension is reused, free. If it repeats, send me this message.`}; await new Promise(r=>setTimeout(r,1200)); } } }
   /* the AI picture, rebuilt at its own pixel size from tiles; only the rows / columns the extension needs */
-  async function readBack(id,aw,ah,axis,ranges,onP){ const A=mk(aw,ah), g=A.getContext("2d"), T=Math.min(R.noFine?TILE:FINE,aw,ah), al=axis==="y"?ah:aw, cl=axis==="y"?aw:ah;
+  /* z = 2 when `id` is the result enlarged x2 (a free resize): the pieces are then read at twice the size and reduced here, so the JPEG
+     that the read returns (800 px at most, 8 px blocks, soft colour) leaves no trace. aw, ah, the ranges and the returned picture are always at the real size. */
+  async function readBack(id,aw,ah,axis,ranges,onP,z=1){ const A=mk(aw,ah), g=A.getContext("2d"), T=Math.min(z>1?FINE:TILE,aw,ah), al=axis==="y"?ah:aw, cl=axis==="y"?aw:ah;
     const line=(a,b,len)=>{ const out=[]; a=clamp(Math.floor(a),0,len-T); b=clamp(Math.ceil(b),a+1,len); for(let p=a;p<b;p+=T) out.push(Math.min(p,len-T)); return out; };
     const cross=line(0,cl,cl), seen=new Set(), jobs=[];
     for(const [a,b] of ranges) if(b-a>1) for(const p of line(a,b,al)) for(const q of cross){ const x=axis==="y"?q:p, y=axis==="y"?p:q, k=x+","+y; if(!seen.has(k)){ seen.add(k); jobs.push([x,y]); } }
-    let done=0; const run=async()=>{ for(;;){ const j=jobs.shift(); if(!j) return; if(R.stop) throw {code:"stopped"}; const bmp=await tile(id,j[0],j[1],T); g.drawImage(bmp,j[0],j[1],T,T); bmp.close?.(); onP?.(++done,done+jobs.length); } };
-    const total=jobs.length; onP?.(0,total); await Promise.all([run(),run(),run(),run()]); return A; }
+    let done=0; const run=async()=>{ for(;;){ const j=jobs.shift(); if(!j) return; if(R.stop) throw {code:"stopped"}; const bmp=await tile(id,j[0]*z,j[1]*z,T*z), c=z>1?scaled(bmp,0,0,bmp.width,bmp.height,T,T):bmp; g.drawImage(c,j[0],j[1],T,T); bmp.close?.(); onP?.(++done,done+jobs.length); } };
+    const total=jobs.length; onP?.(0,total); await Promise.all([run(),run(),run()]); return A; }
   /* ---------- plain sides are continued by the page itself: no AI, full resolution, the picture's own grain ----------
      A strip at the picture's edge is read in a canonical position (row 0 = the edge row, rows going INTO the picture).
      If it is one plain surface (a clear sky, a flat wall), it is described by three things: its tone at the edge and how it changes
@@ -6135,7 +6145,7 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
   const fillText=(F,an,doA=true,doB=true)=>{ const [sa,sbb,la,lb]=F.axis==="y"?[an.top,an.bottom,"Above the picture","Below the picture"]:[an.left,an.right,"To the left of the picture","To the right of the picture"];
     return `${doA?`${la}: ${sa.fill||"the same background, plain and even"}. `:""}${doB?`${lb}: ${sbb.fill||"the same background, plain and even"}. `:""}Continue the same scene with the same light, colour, grain and focus blur. Keep the new area calm and empty: no people, no new objects, no furniture, no text, and nothing from the picture repeated.`; };
   const f16=v=>Math.max(32,Math.floor(v/16)*16);
-  async function trash(){ const ids=[...new Set(R.trash)]; R.trash=[]; for(let i=0;i<ids.length;i+=150){ try{ await callMag("creations_trash",{creationIdentifiers:ids.slice(i,i+150)}); }catch(e){ log("✕","resize tidy",{code:e?.code,message:e?.message}); return; } } }
+  async function trash(){ const ids=[...new Set(R.trash)]; R.trash=[]; for(let i=0;i<ids.length;i+=150){ try{ await mag("creations_trash",{creationIdentifiers:ids.slice(i,i+150)}); }catch(e){ log("✕","resize tidy",{code:e?.code,message:e?.message}); return; } } }
   async function family(fam,redoFrom){ const pl=R.plan, F=pl.fams[fam], tall=F.axis==="y", saved=runs()[cacheKey()]?.[fam]||{};
     const base=mk(F.base.w,F.base.h); base.getContext("2d").drawImage(R.bmp,F.base.x,F.base.y,F.base.w,F.base.h,0,0,F.base.w,F.base.h);
     const sig=`v7,${F.base.x},${F.base.w},${F.share.toFixed(3)},${F.plain.A?1:0}${F.plain.B?1:0}`;
@@ -6166,16 +6176,21 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
           const side=async S=>{ const isA=S==="A", xs=isA?xa:xb, key=`${k}.${j}.${S}`, ch=reuse.ch[key]=reuse.ch[key]||{}, nm=F.names[isA?0:1], what=`${tag}${part} · ${nm}`;
             const len=Math.max(sp+16,Math.ceil((N+xs)*u/16)*16), ia=isA?len-sp:0, FL=len/u, IA=ia/u, fw=tall?sc:len, fh=tall?len:sc, p0=isA?0:src.len-N;
             if(!ch.id){ if(!ch.src){ status(`Sending the picture to Magnific… · ${what}`); const cut=tall?scaled(src.canvas,0,p0,F.cross,N,sc,sp):scaled(src.canvas,p0,0,N,F.cross,sp,sc);
-                const blob=await new Promise(r=>cut.toBlob(r,"image/png")); ch.src=(await rlUploadMag(blob,(R.name||"image")+"_resize_"+key.replace(/\./g,"-"))).id; keep(); }
+                const blob=await new Promise(r=>cut.toBlob(r,"image/png")); ch.src=(await paced(()=>rlUploadMag(blob,(R.name||"image")+"_resize_"+key.replace(/\./g,"-")))).id; keep(); }
               status(`Extending the background · ${what} · ${EXT_CREDITS} credits`);
               const note=String(R.notes[fam+k]||"").trim(), args={creationIdentifier:ch.src,aspectRatio:tall?"1:2":"2:1",customWidth:fw,customHeight:fh,imageX:tall?0:ia,imageY:tall?ia:0,mode:MODE,prompt:fillText(F,R.an,isA,!isA)+(note?` Also: ${note.slice(0,200)}`:"")};
-              const r=await callMag("images_expand",args), id=pid(r); if(!id) throw {code:"tool_error",message:"Magnific accepted the extension but returned no identifier."};
+              const r=await mag("images_expand",args), id=pid(r); if(!id) throw {code:"tool_error",message:"Magnific accepted the extension but returned no identifier."};
               ch.id=id; ch.dims=null; reuse.spent=(reuse.spent||0)+EXT_CREDITS; keep(); await waitDone(id); }
             else if(!ch.dims) await waitDone(ch.id);
             if(!ch.dims){ ch.dims=await realSize(ch.id,fw,fh); keep(); if(ch.dims[0]!==fw||ch.dims[1]!==fh) log("·","resize shrunk",{asked:[fw,fh],got:ch.dims}); }
             /* ka = real pixels per plan unit along the extension (1 when Magnific returned the size asked for) */
             const wh=ch.dims, ln=tall?wh[1]:wh[0], ka=ln/FL, r0=isA?IA-xs-2:N-bB, r1=isA?IA+bA:N+xs+2;
-            const P=await readBack(ch.id,wh[0],wh[1],F.axis,[[Math.max(0,r0*ka),Math.min(ln,r1*ka)]],(d,t)=>status(`Reading the ${what} back · ${d} / ${t}`));
+            let rid=ch.id, z=1;
+            if(!R.noFine&&Math.max(wh[0],wh[1])*2<=8192){ try{ status(`Preparing the ${what} for a clean read`); const zr=await mag("images_resize",{creationIdentifier:ch.id,width:wh[0]*2,height:wh[1]*2}), zid=pid(zr); if(!zid) throw {message:"no id"}; R.trash.push(zid);
+                const zs=String(zr?.payload?.creation?.status||"").toLowerCase(); if(zs&&!DONE.test(zs)) await waitDone(zid); const zw=await realSize(zid,wh[0]*2,wh[1]*2);
+                if(zw[0]===wh[0]*2&&zw[1]===wh[1]*2){ rid=zid; z=2; } else log("·","resize fine read off",{asked:[wh[0]*2,wh[1]*2],got:zw}); }
+              catch(e){ if(e?.code==="stopped") throw e; R.noFine=true; log("·","resize fine read off",{code:e?.code,message:e?.message}); } }
+            const P=await readBack(rid,wh[0],wh[1],F.axis,[[Math.max(0,r0*ka),Math.min(ln,r1*ka)]],(d,t)=>status(`Reading the ${what} back · ${d} / ${t}`),z);
             const m0=isA?at-IA:at+src.len-N; if(tall) ag.drawImage(P,0,0,P.width,P.height,0,m0,F.cross,FL); else ag.drawImage(P,0,0,P.width,P.height,m0,0,FL,F.cross); };
           /* the two sides do not depend on each other: both run at once */
           await Promise.all([mA==="ai"?side("A"):null,mB==="ai"?side("B"):null]); }
