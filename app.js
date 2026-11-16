@@ -5927,7 +5927,7 @@ Return ONLY JSON: {"prompt":"…","summary":"what changes, in 8 words or fewer"}
 (()=>{
   const P=$("resize"); if(!P) return; const body=$("rzBody");
   const DEF=[[1920,1080],[3840,2160],[1920,3240],[256,512],[1080,3840],[128,640],[1920,2160],[1080,1920],[128,512],[1920,3840]];
-  const SKEY="bae_rz_sizes", CKEY="bae_rz_runs", EXT_CREDITS=30, MODE="magnific-expand", STEP=2.5, TILE=768, PAD=1.3, SMALL=1500;
+  const SKEY="bae_rz_sizes", CKEY="bae_rz_runs", EXT_CREDITS=30, MODE="magnific-expand", STEP=2.5, TILE=768, FINE=400, ADD=1504, AREA=4.0e6, PAD=1.3, SMALL=1500;
   const okSize=s=>Array.isArray(s)&&s.length===2&&s.every(n=>Number.isInteger(n)&&n>=16&&n<=8192);
   let SIZES=(()=>{ try{ const v=JSON.parse(localStorage.getItem(SKEY)||"null"); if(Array.isArray(v)&&v.length&&v.every(okSize)) return v; }catch{} return DEF.map(s=>[...s]); })();
   const saveSizes=()=>{ try{ localStorage.setItem(SKEY,JSON.stringify(SIZES)); }catch{} };
@@ -5951,7 +5951,7 @@ Return ONLY JSON: {"prompt":"…","summary":"what changes, in 8 words or fewer"}
       const ch=sw/r; return ch>=minH-1?{w,h,kind:"crop",axis:"y",win:ch}:{w,h,kind:"ext",fam:"wide"}; });
     const fams={};
     const tall=items.filter(i=>i.fam==="tall");
-    if(tall.length){ const Wc=Math.round(minW), x0=Math.round(clamp(cx-Wc/2,0,sw-Wc)); tall.forEach(i=>i.len=Math.round(Wc*i.h/i.w));
+    if(tall.length){ const Wc=Math.max(32,Math.min(Math.floor(sw/16)*16,Math.ceil(minW/16)*16)), x0=Math.round(clamp(cx-Wc/2,0,sw-Wc)); tall.forEach(i=>i.len=Math.round(Wc*i.h/i.w));
       fams.tall={axis:"y",base:{x:x0,y:0,w:Wc,h:sh},cross:Wc,src:sh,share:share(an.top?.ease,an.bottom?.ease),masters:steps(sh,tall.map(i=>i.len))}; }
     const wide=items.filter(i=>i.fam==="wide");
     if(wide.length){ wide.forEach(i=>i.len=Math.round(sh*i.w/i.h));
@@ -5961,12 +5961,22 @@ Return ONLY JSON: {"prompt":"…","summary":"what changes, in 8 words or fewer"}
     const n=Object.values(fams).reduce((a,f)=>a+f.masters.length,0);
     return {items,fams,cx,cy,ext:n,credits:n*EXT_CREDITS};
   }
+  /* Full resolution, always. Measured on Magnific (17 Nov 2026, magnific-expand): the result is exactly the size asked for only while
+     each NEW side is at most about 1536 px and the whole frame at most about 4.1 MP; anything larger comes back shrunk
+     (1024x2560 and 2048x1536 exact · 1328x2928 -> 1136x2528 · 1024x4096 -> 528x2128 · 2048x2304 -> 1920x2160).
+     So a long extension is made in pieces: each piece adds at most ADD px on one side, is given the strip of the picture next to that side,
+     and starts from the picture built so far. reach() = what one call can hold for this width; pieces() = the pieces of one master. */
+  function reach(cross){ const u=Math.min(1,2360/cross), fl=Math.floor(AREA/(cross*u*u)), add=Math.max(160,Math.floor(Math.min(ADD/u,fl*.6)/16)*16); return {u,fl,add,ctx:Math.max(160,fl-add)}; }
+  function pieces(F,k){ const prevLen=k?F.masters[k-1]:F.src, prevOff=k?F.offs[k-1]:0, ea=F.offs[k]-prevOff, eb=F.masters[k]-prevLen-ea, add=reach(F.cross).add;
+    const split=(e,plain)=>{ if(e<=0) return []; if(plain) return [e]; const n=Math.ceil(e/add), out=[]; let left=e; for(let i=0;i<n&&left>0;i++){ const x=i<n-1?Math.min(left,Math.ceil(e/n/16)*16):left; out.push(x); left-=x; } return out; };
+    const a=split(ea,F.plain?.A), b=split(eb,F.plain?.B), n=Math.max(a.length,b.length), steps=[]; for(let i=0;i<n;i++) steps.push({xa:a[i]||0,xb:b[i]||0});
+    return {steps,calls:(F.plain?.A?0:a.length)+(F.plain?.B?0:b.length)}; }
   /* which sides the page can continue itself (measured on the picture's own edge; Claude can veto), and what is left for the model */
   function finishPlan(pl){ let n=0;
     for(const [fam,F] of Object.entries(pl.fams)){ const base=mk(F.base.w,F.base.h); base.getContext("2d").drawImage(R.bmp,F.base.x,F.base.y,F.base.w,F.base.h,0,0,F.base.w,F.base.h);
       const pv={canvas:base,len:F.src,off:0}, [na,nb]=F.axis==="y"?["top","bottom"]:["left","right"], ok=(s,nm)=>{ try{ return R.an[nm]?.plain!==false&&edgeModel(pv,F,s).plain; }catch{ return false; } };
       F.plain={A:ok("A",na),B:ok("B",nb)}; F.names=[na,nb];
-      F.aiSteps=F.masters.map((L,k)=>{ const prevLen=k?F.masters[k-1]:F.src, prevOff=k?F.offs[k-1]:0, ea=F.offs[k]-prevOff, eb=L-prevLen-ea; return (ea>0&&!F.plain.A)||(eb>0&&!F.plain.B); }); n+=F.aiSteps.filter(Boolean).length; }
+      F.aiSteps=F.masters.map((L,k)=>pieces(F,k).calls); n+=F.aiSteps.reduce((x,y)=>x+y,0); }
     pl.ext=n; pl.credits=n*EXT_CREDITS; return pl; }
   /* how far a size's window can slide (0..1) and where it sits by default */
   function range(it){ const pl=R.plan;
@@ -6035,8 +6045,14 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
     for(let a=0;a<3;a++){ try{ x=Math.max(0,Math.round(x)); y=Math.max(0,Math.round(y)); if(R.stop) throw {code:"stopped"};
         const c=await callMag("images_crop",{creationIdentifier:id,aspectRatio:"1:1",customWidth:T,customHeight:T,cropX:x,cropY:y}), tid=pid(c); if(!tid){ why="the crop returned no id"; throw 0; } R.trash.push(tid);
         const st=String(c?.payload?.creation?.status||"").toLowerCase(); if(st&&!DONE.test(st)) await waitDone(tid);
-        const r=await callMag("creations_read",{creationIdentifier:tid,hq:"medium"}), rr=readResult(r), im=rr.images[0];
-        if(im){ const bmp=await createImageBitmap(b64Blob(im.data,im.mime||"image/jpeg")); if(bmp.width>=T*.9) return bmp; why=`the piece came back at ${bmp.width} px`; if(bmp.width>16){ const c2=mk(T,T); c2.getContext("2d").drawImage(bmp,0,0,T,T); return await createImageBitmap(c2); } }
+        /* The piece is read as a JPEG of at most 800 px. Enlarged x2 first (a free resize) and reduced here, its 8 px blocks and soft colour vanish. */
+        let rid=tid, want=T;
+        if(!R.noFine&&T*2<=800){ try{ const z=await callMag("images_resize",{creationIdentifier:tid,width:T*2,height:T*2}), zid=pid(z); if(!zid) throw {message:"no id"}; R.trash.push(zid);
+            const zs=String(z?.payload?.creation?.status||"").toLowerCase(); if(zs&&!DONE.test(zs)) await waitDone(zid); rid=zid; want=T*2; }
+          catch(e){ if(e?.code==="stopped") throw e; R.noFine=true; log("·","resize fine tiles off",{code:e?.code,message:e?.message}); } }
+        const r=await callMag("creations_read",{creationIdentifier:rid,hq:"medium"}), rr=readResult(r), im=rr.images[0];
+        if(im){ const bmp=await createImageBitmap(b64Blob(im.data,im.mime||"image/jpeg")); if(bmp.width>=want*.9){ if(bmp.width<=T+2) return bmp; const c2=scaled(bmp,0,0,bmp.width,bmp.height,T,T); bmp.close?.(); return c2; }
+          why=`the piece came back at ${bmp.width} px`; if(bmp.width>16){ const c2=mk(T,T), g2=c2.getContext("2d"); g2.imageSmoothingQuality="high"; g2.drawImage(bmp,0,0,T,T); return c2; } }
         else why="the read returned no image ("+(r?.content||[]).map(b=>b.type).join(",")+")";
         const urls=[...rr.urls]; if(!urls.length){ try{ urls.push(...readResult(await callMag("creations_get",{creationIdentifier:tid})).urls); }catch{} }
         for(const u of urls.filter(u=>!/conversions|preview/i.test(u)).concat(urls)){ try{ return await imgFromUrl(u); }catch(e){ why+=" · link blocked"; } }
@@ -6044,12 +6060,12 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
       }catch(e){ if(e?.code==="stopped") throw e; if(e&&e!==0) why=why||String(e?.message||"").replace(/\(request_id[^)]*\)/i,"").trim()||e?.code||String(e); log("✕","resize tile",{x,y,T,why,code:e?.code,message:e?.message});
         if(a===2) throw {code:"tool_error",message:`Magnific did not return a part of the extended picture (${String(why).slice(0,120)}). Press Create again: the extension is reused, free. If it repeats, send me this message.`}; await new Promise(r=>setTimeout(r,1200)); } } }
   /* the AI picture, rebuilt at its own pixel size from tiles; only the rows / columns the extension needs */
-  async function readBack(id,aw,ah,axis,ranges,onP){ const A=mk(aw,ah), g=A.getContext("2d"), T=Math.min(TILE,aw,ah), al=axis==="y"?ah:aw, cl=axis==="y"?aw:ah;
+  async function readBack(id,aw,ah,axis,ranges,onP){ const A=mk(aw,ah), g=A.getContext("2d"), T=Math.min(R.noFine?TILE:FINE,aw,ah), al=axis==="y"?ah:aw, cl=axis==="y"?aw:ah;
     const line=(a,b,len)=>{ const out=[]; a=clamp(Math.floor(a),0,len-T); b=clamp(Math.ceil(b),a+1,len); for(let p=a;p<b;p+=T) out.push(Math.min(p,len-T)); return out; };
     const cross=line(0,cl,cl), seen=new Set(), jobs=[];
     for(const [a,b] of ranges) if(b-a>1) for(const p of line(a,b,al)) for(const q of cross){ const x=axis==="y"?q:p, y=axis==="y"?p:q, k=x+","+y; if(!seen.has(k)){ seen.add(k); jobs.push([x,y]); } }
     let done=0; const run=async()=>{ for(;;){ const j=jobs.shift(); if(!j) return; if(R.stop) throw {code:"stopped"}; const bmp=await tile(id,j[0],j[1],T); g.drawImage(bmp,j[0],j[1],T,T); bmp.close?.(); onP?.(++done,done+jobs.length); } };
-    const total=jobs.length; onP?.(0,total); await Promise.all([run(),run(),run()]); return A; }
+    const total=jobs.length; onP?.(0,total); await Promise.all([run(),run(),run(),run()]); return A; }
   /* ---------- plain sides are continued by the page itself: no AI, full resolution, the picture's own grain ----------
      A strip at the picture's edge is read in a canonical position (row 0 = the edge row, rows going INTO the picture).
      If it is one plain surface (a clear sky, a flat wall), it is described by three things: its tone at the edge and how it changes
@@ -6122,45 +6138,50 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
   async function trash(){ const ids=[...new Set(R.trash)]; R.trash=[]; for(let i=0;i<ids.length;i+=150){ try{ await callMag("creations_trash",{creationIdentifiers:ids.slice(i,i+150)}); }catch(e){ log("✕","resize tidy",{code:e?.code,message:e?.message}); return; } } }
   async function family(fam,redoFrom){ const pl=R.plan, F=pl.fams[fam], tall=F.axis==="y", saved=runs()[cacheKey()]?.[fam]||{};
     const base=mk(F.base.w,F.base.h); base.getContext("2d").drawImage(R.bmp,F.base.x,F.base.y,F.base.w,F.base.h,0,0,F.base.w,F.base.h);
-    const sig=`v6,${F.base.x},${F.base.w},${F.share.toFixed(3)},${F.plain.A?1:0}${F.plain.B?1:0}`;
-    const reuse=saved.sig===sig?saved:{sig,ids:[],dims:[],src:[],spent:saved.spent||0}; reuse.src=reuse.src||[]; R.M[fam]=R.M[fam]||[];
+    const sig=`v7,${F.base.x},${F.base.w},${F.share.toFixed(3)},${F.plain.A?1:0}${F.plain.B?1:0}`;
+    const reuse=saved.sig===sig?saved:{sig,ch:{},spent:saved.spent||0}; reuse.ch=reuse.ch||{}; R.M[fam]=R.M[fam]||[];
     const keep=()=>runSave({...runs()[cacheKey()],an:R.an,[fam]:reuse});
+    const rc=reach(F.cross), u=rc.u, sb=R.an.subject, s0=tall?sb.y*R.sh:sb.x*R.sw, s1=tall?(sb.y+sb.h)*R.sh:(sb.x+sb.w)*R.sw, tick=()=>new Promise(r=>setTimeout(r,20));
     let prev={canvas:base,len:F.src,off:0};
     for(let k=0;k<F.masters.length;k++){ if(R.stop) throw {code:"stopped"};
-      const L=F.masters[k], off=F.offs[k], at=off-prev.off, end=at+prev.len, ea=at, eb=L-end, tag=`${tall?"tall":"wide"} extension ${k+1} of ${F.masters.length}`;
-      if(redoFrom!=null&&k>=redoFrom){ reuse.ids[k]=null; reuse.dims[k]=null; reuse.src[k]=null; }
+      const L=F.masters[k], off=F.offs[k], tag=`${tall?"tall":"wide"} extension ${k+1} of ${F.masters.length}`;
+      if(redoFrom!=null&&k>=redoFrom) for(const key of Object.keys(reuse.ch)) if(+key.split(".")[0]>=k) delete reuse.ch[key];
       if(R.M[fam][k]&&redoFrom!=null&&k<redoFrom){ prev={canvas:R.M[fam][k].canvas,len:L,off}; continue; }
-      /* each side is continued by the page when it is plain, by the model when it is not */
-      const mA=ea>0?(F.plain.A?"synth":"ai"):"", mB=eb>0?(F.plain.B?"synth":"ai"):"", sb=R.an.subject, s0=tall?sb.y*R.sh:sb.x*R.sw, s1=tall?(sb.y+sb.h)*R.sh:(sb.x+sb.w)*R.sw;
-      /* how deep the blend may go on each side: never into the subject */
-      let bA=clamp(Math.min(prev.len*.3,(prev.off+s0)*.8),16,700), bB=clamp(Math.min(prev.len*.3,(prev.len-prev.off-s1)*.8),16,700); if(bA+bB>prev.len*.9){ const z=prev.len*.9/(bA+bB); bA*=z; bB*=z; }
-      const W=tall?F.cross:L, H=tall?L:F.cross, A=mk(W,H), ag=A.getContext("2d"); ag.imageSmoothingEnabled=true; ag.imageSmoothingQuality="high";
-      if(mA==="synth"||mB==="synth"){ status(`Continuing the plain background · ${tag}`); await new Promise(r=>setTimeout(r,20));
-        if(mA==="synth"){ const c=synth(edgeModel(prev,F,"A"),ea,Math.round(bA)); ag.save(); if(tall) ag.setTransform(1,0,0,1,0,at-ea); else ag.setTransform(0,1,1,0,at-ea,0); ag.drawImage(c,0,0); ag.restore(); }
-        if(mB==="synth"){ const c=synth(edgeModel(prev,F,"B"),eb,Math.round(bB)); ag.save(); if(tall) ag.setTransform(1,0,0,-1,0,end+eb); else ag.setTransform(0,1,-1,0,end+eb,0); ag.drawImage(c,0,0); ag.restore(); } }
-      let id=null;
-      if(mA==="ai"||mB==="ai"){ const both=mA==="ai"&&mB==="ai";
-        /* When only one side needs the model, it is given just the part of the picture next to that side: a smaller request,
-           which Magnific returns at (nearly) full resolution instead of shrinking a very tall frame. The source is always a picture
-           this page uploaded (never Magnific's raw result), sized in steps of 16. */
-        const N=Math.min(prev.len,Math.round(F.cross*1.25)), p0=both||mA==="ai"?0:prev.len-N, sl=both?prev.len:N, xa=mA==="ai"?ea:0, xb=mB==="ai"?eb:0, fl=xa+sl+xb;
-        if(!both){ if(mA==="ai") bA=Math.min(bA,sl*.45); else bB=Math.min(bB,sl*.45); }
-        const u=Math.min(1,Math.sqrt(3.2e6/(F.cross*fl)),9000/fl), sc=f16(F.cross*u), sp=f16(sl*u), len=Math.max(sp+16,f16(fl*u)), ia=clamp(Math.round(xa/fl*len),0,len-sp), fw=tall?sc:len, fh=tall?len:sc;
-        let wh=null; id=reuse.ids[k]||null; if(id) wh=reuse.dims[k]||null;
-        if(!id){ if(!reuse.src[k]){ status(`Sending the picture to Magnific…`); const cut=tall?scaled(prev.canvas,0,p0,F.cross,sl,sc,sp):scaled(prev.canvas,p0,0,sl,F.cross,sp,sc);
-            const blob=await new Promise(r=>cut.toBlob(r,"image/png")); reuse.src[k]=(await rlUploadMag(blob,(R.name||"image")+"_resize_"+(k+1))).id; keep(); }
-          status(`Extending the background · ${tag} · ${EXT_CREDITS} credits`);
-          const note=String(R.notes[fam+k]||"").trim(), args={creationIdentifier:reuse.src[k],aspectRatio:tall?"1:2":"2:1",customWidth:fw,customHeight:fh,imageX:tall?0:ia,imageY:tall?ia:0,mode:MODE,prompt:fillText(F,R.an,mA==="ai",mB==="ai")+(note?` Also: ${note.slice(0,200)}`:"")};
-          const r=await callMag("images_expand",args); id=pid(r); if(!id) throw {code:"tool_error",message:"Magnific accepted the extension but returned no identifier."};
-          reuse.ids[k]=id; reuse.dims[k]=null; reuse.spent=(reuse.spent||0)+EXT_CREDITS; keep(); await waitDone(id); }
-        else if(!wh) await waitDone(id);
-        if(!wh){ wh=await realSize(id,fw,fh); reuse.dims[k]=wh; keep(); }
-        /* ka = real pixels per plan unit along the extension (Magnific may shrink the two directions slightly differently) */
-        const ln=tall?wh[1]:wh[0], ka=ln/fl;
-        const P=await readBack(id,wh[0],wh[1],F.axis,[[0,mA==="ai"?(xa+bA)*ka:0],[mB==="ai"?(xa+sl-bB)*ka:ln,ln]],(d,t)=>status(`Reading the ${tag} back · ${d} / ${t}`));
-        const m0=at+p0-xa; if(tall) ag.drawImage(P,0,0,P.width,P.height,0,m0,F.cross,fl); else ag.drawImage(P,0,0,P.width,P.height,m0,0,fl,F.cross); }
-      status(`Putting the original back · ${tag}`); await new Promise(r=>setTimeout(r,20));
-      const canvas=compose(F,L,A,prev,at,bA,bB,{A:mA==="ai",B:mB==="ai"}); R.M[fam][k]={canvas,len:L,off,id,ai:!!id}; prev={canvas,len:L,off}; delete R.qc[fam+k]; paint(); if(id){ status(`Checking the ${tag}`); await check(fam,k).catch(()=>{}); } }
+      const PS=pieces(F,k).steps; let cur=prev, any=false;
+      for(let j=0;j<PS.length;j++){ if(R.stop) throw {code:"stopped"};
+        const {xa,xb}=PS[j], L2=cur.len+xa+xb, at=xa, end=at+cur.len, part=PS.length>1?` · part ${j+1} of ${PS.length}`:"";
+        /* each side is continued by the page when it is plain, by the model when it is not */
+        const mA=xa>0?(F.plain.A?"synth":"ai"):"", mB=xb>0?(F.plain.B?"synth":"ai"):"";
+        /* how deep the blend may go on each side: never into the subject */
+        let bA=clamp(Math.min(cur.len*.3,(cur.off+s0)*.8),16,700), bB=clamp(Math.min(cur.len*.3,(cur.len-cur.off-s1)*.8),16,700); if(bA+bB>cur.len*.9){ const z=cur.len*.9/(bA+bB); bA*=z; bB*=z; }
+        const W=tall?F.cross:L2, H=tall?L2:F.cross, A=mk(W,H), ag=A.getContext("2d"); ag.imageSmoothingEnabled=true; ag.imageSmoothingQuality="high";
+        if(mA==="synth"||mB==="synth"){ status(`Continuing the plain background · ${tag}`); await tick();
+          if(mA==="synth"){ const c=synth(edgeModel(cur,F,"A"),xa,Math.round(bA)); ag.save(); if(tall) ag.setTransform(1,0,0,1,0,at-xa); else ag.setTransform(0,1,1,0,at-xa,0); ag.drawImage(c,0,0); ag.restore(); }
+          if(mB==="synth"){ const c=synth(edgeModel(cur,F,"B"),xb,Math.round(bB)); ag.save(); if(tall) ag.setTransform(1,0,0,-1,0,end+xb); else ag.setTransform(0,1,-1,0,end+xb,0); ag.drawImage(c,0,0); ag.restore(); } }
+        if(mA==="ai"||mB==="ai"){ any=true;
+          /* The model is given only the strip of the picture next to the side it continues, at the picture's own pixel size (steps of 16),
+             and asked for no more than it returns unshrunk. The strip is always cut from a picture this page built (never Magnific's raw result). */
+          const sc=f16(F.cross*u), sp=f16(Math.min(cur.len,rc.ctx)*u), N=Math.min(cur.len,Math.round(sp/u)), src=cur;
+          if(mA==="ai") bA=Math.min(bA,N*.45); if(mB==="ai") bB=Math.min(bB,N*.45);
+          const side=async S=>{ const isA=S==="A", xs=isA?xa:xb, key=`${k}.${j}.${S}`, ch=reuse.ch[key]=reuse.ch[key]||{}, nm=F.names[isA?0:1], what=`${tag}${part} · ${nm}`;
+            const len=Math.max(sp+16,Math.ceil((N+xs)*u/16)*16), ia=isA?len-sp:0, FL=len/u, IA=ia/u, fw=tall?sc:len, fh=tall?len:sc, p0=isA?0:src.len-N;
+            if(!ch.id){ if(!ch.src){ status(`Sending the picture to Magnific… · ${what}`); const cut=tall?scaled(src.canvas,0,p0,F.cross,N,sc,sp):scaled(src.canvas,p0,0,N,F.cross,sp,sc);
+                const blob=await new Promise(r=>cut.toBlob(r,"image/png")); ch.src=(await rlUploadMag(blob,(R.name||"image")+"_resize_"+key.replace(/\./g,"-"))).id; keep(); }
+              status(`Extending the background · ${what} · ${EXT_CREDITS} credits`);
+              const note=String(R.notes[fam+k]||"").trim(), args={creationIdentifier:ch.src,aspectRatio:tall?"1:2":"2:1",customWidth:fw,customHeight:fh,imageX:tall?0:ia,imageY:tall?ia:0,mode:MODE,prompt:fillText(F,R.an,isA,!isA)+(note?` Also: ${note.slice(0,200)}`:"")};
+              const r=await callMag("images_expand",args), id=pid(r); if(!id) throw {code:"tool_error",message:"Magnific accepted the extension but returned no identifier."};
+              ch.id=id; ch.dims=null; reuse.spent=(reuse.spent||0)+EXT_CREDITS; keep(); await waitDone(id); }
+            else if(!ch.dims) await waitDone(ch.id);
+            if(!ch.dims){ ch.dims=await realSize(ch.id,fw,fh); keep(); if(ch.dims[0]!==fw||ch.dims[1]!==fh) log("·","resize shrunk",{asked:[fw,fh],got:ch.dims}); }
+            /* ka = real pixels per plan unit along the extension (1 when Magnific returned the size asked for) */
+            const wh=ch.dims, ln=tall?wh[1]:wh[0], ka=ln/FL, r0=isA?IA-xs-2:N-bB, r1=isA?IA+bA:N+xs+2;
+            const P=await readBack(ch.id,wh[0],wh[1],F.axis,[[Math.max(0,r0*ka),Math.min(ln,r1*ka)]],(d,t)=>status(`Reading the ${what} back · ${d} / ${t}`));
+            const m0=isA?at-IA:at+src.len-N; if(tall) ag.drawImage(P,0,0,P.width,P.height,0,m0,F.cross,FL); else ag.drawImage(P,0,0,P.width,P.height,m0,0,FL,F.cross); };
+          /* the two sides do not depend on each other: both run at once */
+          await Promise.all([mA==="ai"?side("A"):null,mB==="ai"?side("B"):null]); }
+        status(`Putting the original back · ${tag}${part}`); await tick();
+        cur={canvas:compose(F,L2,A,cur,at,bA,bB,{A:mA==="ai",B:mB==="ai"}),len:L2,off:cur.off+xa}; }
+      R.M[fam][k]={canvas:cur.canvas,len:L,off,ai:any}; prev={canvas:cur.canvas,len:L,off}; delete R.qc[fam+k]; paint(); if(any){ status(`Checking the ${tag}`); await check(fam,k).catch(()=>{}); } }
     trash().catch(()=>{});
   }
   /* a second look by Claude at every extension, so a bad one is flagged before it is downloaded */
@@ -6257,7 +6278,7 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
         <div class="rz-srcrow"><span class="t12 muted" data-noi18n>${esc(R.name)} · ${R.sw} × ${R.sh}</span><label class="btn small rz-change"><span>Change the picture</span><input type="file" id="rzFile" accept="image/*" ${busy?"disabled":""}></label></div></div>`;
     h+=`<div class="rl-card rz-ctl"><div><span class="lbl">Sizes</span><div class="rz-chips">${SIZES.map((s,i)=>`<span class="rz-chip" data-noi18n>${s[0]}×${s[1]}<button type="button" data-rzdel="${i}" aria-label="Remove ${s[0]} by ${s[1]}" ${busy?"disabled":""}>×</button></span>`).join("")}</div>
         <div class="rz-add"><input class="rl-field" id="rzNew" inputmode="numeric" placeholder="1080x1350" aria-label="Add a size, width x height" ${busy?"disabled":""}><button type="button" class="btn small" data-rz-act="add" ${busy?"disabled":""}>Add size</button><button type="button" class="btn small ghost" data-rz-act="reset" ${busy?"disabled":""}>My 10 sizes</button></div></div>`;
-    if(pl){ const c=k=>pl.items.filter(i=>i.kind===k).length, todo=Object.entries(pl.fams).reduce((a,[f,F])=>a+F.masters.filter((_,k)=>!R.M[f]?.[k]).length,0), pay=Object.entries(pl.fams).reduce((a,[f,F])=>a+F.masters.filter((_,k)=>!R.M[f]?.[k]&&F.aiSteps[k]).length,0), all=pl.items.every(ready), used=spent(),
+    if(pl){ const c=k=>pl.items.filter(i=>i.kind===k).length, todo=Object.entries(pl.fams).reduce((a,[f,F])=>a+F.masters.filter((_,k)=>!R.M[f]?.[k]).length,0), pay=Object.entries(pl.fams).reduce((a,[f,F])=>a+F.masters.reduce((x,_,k)=>x+(R.M[f]?.[k]?0:F.aiSteps[k]),0),0), all=pl.items.every(ready), used=spent(),
         selfSides=Object.values(pl.fams).flatMap(F=>[F.plain.A&&F.names[0],F.plain.B&&F.names[1]]).filter(Boolean);
       h+=`<ul class="rz-facts"><li><b data-noi18n>${c("same")+c("crop")}</b><span>straight from the original</span></li><li><b data-noi18n>${c("ext")}</b><span>with the background continued</span></li>${selfSides.length?`<li class="page"><b>0</b><span><span>credits for the</span> <span data-noi18n>${selfSides.join(" + ")}</span><span>: the page continues it itself</span></span></li>`:""}</ul>
         <div class="rz-pay">${todo?`<div class="rz-cost"><b data-noi18n>${pay*EXT_CREDITS}</b><span>${pay?"credits to create this set":"credits: this set is free"}</span></div>`:`<div class="rz-cost done"><b data-noi18n>${pl.items.length}</b><span>sizes are ready</span></div>`}
@@ -6277,7 +6298,7 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
   function redoHTML(fam){ const F=R.plan.fams[fam]; return F.masters.map((L,k)=>{ const M=R.M[fam]?.[k], q=R.qc[fam+k]; if(!M||!M.ai) return ""; const n=R.plan.items.filter(i=>i.fam===fam&&i.m===k).length;
       return `<div class="rz-redo"><span class="t12 muted"><span>${fam==="tall"?"Tall":"Wide"} extension</span> <span data-noi18n>${k+1}</span> · <span data-noi18n>${n}</span> <span>sizes use it</span>${q?(q.ok?` · <span class="ok">Checked</span>`:` · <span class="${q.level==="redo"?"bad":"warn"}"><span>${q.level==="redo"?"Clear fault":"Worth a look"}</span>${q.issues.length?`: <span dir="auto" data-noi18n>${q.issues.map(esc).join(" · ")}</span>`:""}</span>`):""}</span>
         <input class="rl-field" data-rznote="${fam+k}" dir="auto" value="${esc(R.notes[fam+k]||"")}" placeholder="What to change (optional), e.g. keep the floor empty" aria-label="What to change in this extension">
-        <button type="button" class="btn small" data-rzredo="${fam}:${k}" ${R.busy?"disabled":""}><span>Make it again</span> <span data-noi18n>· ${F.aiSteps.slice(k).filter(Boolean).length*EXT_CREDITS}</span> <span>credits</span></button></div>`; }).join(""); }
+        <button type="button" class="btn small" data-rzredo="${fam}:${k}" ${R.busy?"disabled":""}><span>Make it again</span> <span data-noi18n>· ${F.aiSteps.slice(k).reduce((x,y)=>x+y,0)*EXT_CREDITS}</span> <span>credits</span></button></div>`; }).join(""); }
   /* wall previews are drawn at the size they are shown; the full size is only made when a file is downloaded */
   function paint(){ if(!R.plan) return; const d=dpr(); body.querySelectorAll("canvas[data-rzc]").forEach(cv=>{ const it=R.plan.items[+cv.dataset.rzc]; if(!it) return; const r=cv.parentElement.getBoundingClientRect(); if(r.width<2) return;
       const w=Math.max(8,Math.round(r.width*d)), h=Math.max(8,Math.round(r.height*d)), c=picture(it,w,h); if(!c) return; cv.width=w; cv.height=h; cv.getContext("2d").drawImage(c,0,0); }); }

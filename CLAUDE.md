@@ -6,6 +6,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 - The owner is Samer, a designer at **Bank al Etihad (BAE), Jordan**.
 - He writes mostly in **Jordanian Arabic**. Reply in the language he used. Keep replies **short and simple**: what changed, what was tested, what is not tested. No long explanations, no code in the reply unless he asks.
+- **Quality first, always (his words, 17 Nov 2026): "credits do not matter to me, what matters is that the work comes out professional. This is a bank. Always give me the solution with the highest quality."** When two routes exist, build the better one and say what it costs; never pick the cheaper one to save credits. (Testing still must not waste credits for nothing: say what a real test spent.)
 - He judges by the result on screen. When he says something is wrong, he is usually right: study the reference again before defending the work.
 - He is not a developer. Never ask him to run commands. Never ask him to paste keys or passwords.
 - When he says "study first, do nothing until I say انطلق (go)", write the study and the plan in chat and wait.
@@ -14,7 +15,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 146 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 147 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openResize`, `openBrand`):
 
@@ -81,7 +82,7 @@ The page uses `await claude.use(name)`:
 
 - `sample` — Claude (text + images). Helper in the code: `rlAsk(prompt, opts)` returns parsed JSON.
 - `mcp` — connectors, called as the viewer:
-  - **Magnafic** (Magnific): generation, upload, wait, spaces, upscale, expand, crop, etc. (38 tools declared; `images_expand`, `images_crop` and `creations_trash` added for BAE Resize)
+  - **Magnafic** (Magnific): generation, upload, wait, spaces, upscale, expand, crop, etc. (39 tools declared; `images_expand`, `images_crop`, `creations_trash` and `images_resize` added for BAE Resize)
   - **BAE Gemini Eye**: `watch_video`, `gemini_status`, `upload_start`, `upload_chunk`, `host_file`
 - `db` — collections with rules (read: view, write: admin): `brain`, `research`, `advisors`, `mem`, `memmeta`, `archive`, `chars`, `charimg`, `brandfiles`, `brandblob`, `upscale`. Private per-person data lives under `data/users/<uid>/…` (Recent history, reels, `lvtaste`).
 - `user`, `downloads`, `assets`, `dictation`.
@@ -236,10 +237,19 @@ The mock that copies all of this is in `dev/resize-mock-test.js` (Playwright; ru
 - A plain side (clear sky, flat wall) is continued by the page itself, no AI: `edgeModel()` reads a strip at the edge, decides if it is plain (numbers, and Claude's `plain` flag can veto) and `synth()` continues its tone, side-to-side drift and mirrored real grain. Free, full resolution, no invented clouds. On Samer's test picture the sky join is invisible at 100%.
 - When only one side needs the model, Magnific gets just the strip of the picture next to that side (about 1.25× the width), so the request stays near 3 MP and comes back at almost full resolution instead of 704 px wide.
 - The model's new area gets the photograph's grain (`grainLevel`, `addGrain`).
-- Tiles and probe crops are moved to Magnific's trash when a run ends (`creations_trash`, added to the manifest: 38 tools).
+- Tiles and probe crops are moved to Magnific's trash when a run ends (`creations_trash`, added to the manifest).
 - Samer approved a three-phase plan: 1 quality (done, except "rolling" full-resolution extension when both sides need AI), 2 interface (a wall of screens at true proportions, focus view with drag, editable subject box, staged progress, LED simulation, phone carousel), 3 workflow (several pictures at once, named size sets, history, a button from Photography, wide formats polish).
 
 **Interface (v145), phase 2 done:** the page is a dark "wall of screens" (`.rz-wall`, `screenHTML`): every size at its true shape; before paying, each screen already shows the original in place and the new parts tinted (teal = continued by the page, orange = AI) via `pending()`/`tint()`. A screen opens a focus view (`FO`, `focusDraw`): drag the picture to place it (arrow keys too), "Show what is new", "LED preview" for small sizes (one round dot per pixel), High quality, Download, previous / next, Esc. The source panel has the keep-frame (`#rzBox`): drag it or its corners, `setBox()` replans (and resets created sizes). Progress is a five-step stepper (`STEPS`, `stageOf`). The cost is one big number; credits used on this picture are shown after. On phones the wall is a swipe carousel. Samer confirmed the real run works ("زبط") before this was built. Phase 3 (several pictures, named size sets, history, button from Photography) is next.
+
+**Full resolution in pieces (v147).** Samer: quality over credits, always. Measured on his account (17 Nov 2026, about 590 credits of real tests, `magnific-expand`):
+- The result is exactly the size asked for only while **each new side is at most about 1536 px** and the **whole frame at most about 4.15 MP**. Exact: 1024x2304, 1024x2560, 1024x3008 (new side 1504), 1024x2048 (both sides), 2048x1536, 2048x1952 (4.0 MP). Shrunk: 1328x2928 -> 1136x2528, 1024x3136 -> 784x2416, 1024x4096 -> 528x2128 (new side lands near 1536 each time), 2048x2304 -> 1920x2160 (area cap). The old "about 5 MP" note was wrong.
+- Other expand modes, same request: `seedream-4-5` (50, returns 2720x6144) **moves and redraws the person**: unusable. `imagen-nano-banana-2-flash` (150, returns 2752x6200) keeps the person in place and is sharp, but rewrites the foreground; not needed because `magnific-expand` is already 1:1 with the source. `resolution:"4k"` does nothing for `magnific-expand`.
+- A piece that continues an earlier piece (context = the picture built so far) stays calm and consistent: tested once for real.
+So `family()` no longer makes one call per master. `reach(cross)` = what one call can hold (`ADD`=1504 new px, `AREA`=4.0e6), `pieces(F,k)` = the pieces of one master per side. Each AI side of each piece is its own call (the two sides run at once), given the strip next to that side at the picture's own pixels (steps of 16; the tall family's width is now a multiple of 16). `F.aiSteps[k]` is now the NUMBER of calls of master k (cost = sum x 30). Cache: `reuse.ch["k.j.A|B"]={src,id,dims}`, signature `v7` (older saved runs are redone). If Magnific ever shrinks a piece the page still places it correctly (`ka`) and logs "resize shrunk".
+- Tiles: `creations_read` returns a JPEG of at most 800 px (quality about 80, 4:2:0), which left 8 px blocks. Now each 400 px tile is enlarged x2 with `images_resize` (free), read at 800 and reduced in the page: the blocks are gone (measured). `images_resize` was added to the manifest (39 Magnific tools); if it is refused the page falls back to 768 px tiles (`R.noFine`).
+- Still mock-tested only inside the page: the whole new flow end to end. The size rule and the look of a second piece are real.
+- Known content limit: when the picture cuts a person at the bottom, a long extension downward makes the model imagine legs and shoes. The note field ("keep the blurred foreground, no legs") steers it.
 
 **Calmer check (v146).** On Samer's second picture (man with a headset at a laptop, blurred mug in the foreground) the automatic check wrote long alarming English notes, cut mid-word, and flagged the mug and table that are in the original; and Claude's keep-frame covered the whole picture (three extensions, 90 credits). Now `check()` sends the original next to the extended picture, is told that anything present in the original is never a defect, and returns `verdict` ok / look / redo with at most two short issues (`clip()` cuts at a word). The UI shows "Worth a look" (amber) or "Clear fault" (red), opens the "AI extensions" card only on a clear fault, and explains in one line what a note is and what "Make it again" costs. The `subject` instruction in `analyse()` now asks for a tight box around the person and the one thing they use, and to look again if it is wider than 0.75 or taller than 0.9. Mock-tested only; the real Claude's verdicts are not yet seen.
 
