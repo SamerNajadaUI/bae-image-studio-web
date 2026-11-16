@@ -81,7 +81,7 @@ The page uses `await claude.use(name)`:
 
 - `sample` — Claude (text + images). Helper in the code: `rlAsk(prompt, opts)` returns parsed JSON.
 - `mcp` — connectors, called as the viewer:
-  - **Magnafic** (Magnific): generation, upload, wait, spaces, upscale, expand, crop, etc. (37 tools declared, `images_expand` and `images_crop` added for BAE Resize)
+  - **Magnafic** (Magnific): generation, upload, wait, spaces, upscale, expand, crop, etc. (38 tools declared; `images_expand`, `images_crop` and `creations_trash` added for BAE Resize)
   - **BAE Gemini Eye**: `watch_video`, `gemini_status`, `upload_start`, `upload_chunk`, `host_file`
 - `db` — collections with rules (read: view, write: admin): `brain`, `research`, `advisors`, `mem`, `memmeta`, `archive`, `chars`, `charimg`, `brandfiles`, `brandblob`, `upscale`. Private per-person data lives under `data/users/<uid>/…` (Recent history, reels, `lvtaste`).
 - `user`, `downloads`, `assets`, `dictation`.
@@ -231,6 +231,13 @@ Samer studied tadvio.com and asked for the same idea inside the studio: give one
 - The page's security blocks `fetch("data:…")`; decode base64 with `b64Blob`.
 So `realSize()` asks for a 10000×10000 crop and reads the size from the refusal, with size probes as fallback. Everything sent to Magnific is sized in steps of 16. Every extension starts from a picture the page uploaded itself (the original, then each finished master), never from Magnific's raw result, so what the model redraws under the join equals what the page puts back. `compose()` measures the tone step exactly at each join (24 bins across) and removes it, then blends over the whole calm band up to the subject.
 The mock that copies all of this is in `dev/resize-mock-test.js` (Playwright; run it with MSG=1/0 and META=1/0, set IMG to a test picture). Run it before changing this module.
+
+**Quality pass (v144):**
+- A plain side (clear sky, flat wall) is continued by the page itself, no AI: `edgeModel()` reads a strip at the edge, decides if it is plain (numbers, and Claude's `plain` flag can veto) and `synth()` continues its tone, side-to-side drift and mirrored real grain. Free, full resolution, no invented clouds. On Samer's test picture the sky join is invisible at 100%.
+- When only one side needs the model, Magnific gets just the strip of the picture next to that side (about 1.25× the width), so the request stays near 3 MP and comes back at almost full resolution instead of 704 px wide.
+- The model's new area gets the photograph's grain (`grainLevel`, `addGrain`).
+- Tiles and probe crops are moved to Magnific's trash when a run ends (`creations_trash`, added to the manifest: 38 tools).
+- Samer approved a three-phase plan: 1 quality (done, except "rolling" full-resolution extension when both sides need AI), 2 interface (a wall of screens at true proportions, focus view with drag, editable subject box, staged progress, LED simulation, phone carousel), 3 workflow (several pictures at once, named size sets, history, a button from Photography, wide formats polish).
 
 **Tested** with Playwright and a mocked Magnific + Claude only (plan, both extensions, tiles, compose, check, ZIP, phone width). **Never tested for real inside the studio:** the upload through BAE Gemini Eye, real tiles, the tone match on a real extension, the check with real Claude.
 Known limits: tiles appear in his Magnific history; a 2560×1440 source means the 1920-wide tall sizes are enlarged ×1.4 (the card says so, a 4K source fixes it); not yet reachable from a Photography result (upload only).

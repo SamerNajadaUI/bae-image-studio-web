@@ -5931,7 +5931,7 @@ Return ONLY JSON: {"prompt":"…","summary":"what changes, in 8 words or fewer"}
   const okSize=s=>Array.isArray(s)&&s.length===2&&s.every(n=>Number.isInteger(n)&&n>=16&&n<=8192);
   let SIZES=(()=>{ try{ const v=JSON.parse(localStorage.getItem(SKEY)||"null"); if(Array.isArray(v)&&v.length&&v.every(okSize)) return v; }catch{} return DEF.map(s=>[...s]); })();
   const saveSizes=()=>{ try{ localStorage.setItem(SKEY,JSON.stringify(SIZES)); }catch{} };
-  const R={file:null,name:"",bmp:null,sw:0,sh:0,thumb:"",busy:"",step:"",err:"",an:null,plan:null,M:{},qc:{},pos:{},px:{},fmt:"png",notes:{},done:false,stop:false};
+  const R={file:null,name:"",bmp:null,sw:0,sh:0,thumb:"",busy:"",step:"",err:"",an:null,plan:null,M:{},qc:{},pos:{},px:{},fmt:"png",notes:{},done:false,stop:false,trash:[]};
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
   const mk=(w,h)=>{ const c=document.createElement("canvas"); c.width=Math.max(1,Math.round(w)); c.height=Math.max(1,Math.round(h)); return c; };
   const gcd=(a,b)=>b?gcd(b,a%b):a;
@@ -5961,6 +5961,13 @@ Return ONLY JSON: {"prompt":"…","summary":"what changes, in 8 words or fewer"}
     const n=Object.values(fams).reduce((a,f)=>a+f.masters.length,0);
     return {items,fams,cx,cy,ext:n,credits:n*EXT_CREDITS};
   }
+  /* which sides the page can continue itself (measured on the picture's own edge; Claude can veto), and what is left for the model */
+  function finishPlan(pl){ let n=0;
+    for(const [fam,F] of Object.entries(pl.fams)){ const base=mk(F.base.w,F.base.h); base.getContext("2d").drawImage(R.bmp,F.base.x,F.base.y,F.base.w,F.base.h,0,0,F.base.w,F.base.h);
+      const pv={canvas:base,len:F.src,off:0}, [na,nb]=F.axis==="y"?["top","bottom"]:["left","right"], ok=(s,nm)=>{ try{ return R.an[nm]?.plain!==false&&edgeModel(pv,F,s).plain; }catch{ return false; } };
+      F.plain={A:ok("A",na),B:ok("B",nb)}; F.names=[na,nb];
+      F.aiSteps=F.masters.map((L,k)=>{ const prevLen=k?F.masters[k-1]:F.src, prevOff=k?F.offs[k-1]:0, ea=F.offs[k]-prevOff, eb=L-prevLen-ea; return (ea>0&&!F.plain.A)||(eb>0&&!F.plain.B); }); n+=F.aiSteps.filter(Boolean).length; }
+    pl.ext=n; pl.credits=n*EXT_CREDITS; return pl; }
   /* how far a size's window can slide (0..1) and where it sits by default */
   function range(it){ const pl=R.plan;
     if(it.kind==="same") return null;
@@ -5988,12 +5995,12 @@ Return ONLY JSON: {"prompt":"…","summary":"what changes, in 8 words or fewer"}
     const small=await toJpeg(R.file,1568).catch(()=>R.file);
     const o=await rlAsk(`You prepare one approved photograph for resizing to many screen formats. The picture itself will never be redrawn: it is cropped, or its background is extended beyond its edges by an outpainting model. Look at the image and return what the layout engine needs.
 "subject": ONE box, as fractions of the image from 0 to 1 (x and y = top-left corner, w and h = size), around everything that must stay whole in every format: the main person or object with the whole head and hair, both hands, what they hold, and what they sit or lean on right under them. Tight, but never cutting a limb. If there are several people who belong together, one box around all of them.
-For each side ("top","bottom","left","right"): "ease" from 0 to 1 = how safely the picture can be continued beyond that edge (1 = plain sky, plain wall, even floor, soft blur: easy and invisible · 0.5 = textured ground, simple furniture · 0 = the edge cuts through a person, a face, hands, text or a complex object), and "fill" = what should continue beyond that edge, in one plain sentence for the outpainting model, written from what is really at that edge (colour, material, focus), e.g. "a perfectly clear, cloudless, smooth deep blue sky, even colour, no clouds" or "the same plain warm limestone floor, softly out of focus, empty". Never ask for new objects or people.
+For each side ("top","bottom","left","right"): "ease" from 0 to 1 = how safely the picture can be continued beyond that edge (1 = plain sky, plain wall, even floor, soft blur: easy and invisible · 0.5 = textured ground, simple furniture · 0 = the edge cuts through a person, a face, hands, text or a complex object), and "fill" = what should continue beyond that edge, in one plain sentence for the outpainting model, written from what is really at that edge (colour, material, focus), e.g. "a perfectly clear, cloudless, smooth deep blue sky, even colour, no clouds" or "the same plain warm limestone floor, softly out of focus, empty". Never ask for new objects or people. And "plain": true ONLY when the whole strip along that edge, from one end to the other, is a single plain featureless surface (a clear sky, a flat wall, a seamless studio backdrop) with nothing crossing it; false when anything else touches that edge (ground with texture, furniture, plants, a blurred object, a horizon).
 "scene": the picture in at most ten words.
-Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""},"bottom":{"ease":0,"fill":""},"left":{"ease":0,"fill":""},"right":{"ease":0,"fill":""},"scene":""}`,{images:[small],modelTier:"default",cache:false});
+Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":"","plain":false},"bottom":{"ease":0,"fill":"","plain":false},"left":{"ease":0,"fill":"","plain":false},"right":{"ease":0,"fill":"","plain":false},"scene":""}`,{images:[small],modelTier:"default",cache:false});
     const n=v=>clamp(+v||0,0,1), b=o?.subject||{}; let x=n(b.x), y=n(b.y), w=clamp(+b.w||0,0,1-x), h=clamp(+b.h||0,0,1-y);
     if(w<.05||h<.05){ x=.3; y=.15; w=.4; h=.7; }
-    const side=s=>({ease:n(o?.[s]?.ease??.5),fill:String(o?.[s]?.fill||"").slice(0,260)});
+    const side=s=>({ease:n(o?.[s]?.ease??.5),fill:String(o?.[s]?.fill||"").slice(0,260),plain:o?.[s]?.plain===true?true:o?.[s]?.plain===false?false:null});
     return {subject:{x,y,w,h},top:side("top"),bottom:side("bottom"),left:side("left"),right:side("right"),scene:String(o?.scene||"").slice(0,120)};
   }
 
@@ -6010,7 +6017,7 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
      · a big request is shrunk by Magnific's own rule (1264×6320 came back 704×3584, also when 4k is asked);
      · a crop LARGER than the file is refused, and the refusal states the true size ("up to 704 x 3552 px"); a crop POSITION past the edge is silently moved back in.
      So: ask for an impossible crop and read the true size from the refusal; if the refusal's text does not reach the page, find the size with size probes (never position probes). */
-  async function fits(id,w,h){ try{ const c=await callMag("images_crop",{creationIdentifier:id,aspectRatio:"1:1",customWidth:w,customHeight:h,cropX:0,cropY:0}); return !!pid(c); }catch(e){ if(e?.code==="stopped") throw e; return false; } }
+  async function fits(id,w,h){ try{ const c=await callMag("images_crop",{creationIdentifier:id,aspectRatio:"1:1",customWidth:w,customHeight:h,cropX:0,cropY:0}), t=pid(c); if(t) R.trash.push(t); return !!t; }catch(e){ if(e?.code==="stopped") throw e; return false; } }
   async function edge(test,lo,hi){ /* largest value that still fits, lo is known to fit */ while(hi-lo>1){ if(R.stop) throw {code:"stopped"}; const m=(lo+hi)>>1; if(await test(m)) lo=m; else hi=m; } return lo; }
   async function realSize(id,hw,hh){
     try{ await callMag("images_crop",{creationIdentifier:id,aspectRatio:"1:1",customWidth:10000,customHeight:10000,cropX:0,cropY:0}); }
@@ -6026,7 +6033,7 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
   const imgFromUrl=u=>new Promise((res,rej)=>{ const im=new Image(); im.crossOrigin="anonymous"; im.onload=()=>createImageBitmap(im).then(res,rej); im.onerror=()=>rej(new Error("link blocked")); im.src=u; });
   async function tile(id,x,y,T){ let why="";
     for(let a=0;a<3;a++){ try{ x=Math.max(0,Math.round(x)); y=Math.max(0,Math.round(y)); if(R.stop) throw {code:"stopped"};
-        const c=await callMag("images_crop",{creationIdentifier:id,aspectRatio:"1:1",customWidth:T,customHeight:T,cropX:x,cropY:y}), tid=pid(c); if(!tid){ why="the crop returned no id"; throw 0; }
+        const c=await callMag("images_crop",{creationIdentifier:id,aspectRatio:"1:1",customWidth:T,customHeight:T,cropX:x,cropY:y}), tid=pid(c); if(!tid){ why="the crop returned no id"; throw 0; } R.trash.push(tid);
         const st=String(c?.payload?.creation?.status||"").toLowerCase(); if(st&&!DONE.test(st)) await waitDone(tid);
         const r=await callMag("creations_read",{creationIdentifier:tid,hq:"medium"}), rr=readResult(r), im=rr.images[0];
         if(im){ const bmp=await createImageBitmap(b64Blob(im.data,im.mime||"image/jpeg")); if(bmp.width>=T*.9) return bmp; why=`the piece came back at ${bmp.width} px`; if(bmp.width>16){ const c2=mk(T,T); c2.getContext("2d").drawImage(bmp,0,0,T,T); return await createImageBitmap(c2); } }
@@ -6043,8 +6050,41 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
     for(const [a,b] of ranges) if(b-a>1) for(const p of line(a,b,al)) for(const q of cross){ const x=axis==="y"?q:p, y=axis==="y"?p:q, k=x+","+y; if(!seen.has(k)){ seen.add(k); jobs.push([x,y]); } }
     let done=0; const run=async()=>{ for(;;){ const j=jobs.shift(); if(!j) return; if(R.stop) throw {code:"stopped"}; const bmp=await tile(id,j[0],j[1],T); g.drawImage(bmp,j[0],j[1],T,T); bmp.close?.(); onP?.(++done,done+jobs.length); } };
     const total=jobs.length; onP?.(0,total); await Promise.all([run(),run(),run()]); return A; }
+  /* ---------- plain sides are continued by the page itself: no AI, full resolution, the picture's own grain ----------
+     A strip at the picture's edge is read in a canonical position (row 0 = the edge row, rows going INTO the picture).
+     If it is one plain surface (a clear sky, a flat wall), it is described by three things: its tone at the edge and how it changes
+     with distance, its slow change from side to side, and its grain. The new area is those three continued outward: the tone change
+     eases off, the side-to-side change fades, the grain is mirrored so it is the picture's real grain. */
+  function edgeStrip(prev,F,side,S){ const tall=F.axis==="y", c=mk(F.cross,S), g=c.getContext("2d",{willReadFrequently:true}), len=prev.len;
+    if(tall&&side==="A") g.setTransform(1,0,0,1,0,0); else if(tall) g.setTransform(1,0,0,-1,0,len); else if(side==="A") g.setTransform(0,1,1,0,0,0); else g.setTransform(0,-1,1,0,0,len);
+    g.drawImage(prev.canvas,0,0); return g.getImageData(0,0,F.cross,S).data; }
+  const box1=(v,n,ch,r)=>{ const o=new Float64Array(v.length); for(let c=0;c<ch;c++){ let s=0,k=0; for(let i=0;i<Math.min(n,r+1);i++){ s+=v[i*ch+c]; k++; } for(let i=0;i<n;i++){ o[i*ch+c]=s/k; const add=i+r+1, rem=i-r; if(add<n){ s+=v[add*ch+c]; k++; } if(rem>=0){ s-=v[rem*ch+c]; k--; } } } return o; };
+  function edgeModel(prev,F,side){ const W=F.cross, S=Math.round(clamp(prev.len*.06,48,200)), im=edgeStrip(prev,F,side,S), rm=new Float64Array(S*3), cm=new Float64Array(W*3);
+    for(let r=0;r<S;r++) for(let x=0;x<W;x++){ const i=(r*W+x)*4; for(let k=0;k<3;k++){ rm[r*3+k]+=im[i+k]/W; cm[x*3+k]+=im[i+k]/S; } }
+    const g=[0,0,0], i0=[0,0,0], mean=[0,0,0]; let rowRes=0;
+    for(let k=0;k<3;k++){ let sx=0,sy=0,sxx=0,sxy=0; for(let r=0;r<S;r++){ sx+=r; sy+=rm[r*3+k]; sxx+=r*r; sxy+=r*rm[r*3+k]; } g[k]=(S*sxy-sx*sy)/(S*sxx-sx*sx); i0[k]=(sy-g[k]*sx)/S; mean[k]=sy/S;
+      for(let r=0;r<S;r++) rowRes=Math.max(rowRes,Math.abs(rm[r*3+k]-(i0[k]+g[k]*r))); }
+    const dev=new Float64Array(W*3); for(let x=0;x<W;x++) for(let k=0;k<3;k++) dev[x*3+k]=cm[x*3+k]-mean[k];
+    let lat=dev; const rad=Math.max(8,Math.round(W/10)); for(let p=0;p<3;p++) lat=box1(lat,W,3,rad); const fine=box1(dev,W,3,4); let colRes=0, latMax=0; for(let i=0;i<W*3;i++){ colRes=Math.max(colRes,Math.abs(fine[i]-lat[i])); latMax=Math.max(latMax,Math.abs(lat[i])); }
+    /* grain = the strip minus a small blur of itself */
+    const f=new Float64Array(W*S*3); for(let i=0,j=0;i<im.length;i+=4,j+=3){ f[j]=im[i]; f[j+1]=im[i+1]; f[j+2]=im[i+2]; }
+    let b=f; for(let p=0;p<2;p++){ const h=new Float64Array(b.length); for(let r=0;r<S;r++) h.set(box1(b.subarray(r*W*3,(r+1)*W*3),W,3,5),r*W*3); const v=new Float64Array(b.length), colv=new Float64Array(S*3);
+      for(let x=0;x<W;x++){ for(let r=0;r<S;r++) for(let k=0;k<3;k++) colv[r*3+k]=h[(r*W+x)*3+k]; const o=box1(colv,S,3,5); for(let r=0;r<S;r++) for(let k=0;k<3;k++) v[(r*W+x)*3+k]=o[r*3+k]; } b=v; }
+    const Rg=new Float32Array(W*S*3); let s2=0; for(let i=0;i<Rg.length;i++){ Rg[i]=f[i]-b[i]; s2+=Rg[i]*Rg[i]; } const hp=Math.sqrt(s2/Rg.length);
+    return {W,S,i0,g,lat,R:Rg,hp,rowRes,colRes,latMax,plain:rowRes<4.5&&colRes<5&&hp<9&&latMax<42}; }
+  /* the continued surface, canonical: E rows outside (row E-1 touches the edge) then `band` rows that lie over the picture for the blend */
+  function synth(m,E,band){ const {W,S}=m, H=E+band, c=mk(W,H), g=c.getContext("2d"), im=g.createImageData(W,H), px=im.data, Sd=clamp(S*4,240,900), gk=m.g.map(v=>clamp(v*Sd,-26,26)/Sd), lf=W*1.5;
+    for(let q=0;q<H;q++){ const r=q-E, d=-r, t=r>=0?r:d-1, n=Math.floor(t/S), o=t%S, rr=n%2?S-1-o:o, latK=r>=0?1:Math.exp(-d/lf), b0=[0,1,2].map(k=>r>=0?m.i0[k]+gk[k]*r:m.i0[k]-gk[k]*Sd*(1-Math.exp(-d/Sd)));
+      for(let x=0;x<W;x++){ const i=(q*W+x)*4, j=(rr*W+x)*3; px[i]=b0[0]+m.lat[x*3]*latK+m.R[j]; px[i+1]=b0[1]+m.lat[x*3+1]*latK+m.R[j+1]; px[i+2]=b0[2]+m.lat[x*3+2]*latK+m.R[j+2]; px[i+3]=255; } }
+    g.putImageData(im,0,0); return c; }
+  /* fine grain: the level in the calmest patches (so real detail is not mistaken for grain), and a way to add what is missing */
+  function grainLevel(ctx,x,y,w,h){ x=Math.round(x); y=Math.round(y); w=Math.floor(w); h=Math.floor(h); if(w<40||h<40) return 0; const d=ctx.getImageData(x,y,w,h).data, v=[];
+    for(let by=1;by+16<h-1;by+=24) for(let bx=1;bx+16<w-1;bx+=24){ let s=0,s2=0; for(let yy=by;yy<by+16;yy++) for(let xx=bx;xx<bx+16;xx++){ const i=(yy*w+xx)*4+1, e=d[i]-(d[i-4]+d[i+4]+d[i-w*4]+d[i+w*4])/4; s+=e; s2+=e*e; } v.push(Math.sqrt(Math.max(0,s2/256-(s/256)**2))); }
+    if(v.length<4) return 0; v.sort((p,q)=>p-q); return v[Math.floor(v.length*.15)]/1.118; }
+  function addGrain(ctx,x,y,w,h,sigma){ x=Math.round(x); y=Math.round(y); w=Math.floor(w); h=Math.floor(h); if(w<1||h<1||!(sigma>=.4)) return; let s=((x+1)*73856093^(y+1)*19349663^w)>>>0||1; const rnd=()=>{ s^=s<<13; s>>>=0; s^=s>>>17; s^=s<<5; s>>>=0; return s/4294967296; };
+    for(let y0=0;y0<h;y0+=512){ const hh=Math.min(512,h-y0), im=ctx.getImageData(x,y+y0,w,hh), px=im.data; for(let i=0;i<px.length;i+=4){ const n=(rnd()+rnd()+rnd()-1.5)*2*sigma; px[i]+=n; px[i+1]+=n; px[i+2]+=n; } ctx.putImageData(im,x,y+y0); } }
   /* master = the AI extension with the previous layer (the original, or the master before) put back on top, tone-matched and feathered */
-  function compose(F,L,A,prev,at,bA,bB){ const tall=F.axis==="y", W=tall?F.cross:L, H=tall?L:F.cross, c=mk(W,H), g=c.getContext("2d");
+  function compose(F,L,A,prev,at,bA,bB,ai){ const tall=F.axis==="y", W=tall?F.cross:L, H=tall?L:F.cross, c=mk(W,H), g=c.getContext("2d");
     g.imageSmoothingEnabled=true; g.imageSmoothingQuality="high"; g.drawImage(A,0,0,A.width,A.height,0,0,W,H);
     bA=Math.round(bA); bB=Math.round(bB); const end=at+prev.len, pg=prev.canvas.getContext("2d",{willReadFrequently:true});
     /* Remove the step at each join. The model re-draws the original faithfully but often gives the NEW area a slightly different tone,
@@ -6063,6 +6103,10 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
       for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const along=(tall?y:x)+from, c=tall?x:y, d=Math.abs(along-joinAt), u=Math.min(1,d/Z), k=.5+.5*(1-u*u*(3-2*u)), i=(y*w+x)*4; px[i]+=off[c*3]*k; px[i+1]+=off[c*3+1]*k; px[i+2]+=off[c*3+2]*k; }
       g.putImageData(im,tall?0:from,tall?from:0); };
     if(at>0) seam(0,at,at-thin,0,at); if(end<L) seam(end,L,end,prev.len-thin,end);
+    /* the model's new area is smoother than the photograph (and is enlarged): give it the photograph's grain so the texture does not change at the join */
+    const rect=(o,n)=>tall?[0,o,F.cross,n]:[o,0,n,F.cross];
+    if(ai?.A&&at>40){ const n=Math.min(at,500), want=grainLevel(pg,...rect(0,Math.min(prev.len,400))), has=grainLevel(g,...rect(at-n,n)); addGrain(g,...rect(0,at),Math.min(6,Math.sqrt(Math.max(0,want*want-has*has)))); }
+    if(ai?.B&&L-end>40){ const n=Math.min(L-end,500), m=Math.min(prev.len,400), want=grainLevel(pg,...rect(prev.len-m,m)), has=grainLevel(g,...rect(end,n)); addGrain(g,...rect(end,L-end),Math.min(6,Math.sqrt(Math.max(0,want*want-has*has)))); }
     const pc=mk(prev.canvas.width,prev.canvas.height), q=pc.getContext("2d"); q.drawImage(prev.canvas,0,0); q.globalCompositeOperation="destination-in";
     /* a long, eased blend: the join is spread over the whole calm band between the picture's edge and the subject */
     const gr=tall?q.createLinearGradient(0,0,0,prev.len):q.createLinearGradient(0,0,prev.len,0), fa=bA/prev.len, fb=bB/prev.len, ease=[[0,0],[.25,.1],[.5,.5],[.75,.9],[1,1]];
@@ -6072,39 +6116,52 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
   const cacheKey=()=>`${R.name}|${R.file.size}|${R.sw}x${R.sh}`;
   const runs=()=>{ try{ return JSON.parse(localStorage.getItem(CKEY)||"{}"); }catch{ return {}; } };
   const runSave=o=>{ const all=runs(); all[cacheKey()]={...o,t:Date.now()}; const keys=Object.keys(all).sort((a,b)=>all[b].t-all[a].t); try{ localStorage.setItem(CKEY,JSON.stringify(Object.fromEntries(keys.slice(0,12).map(k=>[k,all[k]])))); }catch{} };
-  const fillText=(F,an)=>{ const [a,b,la,lb]=F.axis==="y"?[an.top,an.bottom,"Above the picture","Below the picture"]:[an.left,an.right,"To the left of the picture","To the right of the picture"];
-    return `${la}: ${a.fill||"the same background, plain and even"}. ${lb}: ${b.fill||"the same background, plain and even"}. Continue the same scene with the same light, colour, grain and focus blur. Keep the new area calm and empty: no people, no new objects, no furniture, no text, and nothing from the picture repeated.`; };
+  const fillText=(F,an,doA=true,doB=true)=>{ const [sa,sbb,la,lb]=F.axis==="y"?[an.top,an.bottom,"Above the picture","Below the picture"]:[an.left,an.right,"To the left of the picture","To the right of the picture"];
+    return `${doA?`${la}: ${sa.fill||"the same background, plain and even"}. `:""}${doB?`${lb}: ${sbb.fill||"the same background, plain and even"}. `:""}Continue the same scene with the same light, colour, grain and focus blur. Keep the new area calm and empty: no people, no new objects, no furniture, no text, and nothing from the picture repeated.`; };
   const f16=v=>Math.max(32,Math.floor(v/16)*16);
+  async function trash(){ const ids=[...new Set(R.trash)]; R.trash=[]; for(let i=0;i<ids.length;i+=150){ try{ await callMag("creations_trash",{creationIdentifiers:ids.slice(i,i+150)}); }catch(e){ log("✕","resize tidy",{code:e?.code,message:e?.message}); return; } } }
   async function family(fam,redoFrom){ const pl=R.plan, F=pl.fams[fam], tall=F.axis==="y", saved=runs()[cacheKey()]?.[fam]||{};
     const base=mk(F.base.w,F.base.h); base.getContext("2d").drawImage(R.bmp,F.base.x,F.base.y,F.base.w,F.base.h,0,0,F.base.w,F.base.h);
-    /* the copy sent to Magnific is sized in steps of 16 (its model's step), small enough for the tallest request */
-    const Lmax=F.masters[F.masters.length-1], u=Math.min(1,Math.sqrt(8e6/(F.cross*Lmax)),9000/Lmax), bc=f16(F.cross*u), bl=f16(F.src*u), sig=`v5,${F.base.x},${F.base.w},${F.share.toFixed(3)},${bc},${bl}`;
+    const sig=`v6,${F.base.x},${F.base.w},${F.share.toFixed(3)},${F.plain.A?1:0}${F.plain.B?1:0}`;
     const reuse=saved.sig===sig?saved:{sig,ids:[],dims:[],src:[]}; reuse.src=reuse.src||[]; R.M[fam]=R.M[fam]||[];
-    /* Every extension starts from a picture THIS PAGE uploaded (the original, then each finished master), never from Magnific's raw result:
-       so what the model re-draws under the join is exactly what the page puts back on top, and a tone error never travels to the next step.
-       pp = that picture's pixel size across and along (steps of 16, the model's step). */
-    let prev={canvas:base,len:F.src,off:0}, pp={cross:bc,len:bl};
-    const send=async k=>{ if(reuse.src[k]) return reuse.src[k]; status(`Sending the picture to Magnific…`); const w=tall?pp.cross:pp.len, h=tall?pp.len:pp.cross, ub=scaled(prev.canvas,0,0,prev.canvas.width,prev.canvas.height,w,h);
-      const blob=await new Promise(r=>ub.toBlob(r,"image/png")); const up=await rlUploadMag(blob,(R.name||"image")+"_resize_"+(k?"step"+k:"base")); reuse.src[k]=up.id; runSave({...runs()[cacheKey()],an:R.an,[fam]:reuse}); return up.id; };
+    const keep=()=>runSave({...runs()[cacheKey()],an:R.an,[fam]:reuse});
+    let prev={canvas:base,len:F.src,off:0};
     for(let k=0;k<F.masters.length;k++){ if(R.stop) throw {code:"stopped"};
-      const L=F.masters[k], off=F.offs[k], at=off-prev.off, tag=`${tall?"tall":"wide"} extension ${k+1} of ${F.masters.length}`;
-      let id=(redoFrom==null||k<redoFrom)?reuse.ids[k]:null, wh=id?reuse.dims[k]:null;
-      if(redoFrom!=null&&k>=redoFrom){ reuse.ids.length=Math.min(reuse.ids.length,k); reuse.dims.length=Math.min(reuse.dims.length,k); reuse.src.length=Math.min(reuse.src.length,k+1); }
-      if(id&&wh&&R.M[fam][k]&&redoFrom!=null&&k<redoFrom){ prev={canvas:R.M[fam][k].canvas,len:L,off}; pp={cross:bc,len:f16(L*bc/F.cross)}; continue; }
-      const len=f16(L/prev.len*pp.len), ia=clamp(Math.round(at/prev.len*pp.len),0,len-pp.len), fw=tall?pp.cross:len, fh=tall?len:pp.cross;
-      if(!id){ reuse.ids.length=k; reuse.dims.length=k; reuse.src.length=Math.min(reuse.src.length,k+1); const prevId=await send(k);
-        status(`Extending the background · ${tag} · ${EXT_CREDITS} credits`);
-        const note=String(R.notes[fam+k]||"").trim(), args={creationIdentifier:prevId,aspectRatio:tall?"1:2":"2:1",customWidth:fw,customHeight:fh,imageX:tall?0:ia,imageY:tall?ia:0,mode:MODE,prompt:fillText(F,R.an)+(note?` Also: ${note.slice(0,200)}`:"")};
-        const r=await callMag("images_expand",args); id=pid(r); if(!id) throw {code:"tool_error",message:"Magnific accepted the extension but returned no identifier."};
-        reuse.ids[k]=id; reuse.dims[k]=null; runSave({...runs()[cacheKey()],an:R.an,[fam]:reuse}); await waitDone(id); }
-      else if(!wh) await waitDone(id);
-      if(!wh){ wh=await realSize(id,fw,fh); reuse.dims[k]=wh; runSave({...runs()[cacheKey()],an:R.an,[fam]:reuse}); }
-      /* ka = real pixels per plan unit along the extension (Magnific may shrink the two directions slightly differently) */
-      const ln=tall?wh[1]:wh[0], ka=ln/L, sb=R.an.subject, s0=tall?sb.y*R.sh:sb.x*R.sw, s1=tall?(sb.y+sb.h)*R.sh:(sb.x+sb.w)*R.sw;
+      const L=F.masters[k], off=F.offs[k], at=off-prev.off, end=at+prev.len, ea=at, eb=L-end, tag=`${tall?"tall":"wide"} extension ${k+1} of ${F.masters.length}`;
+      if(redoFrom!=null&&k>=redoFrom){ reuse.ids[k]=null; reuse.dims[k]=null; reuse.src[k]=null; }
+      if(R.M[fam][k]&&redoFrom!=null&&k<redoFrom){ prev={canvas:R.M[fam][k].canvas,len:L,off}; continue; }
+      /* each side is continued by the page when it is plain, by the model when it is not */
+      const mA=ea>0?(F.plain.A?"synth":"ai"):"", mB=eb>0?(F.plain.B?"synth":"ai"):"", sb=R.an.subject, s0=tall?sb.y*R.sh:sb.x*R.sw, s1=tall?(sb.y+sb.h)*R.sh:(sb.x+sb.w)*R.sw;
       /* how deep the blend may go on each side: never into the subject */
       let bA=clamp(Math.min(prev.len*.3,(prev.off+s0)*.8),16,700), bB=clamp(Math.min(prev.len*.3,(prev.len-prev.off-s1)*.8),16,700); if(bA+bB>prev.len*.9){ const z=prev.len*.9/(bA+bB); bA*=z; bB*=z; }
-      const A=await readBack(id,wh[0],wh[1],F.axis,[[0,at>0?(at+bA)*ka:0],[at+prev.len<L?(at+prev.len-bB)*ka:ln,ln]],(d,t)=>status(`Reading the ${tag} back · ${d} / ${t}`));
-      const canvas=compose(F,L,A,prev,at,bA,bB); R.M[fam][k]={canvas,len:L,off,id}; prev={canvas,len:L,off}; pp={cross:bc,len:f16(L*bc/F.cross)}; delete R.qc[fam+k]; paint(); await check(fam,k).catch(()=>{}); }
+      const W=tall?F.cross:L, H=tall?L:F.cross, A=mk(W,H), ag=A.getContext("2d"); ag.imageSmoothingEnabled=true; ag.imageSmoothingQuality="high";
+      if(mA==="synth"||mB==="synth"){ status(`Continuing the plain background · ${tag}`); await new Promise(r=>setTimeout(r,20));
+        if(mA==="synth"){ const c=synth(edgeModel(prev,F,"A"),ea,Math.round(bA)); ag.save(); if(tall) ag.setTransform(1,0,0,1,0,at-ea); else ag.setTransform(0,1,1,0,at-ea,0); ag.drawImage(c,0,0); ag.restore(); }
+        if(mB==="synth"){ const c=synth(edgeModel(prev,F,"B"),eb,Math.round(bB)); ag.save(); if(tall) ag.setTransform(1,0,0,-1,0,end+eb); else ag.setTransform(0,1,-1,0,end+eb,0); ag.drawImage(c,0,0); ag.restore(); } }
+      let id=null;
+      if(mA==="ai"||mB==="ai"){ const both=mA==="ai"&&mB==="ai";
+        /* When only one side needs the model, it is given just the part of the picture next to that side: a smaller request,
+           which Magnific returns at (nearly) full resolution instead of shrinking a very tall frame. The source is always a picture
+           this page uploaded (never Magnific's raw result), sized in steps of 16. */
+        const N=Math.min(prev.len,Math.round(F.cross*1.25)), p0=both||mA==="ai"?0:prev.len-N, sl=both?prev.len:N, xa=mA==="ai"?ea:0, xb=mB==="ai"?eb:0, fl=xa+sl+xb;
+        if(!both){ if(mA==="ai") bA=Math.min(bA,sl*.45); else bB=Math.min(bB,sl*.45); }
+        const u=Math.min(1,Math.sqrt(3.2e6/(F.cross*fl)),9000/fl), sc=f16(F.cross*u), sp=f16(sl*u), len=Math.max(sp+16,f16(fl*u)), ia=clamp(Math.round(xa/fl*len),0,len-sp), fw=tall?sc:len, fh=tall?len:sc;
+        let wh=null; id=reuse.ids[k]||null; if(id) wh=reuse.dims[k]||null;
+        if(!id){ if(!reuse.src[k]){ status(`Sending the picture to Magnific…`); const cut=tall?scaled(prev.canvas,0,p0,F.cross,sl,sc,sp):scaled(prev.canvas,p0,0,sl,F.cross,sp,sc);
+            const blob=await new Promise(r=>cut.toBlob(r,"image/png")); reuse.src[k]=(await rlUploadMag(blob,(R.name||"image")+"_resize_"+(k+1))).id; keep(); }
+          status(`Extending the background · ${tag} · ${EXT_CREDITS} credits`);
+          const note=String(R.notes[fam+k]||"").trim(), args={creationIdentifier:reuse.src[k],aspectRatio:tall?"1:2":"2:1",customWidth:fw,customHeight:fh,imageX:tall?0:ia,imageY:tall?ia:0,mode:MODE,prompt:fillText(F,R.an,mA==="ai",mB==="ai")+(note?` Also: ${note.slice(0,200)}`:"")};
+          const r=await callMag("images_expand",args); id=pid(r); if(!id) throw {code:"tool_error",message:"Magnific accepted the extension but returned no identifier."};
+          reuse.ids[k]=id; reuse.dims[k]=null; keep(); await waitDone(id); }
+        else if(!wh) await waitDone(id);
+        if(!wh){ wh=await realSize(id,fw,fh); reuse.dims[k]=wh; keep(); }
+        /* ka = real pixels per plan unit along the extension (Magnific may shrink the two directions slightly differently) */
+        const ln=tall?wh[1]:wh[0], ka=ln/fl;
+        const P=await readBack(id,wh[0],wh[1],F.axis,[[0,mA==="ai"?(xa+bA)*ka:0],[mB==="ai"?(xa+sl-bB)*ka:ln,ln]],(d,t)=>status(`Reading the ${tag} back · ${d} / ${t}`));
+        const m0=at+p0-xa; if(tall) ag.drawImage(P,0,0,P.width,P.height,0,m0,F.cross,fl); else ag.drawImage(P,0,0,P.width,P.height,m0,0,fl,F.cross); }
+      status(`Putting the original back · ${tag}`); await new Promise(r=>setTimeout(r,20));
+      const canvas=compose(F,L,A,prev,at,bA,bB,{A:mA==="ai",B:mB==="ai"}); R.M[fam][k]={canvas,len:L,off,id,ai:!!id}; prev={canvas,len:L,off}; delete R.qc[fam+k]; paint(); if(id) await check(fam,k).catch(()=>{}); }
+    trash().catch(()=>{});
   }
   /* a second look by Claude at every extension, so a bad one is flagged before it is downloaded */
   async function check(fam,k){ const M=R.M[fam]?.[k]; if(!M||!sample) return; const F=R.plan.fams[fam], c=M.canvas, s=Math.min(1,1568/Math.max(c.width,c.height));
@@ -6122,16 +6179,17 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
       const saved=runs()[cacheKey()]; if(saved?.an){ R.an=saved.an; }
       else if(sample){ R.busy="Reading the picture…"; draw(); R.an=await analyse(); runSave({...saved,an:R.an}); }
       else R.an={subject:{x:.3,y:.12,w:.4,h:.76},top:{ease:.6,fill:""},bottom:{ease:.5,fill:""},left:{ease:.5,fill:""},right:{ease:.5,fill:""},scene:""};
-      R.plan=makePlan(R.sw,R.sh,R.an,SIZES);
+      R.plan=finishPlan(makePlan(R.sw,R.sh,R.an,SIZES));
     }catch(e){ log("✕","resize open",{code:e?.code,message:e?.message}); R.err=e?.message&&!/[{<]/.test(e.message)?String(e.message).slice(0,200):"This picture could not be read. Try a JPG or PNG."; }
     R.busy=""; draw(); }
-  const replan=()=>{ if(!R.an) return; R.plan=makePlan(R.sw,R.sh,R.an,SIZES); R.done=false; draw(); };
+  const replan=()=>{ if(!R.an) return; R.plan=finishPlan(makePlan(R.sw,R.sh,R.an,SIZES)); R.done=false; draw(); };
   const ready=it=>it.kind!=="ext"||!!R.M[it.fam]?.[it.m];
   async function create(fam,redoFrom){ if(R.busy||!R.plan) return; R.err=""; R.stop=false;
     const fams=fam?[fam]:Object.keys(R.plan.fams);
-    if(fams.length&&(!mcp||S.web)){ R.err="Extending the background needs Magnific, inside claude.ai."; draw(); return; }
+    const needAI=fams.some(f=>R.plan.fams[f].aiSteps.some(Boolean));
+    if(needAI&&(!mcp||S.web)){ R.err="Extending the background needs Magnific, inside claude.ai."; draw(); return; }
     R.busy="Working…"; R.step="Starting…"; draw();
-    try{ await rlJob(async()=>{ if(fams.length&&!S.connected) await connect(true); for(const f of fams) await family(f,fam?redoFrom:null); }); R.done=true; }
+    try{ await rlJob(async()=>{ if(needAI&&!S.connected) await connect(true); for(const f of fams) await family(f,fam?redoFrom:null); }); R.done=true; }
     catch(e){ log("✕","resize",{code:e?.code,message:e?.message,result:e?.result}); R.err=e?.code==="stopped"?"Stopped. What was finished is kept.":/not in the manifest|not_granted|not_connected/i.test(String(e?.code||"")+String(e?.message||""))?"Magnific is not connected for this tool yet. Reconnect Magnific from the top of the page, then try again.":(e?.message&&!/[{<]/.test(e.message)?String(e.message).slice(0,220):"The extension did not finish. Press Create again: what was finished is reused, free."); }
     R.busy=""; R.step=""; draw(); }
 
@@ -6159,19 +6217,20 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
       ${q&&!q.ok?`<p class="t12 rz-issue" dir="auto" data-noi18n>${q.issues.map(esc).join(" · ")}</p>`:""}
       ${rg&&!rg.fixed?`<label class="t12 muted rz-pos"><span>${(it.kind==="crop"?it.axis==="x":it.fam==="wide")?"Move left / right":"Move up / down"}</span><input type="range" min="0" max="100" value="${Math.round((R.pos[k]??rg.def)*100)}" data-rzpos="${i}"></label>`:""}
       <div class="rl-btns">${ok?`<button type="button" class="btn small" data-rzdl="${i}">Download</button>${hq?`<button type="button" class="btn small" data-rzhq="${i}" title="The same picture, same ratio, at ${hq[0]} × ${hq[1]}"><span>High quality</span> <span data-noi18n>${hq[0]}×${hq[1]}</span></button>`:""}${small?`<button type="button" class="btn small" data-rzpx="${i}" aria-pressed="${!!R.px[k]}">Actual pixels</button>`:""}`:""}</div></article>`; }
-  function masterHTML(fam){ const F=R.plan.fams[fam]; return F.masters.map((L,k)=>{ const M=R.M[fam]?.[k], q=R.qc[fam+k]; if(!M) return ""; const n=R.plan.items.filter(i=>i.fam===fam&&i.m===k).length;
+  function masterHTML(fam){ const F=R.plan.fams[fam]; return F.masters.map((L,k)=>{ const M=R.M[fam]?.[k], q=R.qc[fam+k]; if(!M||!M.ai) return ""; const n=R.plan.items.filter(i=>i.fam===fam&&i.m===k).length;
       return `<div class="rz-redo"><span class="t12 muted"><span>${fam==="tall"?"Tall":"Wide"} extension</span> <span data-noi18n>${k+1}</span> · <span data-noi18n>${n}</span> <span>sizes use it</span>${q&&!q.ok?` · <span class="bad" dir="auto" data-noi18n>${q.issues.map(esc).join(" · ")}</span>`:""}</span>
         <input class="rl-field" data-rznote="${fam+k}" dir="auto" value="${esc(R.notes[fam+k]||"")}" placeholder="What to change (optional), e.g. keep the sky clear" aria-label="What to change in this extension">
-        <button type="button" class="btn small" data-rzredo="${fam}:${k}"><span>Make it again</span> <span data-noi18n>· ${(F.masters.length-k)*EXT_CREDITS}</span> <span>credits</span></button></div>`; }).join(""); }
+        <button type="button" class="btn small" data-rzredo="${fam}:${k}"><span>Make it again</span> <span data-noi18n>· ${F.aiSteps.slice(k).filter(Boolean).length*EXT_CREDITS}</span> <span>credits</span></button></div>`; }).join(""); }
   function draw(){ const pl=R.plan, busy=!!R.busy;
     let h=`<div class="rl-card rz-in"><label class="up-drop rz-drop" id="rzDrop">${R.thumb?`<img src="${R.thumb}" alt="">`:""}<span><b>${R.file?"Change the picture":"Drop the approved picture here"}</b><span class="t12 muted">${R.file?`<span data-noi18n>${esc(R.name)} · ${R.sw} × ${R.sh}</span>`:"A clean visual with no text and no logo. The larger the picture, the sharper every size."}</span></span><input type="file" id="rzFile" accept="image/*" ${busy?"disabled":""} aria-label="Picture to resize"></label>
       <div class="rz-sizes"><span class="lbl">Sizes</span><div class="rz-chips">${SIZES.map((s,i)=>`<span class="rz-chip" data-noi18n>${s[0]}×${s[1]}<button type="button" data-rzdel="${i}" aria-label="Remove ${s[0]} by ${s[1]}" ${busy?"disabled":""}>×</button></span>`).join("")}</div>
         <div class="rz-add"><input class="rl-field" id="rzNew" inputmode="numeric" placeholder="1080x1350" aria-label="Add a size, width x height" ${busy?"disabled":""}><button type="button" class="btn small" data-rz-act="add" ${busy?"disabled":""}>Add size</button><button type="button" class="btn small ghost" data-rz-act="reset" ${busy?"disabled":""}>My 10 sizes</button></div></div></div>`;
     if(R.err) h+=`<p class="rl-warn" role="alert">${esc(R.err)}</p>`;
     if(busy) h+=`<div class="rl-card rz-busy" role="status"><span class="spin" aria-hidden="true"></span><span><b>${esc(R.busy)}</b><span class="t12 muted" id="rzStep" data-noi18n>${esc(R.step)}</span></span>${/Working/.test(R.busy)?`<button type="button" class="btn small" data-rz-act="stop">Stop</button>`:""}</div>`;
-    if(pl){ const c=k=>pl.items.filter(i=>i.kind===k).length, todo=Object.entries(pl.fams).reduce((a,[f,F])=>a+F.masters.filter((_,k)=>!R.M[f]?.[k]).length,0), all=pl.items.every(ready);
-      h+=`<div class="rl-card rz-plan"><div class="rz-planrow"><div><b><span data-noi18n>${pl.items.length}</span> <span>sizes</span></b><p class="t12 muted"><span data-noi18n>${c("same")+c("crop")}</span> <span>come straight from the original</span>${c("ext")?` · <span data-noi18n>${c("ext")}</span> <span>need the background extended</span> · <span data-noi18n>${pl.ext}</span> <span>extensions in total, about</span> <span data-noi18n>${pl.credits}</span> <span>credits</span>`:" · no AI needed, free"}</p>${R.an?.scene?`<p class="t12 muted" dir="auto" data-noi18n>${esc(R.an.scene)}</p>`:""}</div>
-        <div class="rl-btns">${todo?`<button type="button" class="btn primary rz-go" data-rz-act="create" ${busy?"disabled":""}><span>Create all sizes</span> <span data-noi18n>(${todo*EXT_CREDITS}</span> <span>credits</span><span data-noi18n>)</span></button>`:""}<button type="button" class="btn${todo?"":" primary"}" data-rz-act="zip" ${busy||!pl.items.some(ready)?"disabled":""}>${all?"Download all (ZIP)":"Download the ready sizes (ZIP)"}</button>
+    if(pl){ const c=k=>pl.items.filter(i=>i.kind===k).length, todo=Object.entries(pl.fams).reduce((a,[f,F])=>a+F.masters.filter((_,k)=>!R.M[f]?.[k]).length,0), pay=Object.entries(pl.fams).reduce((a,[f,F])=>a+F.masters.filter((_,k)=>!R.M[f]?.[k]&&F.aiSteps[k]).length,0), all=pl.items.every(ready),
+        selfSides=Object.values(pl.fams).flatMap(F=>[F.plain.A&&F.names[0],F.plain.B&&F.names[1]]).filter(Boolean);
+      h+=`<div class="rl-card rz-plan"><div class="rz-planrow"><div><b><span data-noi18n>${pl.items.length}</span> <span>sizes</span></b><p class="t12 muted"><span data-noi18n>${c("same")+c("crop")}</span> <span>come straight from the original</span>${c("ext")?` · <span data-noi18n>${c("ext")}</span> <span>need the background extended</span>${pl.ext?` · <span data-noi18n>${pl.ext}</span> <span>by AI, about</span> <span data-noi18n>${pl.credits}</span> <span>credits</span>`:` · <span>no AI needed, free</span>`}`:" · no AI needed, free"}</p>${selfSides.length?`<p class="t12 rz-self"><span>The plain side is continued by the page itself, free and at full quality:</span> <span data-noi18n>${selfSides.join(", ")}</span></p>`:""}${R.an?.scene?`<p class="t12 muted" dir="auto" data-noi18n>${esc(R.an.scene)}</p>`:""}</div>
+        <div class="rl-btns">${todo?`<button type="button" class="btn primary rz-go" data-rz-act="create" ${busy?"disabled":""}><span>Create all sizes</span> ${pay?`<span data-noi18n>(${pay*EXT_CREDITS}</span> <span>credits</span><span data-noi18n>)</span>`:`<span>(free)</span>`}</button>`:""}<button type="button" class="btn${todo?"":" primary"}" data-rz-act="zip" ${busy||!pl.items.some(ready)?"disabled":""}>${all?"Download all (ZIP)":"Download the ready sizes (ZIP)"}</button>
           <div class="a-seg" role="group" aria-label="File type"><button type="button" data-rzfmt="png" aria-pressed="${R.fmt==="png"}">PNG</button><button type="button" data-rzfmt="jpg" aria-pressed="${R.fmt==="jpg"}">JPG</button></div></div></div>
         ${Object.keys(pl.fams).map(masterHTML).join("")}
         <p class="t12 muted">The person and everything in the original stay exactly as they are: only the background around them is new. Sizes marked Enlarged are bigger than the picture has pixels for.</p></div>
@@ -6203,7 +6262,7 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
   document.addEventListener("paste",e=>{ if(P.hidden||e.target.closest?.("textarea,input,[contenteditable]")) return; const f=[...(e.clipboardData?.files||[])].find(x=>/^image\//.test(x.type)); if(f){ e.preventDefault(); load(f); } });
   const open=()=>{ P.hidden=false; P.scrollTop=0; draw(); };
   $("openResize")?.addEventListener("click",open); $("closeResize")?.addEventListener("click",()=>{ P.hidden=true; $("openResize")?.focus(); });
-  window.__rz={makePlan,steps};
+  window.__rz={makePlan,steps,R};
 })();
 
 boot();
