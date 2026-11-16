@@ -6065,7 +6065,7 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
     for(let k=0;k<F.masters.length;k++){ if(R.stop) throw {code:"stopped"};
       const L=F.masters[k], off=F.offs[k], at=off-prev.off, tag=`${tall?"tall":"wide"} extension ${k+1} of ${F.masters.length}`;
       const cross=Math.round(F.cross*prevScale), len=Math.round(L*prevScale), ia=Math.round(at*prevScale);
-      let id=(redoFrom==null||k<redoFrom)?reuse.ids[k]:null, wh=id&&reuse.dv===2?reuse.dims[k]:null;
+      let id=(redoFrom==null||k<redoFrom)?reuse.ids[k]:null, wh=id&&reuse.dv===3?reuse.dims[k]:null;
       if(id&&R.M[fam][k]&&redoFrom!=null&&k<redoFrom&&reuse.dims[k]){ const d=reuse.dims[k]; prev={canvas:R.M[fam][k].canvas,len:L,off}; prevId=id; prevScale=(tall?d[0]:d[1])/F.cross; continue; }
       if(!id){ reuse.ids.length=k; reuse.dims.length=k;
         if(!prevId){ status(`Sending the picture to Magnific…`); const ub=u<1?scaled(base,0,0,base.width,base.height,Math.round(base.width*u),Math.round(base.height*u)):base;
@@ -6075,7 +6075,7 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
         const r=await callMag("images_expand",args); id=pid(r); if(!id) throw {code:"tool_error",message:"Magnific accepted the extension but returned no identifier."};
         reuse.ids[k]=id; reuse.dims[k]=null; runSave({...runs()[cacheKey()],an:R.an,[fam]:reuse}); await waitDone(id); }
       else if(!wh) await waitDone(id);
-      if(!wh){ wh=await dims(id,tall?cross:len,tall?len:cross); reuse.dims[k]=wh; reuse.dv=2; runSave({...runs()[cacheKey()],an:R.an,[fam]:reuse}); }
+      if(!wh){ wh=await dims(id,tall?cross:len,tall?len:cross); reuse.dims[k]=wh; reuse.dv=3; runSave({...runs()[cacheKey()],an:R.an,[fam]:reuse}); }
       const ks=(tall?wh[0]:wh[1])/F.cross, band=clamp(prev.len*.07,24,180);
       const A=await readBack(id,wh[0],wh[1],F.axis,[[0,at>0?(at+band)*ks:0],[at+prev.len<L?(at+prev.len-band)*ks:(tall?wh[1]:wh[0]),tall?wh[1]:wh[0]]],(d,t)=>status(`Reading the ${tag} back · ${d} / ${t}`));
       const canvas=compose(F,L,A,prev,at); R.M[fam][k]={canvas,len:L,off,id}; prev={canvas,len:L,off}; prevId=id; prevScale=ks; delete R.qc[fam+k]; paint(); await check(fam,k).catch(()=>{}); }
