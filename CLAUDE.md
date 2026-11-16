@@ -14,7 +14,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 135 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 136 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openBrand`):
 
@@ -174,6 +174,8 @@ Samer rejected the old builder twice (blurred circles, card-style frame, flat bl
   - Careful: decode the template byte for byte (`String.fromCharCode`), never `TextDecoder("latin1")` (it is windows-1252 and corrupts the embedded binary).
 
 Tested with Playwright from disk only (rendering, editor, every export, both ZIPs, SVG rendered next to the canvas). Never tested for real: inside claude.ai, the paste in Figma, "Ask for a file" with real Claude, Safari / iPhone.
+
+**Recent thumbnails (v136).** Samer saw 40 grey tiles ("16:9 · 2K") in Recent. Two causes fixed: `addHistory` only made a thumbnail when Magnific had sent image bytes (`o.img`), and `saveHist` dropped thumbnails first when localStorage was full. Now `histFill` fetches a 512 px view of every entry without one (`creations_read` with `{creationIdentifier, hq:"low"}`, called directly, no Claude call), one at a time once Magnific is connected, and saves it locally and to the cloud copy; `saveHist` shortens the stored prompts before it gives up any thumbnail. Tested with a mocked connector only.
 
 ## 10. Other things waiting on Samer
 

@@ -1356,14 +1356,24 @@ $("presets").addEventListener("click",e=>{ const p=e.target.closest("button[data
 const HKEY="bae_history_v1";
 function loadHist(){ try{ return JSON.parse(localStorage.getItem(HKEY)||"[]"); }catch{ return []; } }
 const HMAX=40;
-function saveHist(h){ try{ localStorage.setItem(HKEY,JSON.stringify(h.slice(0,HMAX))); }catch{ try{ localStorage.setItem(HKEY,JSON.stringify(h.slice(0,HMAX).map((x,i)=>i<8?x:{...x,thumb:null,prompt:String(x.prompt||"").slice(0,1500)}))); }catch{ try{ localStorage.setItem(HKEY,JSON.stringify(h.slice(0,6).map(x=>({...x,thumb:null})))); }catch{} } } }
+function saveHist(h){ h=h.slice(0,HMAX); const cut=(n,keep)=>h.map((x,i)=>({...x,prompt:String(x.prompt||"").slice(0,n),thumb:i<keep?x.thumb:null}));
+  /* when the browser's store is full, shorten the saved prompts first: the small pictures are what make Recent usable */
+  for(const v of [()=>h,()=>cut(1500,HMAX),()=>cut(400,HMAX),()=>cut(400,24),()=>cut(200,8).slice(0,12)]){ try{ localStorage.setItem(HKEY,JSON.stringify(v())); return; }catch{} } }
 async function thumbOf(dataUrl){ try{ const bmp=await createImageBitmap(await (await fetch(dataUrl)).blob()); const k=240/Math.max(bmp.width,bmp.height); const c=document.createElement("canvas"); c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k); c.getContext("2d").drawImage(bmp,0,0,c.width,c.height); return c.toDataURL("image/jpeg",.78); }catch{ return null; } }
 async function addHistory(o,key){
   const k=key||Object.keys(cards).find(q=>cards[q]?.outs?.includes(o))||(S.mode==="icon"?"icon":"nano");
   const x={hid:"h"+Date.now().toString(36)+Math.random().toString(36).slice(2,5),id:o.id||null,thumb:o.img?await thumbOf(o.img):null,url:o.url||null,webUrl:o.webUrl||null,res:o.long>=2000?"2K":(o.long?o.long+"px":""),long:o.long||0,aspect:aspectText(),aspectVal:$("aspect")?.value||"",look:S.look,setting:S.setting,mode:S.mode,key:k,
     brief:String($("brief").value||"").slice(0,2000),prompt:String($(MODELS[k]?.prompt||"pNano")?.value||"").slice(0,7000),note:o.edit?("Edit: "+String(o.edit).slice(0,80)):(o.angle||""),t:Date.now()};
-  const h=loadHist(); h.unshift(x); saveHist(h); renderHistory(); histCloud(x);
+  const h=loadHist(); h.unshift(x); saveHist(h); renderHistory(); histCloud(x); if(!x.thumb) histFill();
 }
+/* entries saved without a small picture (Magnific sent only a link): fetch a 512 px view of each, one at a time, and keep it */
+let histFilling=false;
+async function histFill(){ if(histFilling) return; histFilling=true;
+  try{ for(let n=0;n<HMAX;n++){ if(!mcp||mcp.web||!S.connected) break; const x=loadHist().find(q=>!q.thumb&&q.id&&!HIST_MISS.has(q.hid)); if(!x) break; HIST_MISS.add(x.hid);
+      try{ const r=await callMag("creations_read",{creationIdentifier:x.id,hq:"low"}), im=readResult(r).images[0], th=im?await thumbOf(`data:${im.mime};base64,${im.data}`):null;
+        if(th){ const h=loadHist(), y=h.find(q=>q.hid===x.hid); if(y){ y.thumb=th; saveHist(h); renderHistory(); histCloud(y); } } }catch{}
+      await new Promise(r=>setTimeout(r,350)); } }catch{} histFilling=false; }
+const HIST_MISS=new Set();
 /* the list also lives in the user's private space, so it follows them to another device */
 async function histCloud(x){ try{ await rlStoreInit(); if(!RLS.db||!RLS.uid) return; await RLS.db.collection(`data/users/${RLS.uid}/hist`).doc(x.hid).set(JSON.parse(JSON.stringify(x))); }catch{} }
 async function histPull(){ try{ await rlStoreInit(); if(!RLS.db||!RLS.uid) return; const sn=await RLS.db.collection(`data/users/${RLS.uid}/hist`).get(); const cloud=sn.docs.map(d=>JSON.parse(JSON.stringify(d.data()))).filter(x=>x&&x.hid);
@@ -1392,6 +1402,8 @@ function renderHistory(){
 }
 $("btnClearHist").onclick=()=>{ const b=$("btnClearHist"); if(b.dataset.sure){ delete b.dataset.sure; b.textContent="Clear"; const old=loadHist(); saveHist([]); renderHistory(); rlStoreInit().then(()=>{ if(RLS.db&&RLS.uid) old.forEach(x=>x.hid&&RLS.db.collection(`data/users/${RLS.uid}/hist`).doc(x.hid).delete().catch(()=>{})); }).catch(()=>{}); } else { b.dataset.sure="1"; b.textContent="Clear all? Press again"; setTimeout(()=>{ if(b.dataset.sure){ delete b.dataset.sure; b.textContent="Clear"; } },4000); } };
 renderHistory(); setTimeout(()=>histPull(),2500);
+/* fill the missing small pictures once Magnific is connected */
+{ let tries=0; const t=setInterval(()=>{ if(++tries>40){ clearInterval(t); return; } try{ if(mcp&&!mcp.web&&S.connected){ clearInterval(t); histFill(); } }catch{} },3000); }
 
 /* ================= WEB RUNTIME (GitHub Pages and any page outside claude.ai) =================
    Claude via the Anthropic Messages API and Nano Banana 2.1 via the Google Gemini API, called
