@@ -6003,16 +6003,21 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
       const x=r?.payload?.results?.[0]||r?.payload?.creations?.[0]||{}, st=String(x.status||readResult(r).status||"").toLowerCase();
       if(FAIL.test(st)) throw {code:"tool_error",message:"Magnific could not extend this picture ("+st+")."}; if(DONE.test(st)) return; }
     throw {code:"tool_error",message:"Magnific is still working on the extension. Open BAE Resize again in a few minutes and press Create: the finished extension is reused, free."}; }
-  async function dims(id,fw,fh){ try{ const r=await callMag("creations_get",{creationIdentifier:id}), m=r?.payload?.metadata||r?.payload?.creations?.[0]?.metadata||{}, x=readResult(r); const w=+m.width||x.w, h=+m.height||x.h; if(w>31&&h>31) return [w,h]; }catch{} return [fw,fh]; }
-  async function tile(id,x,y,T){ for(let a=0;a<3;a++){ try{ const c=await callMag("images_crop",{creationIdentifier:id,aspectRatio:"1:1",customWidth:T,customHeight:T,cropX:x,cropY:y}), tid=pid(c); if(!tid) throw 0;
+  const rtxt=r=>{ const p=r?.payload; return (typeof p==="string"?p:JSON.stringify(p??""))+"\n"+(r?.content||[]).map(c=>c.text||"").join("\n"); };
+  /* the size Magnific really made: its reply can be text rather than an object, and it caps the picture at about 5.2 MP */
+  async function dims(id,fw,fh){ for(let a=0;a<2;a++){ try{ const r=await callMag("creations_get",{creationIdentifier:id}), p=r?.payload, m=p&&typeof p==="object"?(p.metadata||p.creations?.[0]?.metadata||{}):{};
+        let w=+m.width, h=+m.height; if(!(w>31&&h>31)){ const t=rtxt(r), x=t.match(/\bwidth["'\s:=]+(\d{2,5})/i), y=t.match(/\bheight["'\s:=]+(\d{2,5})/i); w=+x?.[1]; h=+y?.[1]; }
+        if(w>31&&h>31) return [w,h]; }catch(e){ log("✕","resize size",{code:e?.code,message:e?.message}); } }
+    const k=Math.min(1,Math.sqrt(5.2e6/(fw*fh))); return [Math.floor(fw*k),Math.floor(fh*k)]; }
+  async function tile(id,x,y,T){ for(let a=0;a<3;a++){ try{ x=Math.max(0,Math.round(x)); y=Math.max(0,Math.round(y)); const c=await callMag("images_crop",{creationIdentifier:id,aspectRatio:"1:1",customWidth:T,customHeight:T,cropX:x,cropY:y}), tid=pid(c); if(!tid) throw 0;
         const st=String(c?.payload?.creation?.status||"").toLowerCase(); if(st&&!DONE.test(st)) await waitDone(tid);
         const r=await callMag("creations_read",{creationIdentifier:tid,hq:"medium"}), im=readResult(r).images[0]; if(!im) throw 0;
-        return await createImageBitmap(await (await fetch(`data:${im.mime};base64,${im.data}`)).blob()); }catch(e){ if(e?.code==="stopped"||a===2) throw e?.code?e:{code:"tool_error",message:"Magnific did not return a part of the extended picture. Press Create again: the extension is reused, free."}; await new Promise(r=>setTimeout(r,1200)); } } }
+        return await createImageBitmap(await (await fetch(`data:${im.mime};base64,${im.data}`)).blob()); }catch(e){ log("✕","resize tile",{x,y,T,code:e?.code,message:e?.message}); if(e?.code==="stopped"||a===2) throw e?.code?e:{code:"tool_error",message:"Magnific did not return a part of the extended picture. Press Create again: the extension is reused, free."}; await new Promise(r=>setTimeout(r,1200)); } } }
   /* the AI picture, rebuilt at its own pixel size from tiles; only the rows / columns the extension needs */
   async function readBack(id,aw,ah,axis,ranges,onP){ const A=mk(aw,ah), g=A.getContext("2d"), T=Math.min(TILE,aw,ah), al=axis==="y"?ah:aw, cl=axis==="y"?aw:ah;
-    const line=(a,b)=>{ const out=[]; a=clamp(Math.floor(a),0,al-T); b=clamp(Math.ceil(b),a+1,al); for(let p=a;p<b;p+=T) out.push(Math.min(p,al-T)); return out; };
-    const cross=line(0,cl), seen=new Set(), jobs=[];
-    for(const [a,b] of ranges) if(b-a>1) for(const p of line(a,b)) for(const q of cross){ const x=axis==="y"?q:p, y=axis==="y"?p:q, k=x+","+y; if(!seen.has(k)){ seen.add(k); jobs.push([x,y]); } }
+    const line=(a,b,len)=>{ const out=[]; a=clamp(Math.floor(a),0,len-T); b=clamp(Math.ceil(b),a+1,len); for(let p=a;p<b;p+=T) out.push(Math.min(p,len-T)); return out; };
+    const cross=line(0,cl,cl), seen=new Set(), jobs=[];
+    for(const [a,b] of ranges) if(b-a>1) for(const p of line(a,b,al)) for(const q of cross){ const x=axis==="y"?q:p, y=axis==="y"?p:q, k=x+","+y; if(!seen.has(k)){ seen.add(k); jobs.push([x,y]); } }
     let done=0; const run=async()=>{ for(;;){ const j=jobs.shift(); if(!j) return; if(R.stop) throw {code:"stopped"}; const bmp=await tile(id,j[0],j[1],T); g.drawImage(bmp,j[0],j[1],T,T); bmp.close?.(); onP?.(++done,done+jobs.length); } };
     const total=jobs.length; onP?.(0,total); await Promise.all([run(),run(),run()]); return A; }
   /* master = the AI extension with the previous layer (the original, or the master before) put back on top, tone-matched and feathered */
@@ -6041,8 +6046,8 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
     for(let k=0;k<F.masters.length;k++){ if(R.stop) throw {code:"stopped"};
       const L=F.masters[k], off=F.offs[k], at=off-prev.off, tag=`${tall?"tall":"wide"} extension ${k+1} of ${F.masters.length}`;
       const cross=Math.round(F.cross*prevScale), len=Math.round(L*prevScale), ia=Math.round(at*prevScale);
-      let id=(redoFrom==null||k<redoFrom)?reuse.ids[k]:null, wh=id?reuse.dims[k]:null;
-      if(id&&R.M[fam][k]&&redoFrom!=null&&k<redoFrom){ prev={canvas:R.M[fam][k].canvas,len:L,off}; prevId=id; prevScale=(tall?wh[0]:wh[1])/F.cross; continue; }
+      let id=(redoFrom==null||k<redoFrom)?reuse.ids[k]:null, wh=id&&reuse.dv===2?reuse.dims[k]:null;
+      if(id&&R.M[fam][k]&&redoFrom!=null&&k<redoFrom&&reuse.dims[k]){ const d=reuse.dims[k]; prev={canvas:R.M[fam][k].canvas,len:L,off}; prevId=id; prevScale=(tall?d[0]:d[1])/F.cross; continue; }
       if(!id){ reuse.ids.length=k; reuse.dims.length=k;
         if(!prevId){ status(`Sending the picture to Magnific…`); const ub=u<1?scaled(base,0,0,base.width,base.height,Math.round(base.width*u),Math.round(base.height*u)):base;
           const blob=await new Promise(r=>ub.toBlob(r,"image/png")); const up=await rlUploadMag(blob,(R.name||"image")+"_resize_base"); prevId=up.id; reuse.baseId=prevId; }
@@ -6051,7 +6056,7 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
         const r=await callMag("images_expand",args); id=pid(r); if(!id) throw {code:"tool_error",message:"Magnific accepted the extension but returned no identifier."};
         reuse.ids[k]=id; reuse.dims[k]=null; runSave({...runs()[cacheKey()],an:R.an,[fam]:reuse}); await waitDone(id); }
       else if(!wh) await waitDone(id);
-      if(!wh){ wh=await dims(id,tall?cross:len,tall?len:cross); reuse.dims[k]=wh; runSave({...runs()[cacheKey()],an:R.an,[fam]:reuse}); }
+      if(!wh){ wh=await dims(id,tall?cross:len,tall?len:cross); reuse.dims[k]=wh; reuse.dv=2; runSave({...runs()[cacheKey()],an:R.an,[fam]:reuse}); }
       const ks=(tall?wh[0]:wh[1])/F.cross, band=clamp(prev.len*.07,24,180);
       const A=await readBack(id,wh[0],wh[1],F.axis,[[0,at>0?(at+band)*ks:0],[at+prev.len<L?(at+prev.len-band)*ks:(tall?wh[1]:wh[0]),tall?wh[1]:wh[0]]],(d,t)=>status(`Reading the ${tag} back · ${d} / ${t}`));
       const canvas=compose(F,L,A,prev,at); R.M[fam][k]={canvas,len:L,off,id}; prev={canvas,len:L,off}; prevId=id; prevScale=ks; delete R.qc[fam+k]; paint(); await check(fam,k).catch(()=>{}); }
@@ -6121,7 +6126,7 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
     if(busy) h+=`<div class="rl-card rz-busy" role="status"><span class="spin" aria-hidden="true"></span><span><b>${esc(R.busy)}</b><span class="t12 muted" id="rzStep" data-noi18n>${esc(R.step)}</span></span>${/Working/.test(R.busy)?`<button type="button" class="btn small" data-rz-act="stop">Stop</button>`:""}</div>`;
     if(pl){ const c=k=>pl.items.filter(i=>i.kind===k).length, todo=Object.entries(pl.fams).reduce((a,[f,F])=>a+F.masters.filter((_,k)=>!R.M[f]?.[k]).length,0), all=pl.items.every(ready);
       h+=`<div class="rl-card rz-plan"><div class="rz-planrow"><div><b><span data-noi18n>${pl.items.length}</span> <span>sizes</span></b><p class="t12 muted"><span data-noi18n>${c("same")+c("crop")}</span> <span>come straight from the original</span>${c("ext")?` · <span data-noi18n>${c("ext")}</span> <span>need the background extended</span> · <span data-noi18n>${pl.ext}</span> <span>extensions in total, about</span> <span data-noi18n>${pl.credits}</span> <span>credits</span>`:" · no AI needed, free"}</p>${R.an?.scene?`<p class="t12 muted" dir="auto" data-noi18n>${esc(R.an.scene)}</p>`:""}</div>
-        <div class="rl-btns">${todo?`<button type="button" class="btn primary" data-rz-act="create" ${busy?"disabled":""}><span>Extend and create all sizes</span> <span data-noi18n>· ${todo*EXT_CREDITS}</span> <span>credits</span></button>`:""}<button type="button" class="btn${todo?"":" primary"}" data-rz-act="zip" ${busy||!pl.items.some(ready)?"disabled":""}>${all?"Download all (ZIP)":"Download the ready sizes (ZIP)"}</button>
+        <div class="rl-btns">${todo?`<button type="button" class="btn primary rz-go" data-rz-act="create" ${busy?"disabled":""}><span>Create all sizes</span> <span data-noi18n>(${todo*EXT_CREDITS}</span> <span>credits</span><span data-noi18n>)</span></button>`:""}<button type="button" class="btn${todo?"":" primary"}" data-rz-act="zip" ${busy||!pl.items.some(ready)?"disabled":""}>${all?"Download all (ZIP)":"Download the ready sizes (ZIP)"}</button>
           <div class="a-seg" role="group" aria-label="File type"><button type="button" data-rzfmt="png" aria-pressed="${R.fmt==="png"}">PNG</button><button type="button" data-rzfmt="jpg" aria-pressed="${R.fmt==="jpg"}">JPG</button></div></div></div>
         ${Object.keys(pl.fams).map(masterHTML).join("")}
         <p class="t12 muted">The person and everything in the original stay exactly as they are: only the background around them is new. Sizes marked Enlarged are bigger than the picture has pixels for.</p></div>
