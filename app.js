@@ -6009,10 +6009,21 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
         let w=+m.width, h=+m.height; if(!(w>31&&h>31)){ const t=rtxt(r), x=t.match(/\bwidth["'\s:=]+(\d{2,5})/i), y=t.match(/\bheight["'\s:=]+(\d{2,5})/i); w=+x?.[1]; h=+y?.[1]; }
         if(w>31&&h>31) return [w,h]; }catch(e){ log("✕","resize size",{code:e?.code,message:e?.message}); } }
     const k=Math.min(1,Math.sqrt(5.2e6/(fw*fh))); return [Math.floor(fw*k),Math.floor(fh*k)]; }
-  async function tile(id,x,y,T){ for(let a=0;a<3;a++){ try{ x=Math.max(0,Math.round(x)); y=Math.max(0,Math.round(y)); const c=await callMag("images_crop",{creationIdentifier:id,aspectRatio:"1:1",customWidth:T,customHeight:T,cropX:x,cropY:y}), tid=pid(c); if(!tid) throw 0;
+  /* one square piece of Magnific's picture as pixels. The bytes are decoded in the page (a data: fetch is blocked by the page's security);
+     if the read returns no bytes, the piece is loaded from its file link instead. */
+  const imgFromUrl=u=>new Promise((res,rej)=>{ const im=new Image(); im.crossOrigin="anonymous"; im.onload=()=>createImageBitmap(im).then(res,rej); im.onerror=()=>rej(new Error("link blocked")); im.src=u; });
+  async function tile(id,x,y,T){ let why="";
+    for(let a=0;a<3;a++){ try{ x=Math.max(0,Math.round(x)); y=Math.max(0,Math.round(y)); if(R.stop) throw {code:"stopped"};
+        const c=await callMag("images_crop",{creationIdentifier:id,aspectRatio:"1:1",customWidth:T,customHeight:T,cropX:x,cropY:y}), tid=pid(c); if(!tid){ why="the crop returned no id"; throw 0; }
         const st=String(c?.payload?.creation?.status||"").toLowerCase(); if(st&&!DONE.test(st)) await waitDone(tid);
-        const r=await callMag("creations_read",{creationIdentifier:tid,hq:"medium"}), im=readResult(r).images[0]; if(!im) throw 0;
-        return await createImageBitmap(await (await fetch(`data:${im.mime};base64,${im.data}`)).blob()); }catch(e){ log("✕","resize tile",{x,y,T,code:e?.code,message:e?.message}); if(e?.code==="stopped"||a===2) throw e?.code?e:{code:"tool_error",message:"Magnific did not return a part of the extended picture. Press Create again: the extension is reused, free."}; await new Promise(r=>setTimeout(r,1200)); } } }
+        const r=await callMag("creations_read",{creationIdentifier:tid,hq:"medium"}), rr=readResult(r), im=rr.images[0];
+        if(im){ const bmp=await createImageBitmap(b64Blob(im.data,im.mime||"image/jpeg")); if(bmp.width>=T*.9) return bmp; why=`the piece came back at ${bmp.width} px`; if(bmp.width>16){ const c2=mk(T,T); c2.getContext("2d").drawImage(bmp,0,0,T,T); return await createImageBitmap(c2); } }
+        else why="the read returned no image ("+(r?.content||[]).map(b=>b.type).join(",")+")";
+        const urls=[...rr.urls]; if(!urls.length){ try{ urls.push(...readResult(await callMag("creations_get",{creationIdentifier:tid})).urls); }catch{} }
+        for(const u of urls.filter(u=>!/conversions|preview/i.test(u)).concat(urls)){ try{ return await imgFromUrl(u); }catch(e){ why+=" · link blocked"; } }
+        throw 0;
+      }catch(e){ if(e?.code==="stopped") throw e; if(e&&e!==0) why=why||e?.code||e?.message||String(e); log("✕","resize tile",{x,y,T,why,code:e?.code,message:e?.message});
+        if(a===2) throw {code:"tool_error",message:`Magnific did not return a part of the extended picture (${String(why).slice(0,120)}). Press Create again: the extension is reused, free. If it repeats, send me this message.`}; await new Promise(r=>setTimeout(r,1200)); } } }
   /* the AI picture, rebuilt at its own pixel size from tiles; only the rows / columns the extension needs */
   async function readBack(id,aw,ah,axis,ranges,onP){ const A=mk(aw,ah), g=A.getContext("2d"), T=Math.min(TILE,aw,ah), al=axis==="y"?ah:aw, cl=axis==="y"?aw:ah;
     const line=(a,b,len)=>{ const out=[]; a=clamp(Math.floor(a),0,len-T); b=clamp(Math.ceil(b),a+1,len); for(let p=a;p<b;p+=T) out.push(Math.min(p,len-T)); return out; };
