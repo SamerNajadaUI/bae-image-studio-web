@@ -223,5 +223,14 @@ Samer studied tadvio.com and asked for the same idea inside the studio: give one
 - Per size: slider to move the window, "Actual pixels" for the small LED sizes, "High quality" = the same ratio at the native size. ZIP has `exact/` and `HQ/`.
 - Finished extensions are remembered in localStorage (`bae_rz_runs`, by file name + size + dimensions) and reused free after a reload.
 
+**How Magnific really behaves (measured live on Samer's account, 16 Nov 2026 — the first four versions failed in his hands because the mock did not copy this):**
+- The size in `creations_get` metadata is NOT the file's size: details said 711×3556, the file is 704×3552 (the model works in steps of 16).
+- A big request is shrunk by Magnific's own rule: 1264×6320 came back 704×3584, the same with `resolution:"4k"`. Never assume the requested size.
+- `images_crop` refuses a crop LARGER than the file and the refusal states the true size ("A crop fits inside the picture: up to 704 x 3552 px"); non-square sizes are fine; a crop POSITION past the edge is silently moved back inside (so position probes lie, size probes do not).
+- `creations_wait` can come back `processing`; loop.
+- The page's security blocks `fetch("data:…")`; decode base64 with `b64Blob`.
+So `realSize()` asks for a 10000×10000 crop and reads the size from the refusal, with size probes as fallback. Everything sent to Magnific is sized in steps of 16. Every extension starts from a picture the page uploaded itself (the original, then each finished master), never from Magnific's raw result, so what the model redraws under the join equals what the page puts back. `compose()` measures the tone step exactly at each join (24 bins across) and removes it, then blends over the whole calm band up to the subject.
+The mock that copies all of this is in `dev/resize-mock-test.js` (Playwright; run it with MSG=1/0 and META=1/0, set IMG to a test picture). Run it before changing this module.
+
 **Tested** with Playwright and a mocked Magnific + Claude only (plan, both extensions, tiles, compose, check, ZIP, phone width). **Never tested for real inside the studio:** the upload through BAE Gemini Eye, real tiles, the tone match on a real extension, the check with real Claude.
 Known limits: tiles appear in his Magnific history; a 2560×1440 source means the 1920-wide tall sizes are enlarged ×1.4 (the card says so, a 4K source fixes it); not yet reachable from a Photography result (upload only).

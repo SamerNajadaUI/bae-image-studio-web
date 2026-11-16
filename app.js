@@ -6004,19 +6004,23 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
       if(FAIL.test(st)) throw {code:"tool_error",message:"Magnific could not extend this picture ("+st+")."}; if(DONE.test(st)) return; }
     throw {code:"tool_error",message:"Magnific is still working on the extension. Open BAE Resize again in a few minutes and press Create: the finished extension is reused, free."}; }
   const rtxt=r=>{ const p=r?.payload; return (typeof p==="string"?p:JSON.stringify(p??""))+"\n"+(r?.content||[]).map(c=>c.text||"").join("\n"); };
-  /* the size Magnific really made. Its reply can be text or an object, and it shrinks big requests by its own rule
-     (1265×6325 came back as 700×3504), so the size is read from the reply and then PROVED with a tiny free crop in the far corner;
-     if the reply is missing or wrong, the size is found by halving with such crops (the ratio is always kept). */
-  async function corner(id,W,H){ try{ const c=await callMag("images_crop",{creationIdentifier:id,aspectRatio:"1:1",customWidth:32,customHeight:32,cropX:W-32,cropY:H-32}); return !!pid(c); }catch{ return false; } }
-  async function dims(id,fw,fh){ let w=0,h=0;
-    for(let a=0;a<3&&!(w>31&&h>31);a++){ try{ const r=await callMag("creations_get",{creationIdentifier:id}), p=r?.payload, m=p&&typeof p==="object"?(p.metadata||p.creation?.metadata||p.creations?.[0]?.metadata||{}):{};
-        w=+m.width; h=+m.height; if(!(w>31&&h>31)){ const t=rtxt(r), x=t.match(/\bwidth["'\s:=]+(\d{2,5})/i), y=t.match(/\bheight["'\s:=]+(\d{2,5})/i); w=+x?.[1]||0; h=+y?.[1]||0; } }
-      catch(e){ log("✕","resize size",{code:e?.code,message:e?.message}); } if(!(w>31&&h>31)) await new Promise(r=>setTimeout(r,1500)); }
-    if(w>31&&h>31&&Math.abs(w/h-fw/fh)<.03&&await corner(id,w,h)) return [w,h];
-    status("Measuring the extended picture…"); let lo=.05, hi=1;
-    if(await corner(id,fw,fh)) return [fw,fh];
-    for(let n=0;n<11;n++){ const k=(lo+hi)/2; if(await corner(id,Math.floor(fw*k),Math.floor(fh*k))) lo=k; else hi=k; }
-    const out=[Math.floor(fw*lo),Math.floor(fh*lo)]; log("·","resize measured",{reply:[w,h],measured:out}); return out; }
+  const errText=e=>{ let s=""; try{ s=String(e?.message||"")+" "+JSON.stringify(e?.result??"")+" "+JSON.stringify(e?.data??""); }catch{} return s; };
+  /* THE REAL SIZE of a Magnific picture. Measured on real results (Nov 2026):
+     · the size in the creation's details is NOT the file's size (details said 711×3556, the file is 704×3552: the model works in steps of 16);
+     · a big request is shrunk by Magnific's own rule (1264×6320 came back 704×3584, also when 4k is asked);
+     · a crop LARGER than the file is refused, and the refusal states the true size ("up to 704 x 3552 px"); a crop POSITION past the edge is silently moved back in.
+     So: ask for an impossible crop and read the true size from the refusal; if the refusal's text does not reach the page, find the size with size probes (never position probes). */
+  async function fits(id,w,h){ try{ const c=await callMag("images_crop",{creationIdentifier:id,aspectRatio:"1:1",customWidth:w,customHeight:h,cropX:0,cropY:0}); return !!pid(c); }catch(e){ if(e?.code==="stopped") throw e; return false; } }
+  async function edge(test,lo,hi){ /* largest value that still fits, lo is known to fit */ while(hi-lo>1){ if(R.stop) throw {code:"stopped"}; const m=(lo+hi)>>1; if(await test(m)) lo=m; else hi=m; } return lo; }
+  async function realSize(id,hw,hh){
+    try{ await callMag("images_crop",{creationIdentifier:id,aspectRatio:"1:1",customWidth:10000,customHeight:10000,cropX:0,cropY:0}); }
+    catch(e){ if(e?.code==="stopped") throw e; const m=errText(e).match(/up to\s+(\d{2,5})\s*[x×]\s*(\d{2,5})/i); if(m&&+m[1]>31&&+m[2]>31) return [+m[1],+m[2]]; }
+    status("Measuring the extended picture…"); let w=0,h=0;
+    try{ const r=await callMag("creations_get",{creationIdentifier:id}), p=r?.payload, m=p&&typeof p==="object"?(p.metadata||p.creation?.metadata||p.creations?.[0]?.metadata||{}):{};
+      w=+m.width; h=+m.height; if(!(w>31&&h>31)){ const t=rtxt(r), x=t.match(/\bwidth["'\s:=]+(\d{2,5})/i), y=t.match(/\bheight["'\s:=]+(\d{2,5})/i); w=+x?.[1]||0; h=+y?.[1]||0; } }catch(e){ log("✕","resize size",{code:e?.code,message:e?.message}); }
+    if(w>31&&h>31){ const c=[Math.floor(w/16)*16,Math.floor(h/16)*16]; if(await fits(id,c[0],c[1])&&!(await fits(id,c[0]+1,32))&&!(await fits(id,32,c[1]+1))) return c; }
+    if(!(await fits(id,32,32))) throw {code:"tool_error",message:"Magnific did not let the page read the extended picture. Try again in a minute."};
+    const W=await edge(v=>fits(id,v,32),32,Math.max(hw,w,64)+65), H=await edge(v=>fits(id,32,v),32,Math.max(hh,h,64)+65); log("·","resize measured",{details:[w,h],measured:[W,H]}); return [W,H]; }
   /* one square piece of Magnific's picture as pixels. The bytes are decoded in the page (a data: fetch is blocked by the page's security);
      if the read returns no bytes, the piece is loaded from its file link instead. */
   const imgFromUrl=u=>new Promise((res,rej)=>{ const im=new Image(); im.crossOrigin="anonymous"; im.onload=()=>createImageBitmap(im).then(res,rej); im.onerror=()=>rej(new Error("link blocked")); im.src=u; });
@@ -6030,7 +6034,7 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
         const urls=[...rr.urls]; if(!urls.length){ try{ urls.push(...readResult(await callMag("creations_get",{creationIdentifier:tid})).urls); }catch{} }
         for(const u of urls.filter(u=>!/conversions|preview/i.test(u)).concat(urls)){ try{ return await imgFromUrl(u); }catch(e){ why+=" · link blocked"; } }
         throw 0;
-      }catch(e){ if(e?.code==="stopped") throw e; if(e&&e!==0) why=why||e?.code||e?.message||String(e); log("✕","resize tile",{x,y,T,why,code:e?.code,message:e?.message});
+      }catch(e){ if(e?.code==="stopped") throw e; if(e&&e!==0) why=why||String(e?.message||"").replace(/\(request_id[^)]*\)/i,"").trim()||e?.code||String(e); log("✕","resize tile",{x,y,T,why,code:e?.code,message:e?.message});
         if(a===2) throw {code:"tool_error",message:`Magnific did not return a part of the extended picture (${String(why).slice(0,120)}). Press Create again: the extension is reused, free. If it repeats, send me this message.`}; await new Promise(r=>setTimeout(r,1200)); } } }
   /* the AI picture, rebuilt at its own pixel size from tiles; only the rows / columns the extension needs */
   async function readBack(id,aw,ah,axis,ranges,onP){ const A=mk(aw,ah), g=A.getContext("2d"), T=Math.min(TILE,aw,ah), al=axis==="y"?ah:aw, cl=axis==="y"?aw:ah;
@@ -6040,45 +6044,67 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
     let done=0; const run=async()=>{ for(;;){ const j=jobs.shift(); if(!j) return; if(R.stop) throw {code:"stopped"}; const bmp=await tile(id,j[0],j[1],T); g.drawImage(bmp,j[0],j[1],T,T); bmp.close?.(); onP?.(++done,done+jobs.length); } };
     const total=jobs.length; onP?.(0,total); await Promise.all([run(),run(),run()]); return A; }
   /* master = the AI extension with the previous layer (the original, or the master before) put back on top, tone-matched and feathered */
-  function compose(F,L,A,prev,at){ const tall=F.axis==="y", W=tall?F.cross:L, H=tall?L:F.cross, c=mk(W,H), g=c.getContext("2d");
+  function compose(F,L,A,prev,at,bA,bB){ const tall=F.axis==="y", W=tall?F.cross:L, H=tall?L:F.cross, c=mk(W,H), g=c.getContext("2d");
     g.imageSmoothingEnabled=true; g.imageSmoothingQuality="high"; g.drawImage(A,0,0,A.width,A.height,0,0,W,H);
-    const band=Math.round(clamp(prev.len*.07,24,180)), end=at+prev.len, pg=prev.canvas.getContext("2d",{willReadFrequently:true});
-    const strip=(ctx,o)=>tall?ctx.getImageData(0,o,F.cross,band).data:ctx.getImageData(o,0,band,F.cross).data;
-    const mean=d=>{ let r=0,gg=0,b=0,n=0; for(let i=0;i<d.length;i+=16){ r+=d[i]; gg+=d[i+1]; b+=d[i+2]; n++; } return [r/n,gg/n,b/n]; };
-    const shift=(from,to,ai,pv)=>{ if(to-from<1) return; const a=mean(strip(g,ai)), p=mean(strip(pg,pv)), d=p.map((v,i)=>clamp(v-a[i],-36,36)); if(d.every(v=>Math.abs(v)<.6)) return;
-      const im=tall?g.getImageData(0,from,F.cross,to-from):g.getImageData(from,0,to-from,F.cross), px=im.data; for(let i=0;i<px.length;i+=4){ px[i]+=d[0]; px[i+1]+=d[1]; px[i+2]+=d[2]; } g.putImageData(im,tall?0:from,tall?from:0); };
-    if(at>0) shift(0,at+band,at,0); if(end<L) shift(end-band,L,end-band,prev.len-band);
+    bA=Math.round(bA); bB=Math.round(bB); const end=at+prev.len, pg=prev.canvas.getContext("2d",{willReadFrequently:true});
+    /* Remove the step at each join. The model re-draws the original faithfully but often gives the NEW area a slightly different tone,
+       so the step sits exactly at the picture's edge. Measure it there (a thin strip just outside against a thin strip just inside, in 24 bins
+       across so a step that changes from side to side is followed), then lift the new area by that amount: all of it at the join, fading to
+       half far away, so the sky keeps one tone and no line is left. */
+    const NB=24, thin=Math.round(clamp(prev.len*.012,4,24));
+    const bins=(ctx,o)=>{ const d=tall?ctx.getImageData(0,o,F.cross,thin).data:ctx.getImageData(o,0,thin,F.cross).data, w=tall?F.cross:thin, h=tall?thin:F.cross, s=new Float64Array(NB*3), n=new Float64Array(NB);
+      for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const c=tall?x:y, b=Math.min(NB-1,Math.floor(c/F.cross*NB)), i=(y*w+x)*4; if(d[i+3]<250) continue; s[b*3]+=d[i]; s[b*3+1]+=d[i+1]; s[b*3+2]+=d[i+2]; n[b]++; }
+      for(let b=0;b<NB;b++) if(n[b]){ s[b*3]/=n[b]; s[b*3+1]/=n[b]; s[b*3+2]/=n[b]; } return s; };
+    const seam=(from,to,aiO,pvO,joinAt)=>{ const ext=to-from; if(ext<thin+2) return; const A2=bins(g,aiO), P2=bins(pg,pvO); let st=new Float64Array(NB*3); for(let i=0;i<NB*3;i++) st[i]=clamp(P2[i]-A2[i],-90,90);
+      for(let pass=0;pass<3;pass++){ const t=st.slice(); for(let b=0;b<NB;b++) for(let c=0;c<3;c++){ const l=t[Math.max(0,b-1)*3+c], r=t[Math.min(NB-1,b+1)*3+c]; st[b*3+c]=(l+2*t[b*3+c]+r)/4; } }
+      if(st.every(v=>Math.abs(v)<.7)) return;
+      const off=new Float32Array(F.cross*3); for(let c=0;c<F.cross;c++){ const f=clamp((c+.5)/F.cross*NB-.5,0,NB-1), b0=Math.floor(f), b1=Math.min(NB-1,b0+1), t=f-b0; for(let k=0;k<3;k++) off[c*3+k]=st[b0*3+k]*(1-t)+st[b1*3+k]*t; }
+      const Z=clamp(ext*.6,60,F.cross*1.5), im=tall?g.getImageData(0,from,F.cross,ext):g.getImageData(from,0,ext,F.cross), px=im.data, w=tall?F.cross:ext, h=tall?ext:F.cross;
+      for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const along=(tall?y:x)+from, c=tall?x:y, d=Math.abs(along-joinAt), u=Math.min(1,d/Z), k=.5+.5*(1-u*u*(3-2*u)), i=(y*w+x)*4; px[i]+=off[c*3]*k; px[i+1]+=off[c*3+1]*k; px[i+2]+=off[c*3+2]*k; }
+      g.putImageData(im,tall?0:from,tall?from:0); };
+    if(at>0) seam(0,at,at-thin,0,at); if(end<L) seam(end,L,end,prev.len-thin,end);
     const pc=mk(prev.canvas.width,prev.canvas.height), q=pc.getContext("2d"); q.drawImage(prev.canvas,0,0); q.globalCompositeOperation="destination-in";
-    const gr=tall?q.createLinearGradient(0,0,0,prev.len):q.createLinearGradient(0,0,prev.len,0), b=band/prev.len;
-    gr.addColorStop(0,at>0?"rgba(0,0,0,0)":"#000"); gr.addColorStop(b,"#000"); gr.addColorStop(1-b,"#000"); gr.addColorStop(1,end<L?"rgba(0,0,0,0)":"#000");
+    /* a long, eased blend: the join is spread over the whole calm band between the picture's edge and the subject */
+    const gr=tall?q.createLinearGradient(0,0,0,prev.len):q.createLinearGradient(0,0,prev.len,0), fa=bA/prev.len, fb=bB/prev.len, ease=[[0,0],[.25,.1],[.5,.5],[.75,.9],[1,1]];
+    if(at>0) ease.forEach(([t,v])=>gr.addColorStop(fa*t,`rgba(0,0,0,${v})`)); else gr.addColorStop(0,"#000");
+    if(end<L) ease.forEach(([t,v])=>gr.addColorStop(1-fb*t,`rgba(0,0,0,${v})`)); else gr.addColorStop(1,"#000");
     q.fillStyle=gr; q.fillRect(0,0,pc.width,pc.height); g.drawImage(pc,tall?0:at,tall?at:0); return c; }
   const cacheKey=()=>`${R.name}|${R.file.size}|${R.sw}x${R.sh}`;
   const runs=()=>{ try{ return JSON.parse(localStorage.getItem(CKEY)||"{}"); }catch{ return {}; } };
   const runSave=o=>{ const all=runs(); all[cacheKey()]={...o,t:Date.now()}; const keys=Object.keys(all).sort((a,b)=>all[b].t-all[a].t); try{ localStorage.setItem(CKEY,JSON.stringify(Object.fromEntries(keys.slice(0,12).map(k=>[k,all[k]])))); }catch{} };
   const fillText=(F,an)=>{ const [a,b,la,lb]=F.axis==="y"?[an.top,an.bottom,"Above the picture","Below the picture"]:[an.left,an.right,"To the left of the picture","To the right of the picture"];
     return `${la}: ${a.fill||"the same background, plain and even"}. ${lb}: ${b.fill||"the same background, plain and even"}. Continue the same scene with the same light, colour, grain and focus blur. Keep the new area calm and empty: no people, no new objects, no furniture, no text, and nothing from the picture repeated.`; };
+  const f16=v=>Math.max(32,Math.floor(v/16)*16);
   async function family(fam,redoFrom){ const pl=R.plan, F=pl.fams[fam], tall=F.axis==="y", saved=runs()[cacheKey()]?.[fam]||{};
     const base=mk(F.base.w,F.base.h); base.getContext("2d").drawImage(R.bmp,F.base.x,F.base.y,F.base.w,F.base.h,0,0,F.base.w,F.base.h);
-    const Lmax=F.masters[F.masters.length-1], u=Math.min(1,Math.sqrt(8e6/(F.cross*Lmax)),9000/Lmax), sig=`${F.base.x},${F.base.w},${F.share.toFixed(3)},${u.toFixed(3)}`;
-    const reuse=saved.sig===sig&&redoFrom!==0?saved:{sig,ids:[],dims:[],baseId:saved.sig===sig?saved.baseId:null}; R.M[fam]=R.M[fam]||[];
-    let prev={canvas:base,len:F.src,off:0}, prevId=reuse.baseId||null, prevScale=u;
+    /* the copy sent to Magnific is sized in steps of 16 (its model's step), small enough for the tallest request */
+    const Lmax=F.masters[F.masters.length-1], u=Math.min(1,Math.sqrt(8e6/(F.cross*Lmax)),9000/Lmax), bc=f16(F.cross*u), bl=f16(F.src*u), sig=`v5,${F.base.x},${F.base.w},${F.share.toFixed(3)},${bc},${bl}`;
+    const reuse=saved.sig===sig?saved:{sig,ids:[],dims:[],src:[]}; reuse.src=reuse.src||[]; R.M[fam]=R.M[fam]||[];
+    /* Every extension starts from a picture THIS PAGE uploaded (the original, then each finished master), never from Magnific's raw result:
+       so what the model re-draws under the join is exactly what the page puts back on top, and a tone error never travels to the next step.
+       pp = that picture's pixel size across and along (steps of 16, the model's step). */
+    let prev={canvas:base,len:F.src,off:0}, pp={cross:bc,len:bl};
+    const send=async k=>{ if(reuse.src[k]) return reuse.src[k]; status(`Sending the picture to Magnific…`); const w=tall?pp.cross:pp.len, h=tall?pp.len:pp.cross, ub=scaled(prev.canvas,0,0,prev.canvas.width,prev.canvas.height,w,h);
+      const blob=await new Promise(r=>ub.toBlob(r,"image/png")); const up=await rlUploadMag(blob,(R.name||"image")+"_resize_"+(k?"step"+k:"base")); reuse.src[k]=up.id; runSave({...runs()[cacheKey()],an:R.an,[fam]:reuse}); return up.id; };
     for(let k=0;k<F.masters.length;k++){ if(R.stop) throw {code:"stopped"};
       const L=F.masters[k], off=F.offs[k], at=off-prev.off, tag=`${tall?"tall":"wide"} extension ${k+1} of ${F.masters.length}`;
-      const cross=Math.round(F.cross*prevScale), len=Math.round(L*prevScale), ia=Math.round(at*prevScale);
-      let id=(redoFrom==null||k<redoFrom)?reuse.ids[k]:null, wh=id&&reuse.dv===3?reuse.dims[k]:null;
-      if(id&&R.M[fam][k]&&redoFrom!=null&&k<redoFrom&&reuse.dims[k]){ const d=reuse.dims[k]; prev={canvas:R.M[fam][k].canvas,len:L,off}; prevId=id; prevScale=(tall?d[0]:d[1])/F.cross; continue; }
-      if(!id){ reuse.ids.length=k; reuse.dims.length=k;
-        if(!prevId){ status(`Sending the picture to Magnific…`); const ub=u<1?scaled(base,0,0,base.width,base.height,Math.round(base.width*u),Math.round(base.height*u)):base;
-          const blob=await new Promise(r=>ub.toBlob(r,"image/png")); const up=await rlUploadMag(blob,(R.name||"image")+"_resize_base"); prevId=up.id; reuse.baseId=prevId; }
+      let id=(redoFrom==null||k<redoFrom)?reuse.ids[k]:null, wh=id?reuse.dims[k]:null;
+      if(redoFrom!=null&&k>=redoFrom){ reuse.ids.length=Math.min(reuse.ids.length,k); reuse.dims.length=Math.min(reuse.dims.length,k); reuse.src.length=Math.min(reuse.src.length,k+1); }
+      if(id&&wh&&R.M[fam][k]&&redoFrom!=null&&k<redoFrom){ prev={canvas:R.M[fam][k].canvas,len:L,off}; pp={cross:bc,len:f16(L*bc/F.cross)}; continue; }
+      const len=f16(L/prev.len*pp.len), ia=clamp(Math.round(at/prev.len*pp.len),0,len-pp.len), fw=tall?pp.cross:len, fh=tall?len:pp.cross;
+      if(!id){ reuse.ids.length=k; reuse.dims.length=k; reuse.src.length=Math.min(reuse.src.length,k+1); const prevId=await send(k);
         status(`Extending the background · ${tag} · ${EXT_CREDITS} credits`);
-        const note=String(R.notes[fam+k]||"").trim(), args={creationIdentifier:prevId,aspectRatio:tall?"1:2":"2:1",customWidth:tall?cross:len,customHeight:tall?len:cross,imageX:tall?0:ia,imageY:tall?ia:0,mode:MODE,prompt:fillText(F,R.an)+(note?` Also: ${note.slice(0,200)}`:"")};
+        const note=String(R.notes[fam+k]||"").trim(), args={creationIdentifier:prevId,aspectRatio:tall?"1:2":"2:1",customWidth:fw,customHeight:fh,imageX:tall?0:ia,imageY:tall?ia:0,mode:MODE,prompt:fillText(F,R.an)+(note?` Also: ${note.slice(0,200)}`:"")};
         const r=await callMag("images_expand",args); id=pid(r); if(!id) throw {code:"tool_error",message:"Magnific accepted the extension but returned no identifier."};
         reuse.ids[k]=id; reuse.dims[k]=null; runSave({...runs()[cacheKey()],an:R.an,[fam]:reuse}); await waitDone(id); }
       else if(!wh) await waitDone(id);
-      if(!wh){ wh=await dims(id,tall?cross:len,tall?len:cross); reuse.dims[k]=wh; reuse.dv=3; runSave({...runs()[cacheKey()],an:R.an,[fam]:reuse}); }
-      const ks=(tall?wh[0]:wh[1])/F.cross, band=clamp(prev.len*.07,24,180);
-      const A=await readBack(id,wh[0],wh[1],F.axis,[[0,at>0?(at+band)*ks:0],[at+prev.len<L?(at+prev.len-band)*ks:(tall?wh[1]:wh[0]),tall?wh[1]:wh[0]]],(d,t)=>status(`Reading the ${tag} back · ${d} / ${t}`));
-      const canvas=compose(F,L,A,prev,at); R.M[fam][k]={canvas,len:L,off,id}; prev={canvas,len:L,off}; prevId=id; prevScale=ks; delete R.qc[fam+k]; paint(); await check(fam,k).catch(()=>{}); }
+      if(!wh){ wh=await realSize(id,fw,fh); reuse.dims[k]=wh; runSave({...runs()[cacheKey()],an:R.an,[fam]:reuse}); }
+      /* ka = real pixels per plan unit along the extension (Magnific may shrink the two directions slightly differently) */
+      const ln=tall?wh[1]:wh[0], ka=ln/L, sb=R.an.subject, s0=tall?sb.y*R.sh:sb.x*R.sw, s1=tall?(sb.y+sb.h)*R.sh:(sb.x+sb.w)*R.sw;
+      /* how deep the blend may go on each side: never into the subject */
+      let bA=clamp(Math.min(prev.len*.3,(prev.off+s0)*.8),16,700), bB=clamp(Math.min(prev.len*.3,(prev.len-prev.off-s1)*.8),16,700); if(bA+bB>prev.len*.9){ const z=prev.len*.9/(bA+bB); bA*=z; bB*=z; }
+      const A=await readBack(id,wh[0],wh[1],F.axis,[[0,at>0?(at+bA)*ka:0],[at+prev.len<L?(at+prev.len-bB)*ka:ln,ln]],(d,t)=>status(`Reading the ${tag} back · ${d} / ${t}`));
+      const canvas=compose(F,L,A,prev,at,bA,bB); R.M[fam][k]={canvas,len:L,off,id}; prev={canvas,len:L,off}; pp={cross:bc,len:f16(L*bc/F.cross)}; delete R.qc[fam+k]; paint(); await check(fam,k).catch(()=>{}); }
   }
   /* a second look by Claude at every extension, so a bad one is flagged before it is downloaded */
   async function check(fam,k){ const M=R.M[fam]?.[k]; if(!M||!sample) return; const F=R.plan.fams[fam], c=M.canvas, s=Math.min(1,1568/Math.max(c.width,c.height));
