@@ -14,7 +14,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 137 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 146 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openResize`, `openBrand`):
 
@@ -240,6 +240,8 @@ The mock that copies all of this is in `dev/resize-mock-test.js` (Playwright; ru
 - Samer approved a three-phase plan: 1 quality (done, except "rolling" full-resolution extension when both sides need AI), 2 interface (a wall of screens at true proportions, focus view with drag, editable subject box, staged progress, LED simulation, phone carousel), 3 workflow (several pictures at once, named size sets, history, a button from Photography, wide formats polish).
 
 **Interface (v145), phase 2 done:** the page is a dark "wall of screens" (`.rz-wall`, `screenHTML`): every size at its true shape; before paying, each screen already shows the original in place and the new parts tinted (teal = continued by the page, orange = AI) via `pending()`/`tint()`. A screen opens a focus view (`FO`, `focusDraw`): drag the picture to place it (arrow keys too), "Show what is new", "LED preview" for small sizes (one round dot per pixel), High quality, Download, previous / next, Esc. The source panel has the keep-frame (`#rzBox`): drag it or its corners, `setBox()` replans (and resets created sizes). Progress is a five-step stepper (`STEPS`, `stageOf`). The cost is one big number; credits used on this picture are shown after. On phones the wall is a swipe carousel. Samer confirmed the real run works ("زبط") before this was built. Phase 3 (several pictures, named size sets, history, button from Photography) is next.
+
+**Calmer check (v146).** On Samer's second picture (man with a headset at a laptop, blurred mug in the foreground) the automatic check wrote long alarming English notes, cut mid-word, and flagged the mug and table that are in the original; and Claude's keep-frame covered the whole picture (three extensions, 90 credits). Now `check()` sends the original next to the extended picture, is told that anything present in the original is never a defect, and returns `verdict` ok / look / redo with at most two short issues (`clip()` cuts at a word). The UI shows "Worth a look" (amber) or "Clear fault" (red), opens the "AI extensions" card only on a clear fault, and explains in one line what a note is and what "Make it again" costs. The `subject` instruction in `analyse()` now asks for a tight box around the person and the one thing they use, and to look again if it is wider than 0.75 or taller than 0.9. Mock-tested only; the real Claude's verdicts are not yet seen.
 
 **Tested** with Playwright and a mocked Magnific + Claude only (plan, both extensions, tiles, compose, check, ZIP, phone width). **Never tested for real inside the studio:** the upload through BAE Gemini Eye, real tiles, the tone match on a real extension, the check with real Claude.
 Known limits: tiles appear in his Magnific history; a 2560×1440 source means the 1920-wide tall sizes are enlarged ×1.4 (the card says so, a 4K source fixes it); not yet reachable from a Photography result (upload only).
