@@ -14,7 +14,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 132 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 133 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openBrand`):
 
@@ -43,6 +43,7 @@ index.html   ~1750 lines. All markup and ALL CSS (one <style> block; new CSS goe
 app.js       ~5500 lines. One outer IIFE. All logic.
 refs/        photography references, studio references (st_minimal_01/02), outfit sheets (of_01..of_15) + _t.jpg thumbs
 grad/        the six OFFICIAL gradient elements: BAE_gradient_{circle_1,circle_2,lozenge_h_1,lozenge_h_2,lozenge_v_1,lozenge_v_2}.png + _preview.webp
+ai/          freeform.gz.txt: the Illustrator freeform-gradient template (see section 9)
 up/          BAE Upscale engine: tf.min.js, x2/ and x4/ model weights as base64 text parts (net.json, w0.txt, w1.txt)
 anim/        animation template previews (v/*.mp4, p/*.jpg)
 ```
@@ -167,7 +168,10 @@ Samer rejected the old builder twice (blurred circles, card-style frame, flat bl
 - **Copy for Figma = editable layers** (Samer asked for an open file, not an image). `tplFig` writes an SVG the way Figma itself exports one (its own layer-blur filter pattern): base rect, one vector per organic shape with gradient fill + layer blur, logo symbol, live text. `Download SVG` is the same file. `Copy as image` keeps the PNG. The circle / lozenge soft side cannot be written in SVG: it pastes crisp and the page tells him to add Layer blur → Progressive in Figma.
 - **Not confirmed in real Figma.** The v127 paste lost the blur (plain filter). If the Figma-format filter is also dropped, the reliable route is a small Figma plugin that builds the nodes (frame, vectors, gradient fills, layer blur, progressive blur) from the studio's JSON. Offer it; it needs his yes.
 
-- **Illustrator mesh (v130, first test).** Samer wants ONE gradient mesh with mesh points, not shapes ("مين حكالك بدي Shapes"). `tplMesh` samples the colour field on a grid (Few 5 / Medium 8 / Many 12 patches on the long side) and writes a PDF patch mesh (shading type 6) saved as `_mesh.pdf` (the artifact download allowlist refuses `.ai`: the first try did nothing on click; allowed: gif png jpg jpeg webp mp4 webm mov txt json md docx pptx epub csv ttf html svg pdf xlsx zip fig). Backgrounds, frames and dark only; circle / lozenge are not done (their soft edge needs transparency). The PDF renders correctly (checked with poppler). **Result (Samer tested): Illustrator opens it as "Non-Native Art", not a mesh. The button is hidden (`false&&` in `tplDraw`).** Next route: write Illustrator's own native mesh syntax (legacy "Illustrator 8" text format). Samer was asked for a sample: a 2×2 gradient mesh saved as Illustrator 8, to learn the syntax from. His connector "BAE Layout Fixer for Illustrator" was switched on in his UI but its tools never reached the session; if the file route fails, build the mesh through that connector.
+- **Illustrator = Freeform Gradient (v133).** What Samer really wants is Illustrator's **Freeform Gradient** (colour points), not shapes and not a mesh (the PDF patch-mesh test opened as "Non-Native Art" and was dropped; `meshBytes` survives only as the PDF preview inside the .ai). There is no open format for it, so `tplFreeform` fills in Samer's own saved sample: `ai/freeform.gz.txt` = gzip + base64 of that file's Illustrator private data, with blanks `@W@ @H@ @BB@ @TB@ @TILE@ @OX@ @OY@ @N@ @PTS@` (artboard size, ruler origin = 8191 − half size, and the colour points). In the private data a freeform gradient is `/SmoothShadingStyle : (Adobe Diffusion Coloring Style) N /ColorPoints`, then per point `c m y k r g b Xa` / `1 1 0 x y` (x, y = 0..1 from the top left) / `/ColorPoint ,`. The data is wrapped in a minimal PDF (`pdfWrite`) with `/PieceInfo /Illustrator /Private` (AIMetaData + 64 KB blocks), exactly how an .ai is stored. Points = an even grid (Few 3×2, Medium 4×3, Many 6×4) + the lightest / darkest spot (`ffPoints`). The download is a ZIP with the .ai inside, because the artifact download list refuses `.ai`. Backgrounds, frames and dark only; not the circle / lozenge.
+  - Proven: a hand-made test (sample + 13 new points, original PDF container, 1920×1080) opened in Illustrator 2026 as an editable freeform gradient ("زبط"). The studio's output at 1920×1080 is byte-identical to the sample outside the points and the tile box.
+  - **Not yet confirmed by Samer:** the studio's own minimal PDF container, and sizes other than 1920×1080.
+  - Careful: decode the template byte for byte (`String.fromCharCode`), never `TextDecoder("latin1")` (it is windows-1252 and corrupts the embedded binary).
 
 Tested with Playwright from disk only (rendering, editor, every export, both ZIPs, SVG rendered next to the canvas). Never tested for real: inside claude.ai, the paste in Figma, "Ask for a file" with real Claude, Safari / iPhone.
 

@@ -5137,26 +5137,41 @@ function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span
         if(!tiny) s+=`<text id="Subhead" x="${n(side)}" y="${n(pad+fs+fs2*1.9)}" font-family="${font}" font-size="${fs2}" font-weight="400" fill="${ink(tx+dx*fs*2.5,ty-fs*.35)}" text-anchor="${anchor}">${xml(sub)}</text>\n`;
         if(!tiny&&!wide){ const axp=ar?pad:w-pad; s+=`<text id="Address" x="${n(axp)}" y="${n(h-pad-2)}" font-family="GT Walsheim, Figtree, Arial, sans-serif" font-size="${Math.max(11,Math.round(fs2*.5))}" fill="${ink(axp+(ar?1:-1)*fs2*3,h-pad-4)}" text-anchor="${ar?"start":"end"}">www.bankaletihad.com</text>\n`; } } }
     return s+`<defs>\n${defs}</defs>\n</svg>`; }
-  /* ----- Illustrator: the gradient as ONE gradient mesh (mesh points, no shapes). The colour field is sampled on a grid and written as a
-     PDF patch mesh (shading type 6), the form Illustrator's own mesh takes inside a PDF; the file opens in Illustrator. ----- */
-  const MESH=[["few","Few",5],["mid","Medium",8],["many","Many",12]];
-  function tplMesh(o,N){ const {w,h}=o, it=o.it, F=gField(it,o.blobs,w,h,240), long=Math.max(w,h), nx=Math.max(2,Math.round(N*w/long)), ny=Math.max(2,Math.round(N*h/long));
-    const col=(u,v)=>{ const x=clamp(u*(F.w-1),0,F.w-1.001), y=clamp(v*(F.h-1),0,F.h-1.001), xi=Math.floor(x), yi=Math.floor(y), fx=x-xi, fy=y-yi, a=(yi*F.w+xi)*3, b=a+F.w*3; return [0,1,2].map(c=>{ const t0=F.d[a+c]+(F.d[a+3+c]-F.d[a+c])*fx, t1=F.d[b+c]+(F.d[b+3+c]-F.d[b+c])*fx; return clamp(Math.round(t0+(t1-t0)*fy),0,255); }); };
-    const X=i=>Math.round(i/nx*65535), Y=j=>Math.round((1-j/ny)*65535), data=new Uint8Array(nx*ny*61), dv=new DataView(data.buffer); let p=0;
+  /* ----- Illustrator: the gradient as a FREEFORM GRADIENT (colour points), a real .ai file. Illustrator has no open format for it, so the file is
+     Samer's own saved sample (ai/freeform.gz.txt, its private data with the size and the colour points left as blanks) filled in here and wrapped
+     in a PDF the way Illustrator saves an .ai. The page content of that PDF is a patch mesh of the same gradient (preview outside Illustrator). ----- */
+  const MESH=[["few","Few",[3,2]],["mid","Medium",[4,3]],["many","Many",[6,4]]];
+  const fSample=(F,u,v)=>{ const x=clamp(u*(F.w-1),0,F.w-1.001), y=clamp(v*(F.h-1),0,F.h-1.001), xi=Math.floor(x), yi=Math.floor(y), fx=x-xi, fy=y-yi, a=(yi*F.w+xi)*3, b=a+F.w*3; return [0,1,2].map(c=>{ const t0=F.d[a+c]+(F.d[a+3+c]-F.d[a+c])*fx, t1=F.d[b+c]+(F.d[b+3+c]-F.d[b+c])*fx; return clamp(t0+(t1-t0)*fy,0,255); }); };
+  /* a PDF from a list of objects: a string, or [dictionary without the Length, bytes] for a stream */
+  function pdfWrite(objs,root,info){ const te=new TextEncoder(), parts=[], offs=[]; let len=0; const put=x=>{ const u=typeof x==="string"?te.encode(x):x; parts.push(u); len+=u.length; };
+    put("%PDF-1.6\n%âãÏÓ\n"); objs.forEach((o,i)=>{ offs[i]=len; put(`${i+1} 0 obj\n`); if(typeof o==="string") put(o); else { put(`<< ${o[0]} /Length ${o[1].length} >>\nstream\n`); put(o[1]); put("\nendstream"); } put("\nendobj\n"); });
+    const xr=len; put(`xref\n0 ${objs.length+1}\n0000000000 65535 f \n`+offs.map(o=>String(o).padStart(10,"0")+" 00000 n \n").join("")+`trailer\n<< /Size ${objs.length+1} /Root ${root} 0 R /Info ${info} 0 R >>\nstartxref\n${xr}\n%%EOF\n`); return parts; }
+  /* the gradient as patch-mesh bytes (PDF shading type 6) */
+  function meshBytes(F,w,h,nx,ny){ const X=i=>Math.round(i/nx*65535), Y=j=>Math.round((1-j/ny)*65535), data=new Uint8Array(nx*ny*61), dv=new DataView(data.buffer); let p=0;
     const pt=(x,y)=>{ dv.setUint16(p,x); dv.setUint16(p+2,y); p+=4; }, edge=(a,b)=>{ pt(a[0],a[1]); pt(Math.round(a[0]+(b[0]-a[0])/3),Math.round(a[1]+(b[1]-a[1])/3)); pt(Math.round(a[0]+(b[0]-a[0])*2/3),Math.round(a[1]+(b[1]-a[1])*2/3)); };
     for(let j=0;j<ny;j++) for(let i=0;i<nx;i++){ const A=[X(i),Y(j)], Bq=[X(i),Y(j+1)], C=[X(i+1),Y(j+1)], D=[X(i+1),Y(j)]; data[p++]=0; edge(A,Bq); edge(Bq,C); edge(C,D); edge(D,A);
-      for(const [u,v] of [[i,j],[i,j+1],[i+1,j+1],[i+1,j]]){ const c=col(u/nx,v/ny); data[p++]=c[0]; data[p++]=c[1]; data[p++]=c[2]; } }
-    const te=new TextEncoder(), parts=[], offs=[]; let len=0; const put=x=>{ const u=typeof x==="string"?te.encode(x):x; parts.push(u); len+=u.length; }, obj=(n,s)=>{ offs[n]=len; put(`${n} 0 obj\n`); s(); put(`\nendobj\n`); };
-    const content=`q 0 0 ${w} ${h} re W n /Sh0 sh Q`;
-    put("%PDF-1.4\n%âãÏÓ\n");
-    obj(1,()=>put("<< /Type /Catalog /Pages 2 0 R >>"));
-    obj(2,()=>put("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"));
-    obj(3,()=>put(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${w} ${h}] /Resources << /Shading << /Sh0 5 0 R >> >> /Contents 4 0 R >>`));
-    obj(4,()=>put(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`));
-    obj(5,()=>{ put(`<< /ShadingType 6 /ColorSpace /DeviceRGB /BitsPerCoordinate 16 /BitsPerComponent 8 /BitsPerFlag 8 /Decode [0 ${w} 0 ${h} 0 1 0 1 0 1] /Length ${data.length} >>\nstream\n`); put(data); put("\nendstream"); });
-    obj(6,()=>put(`<< /Title (${tplName(o)} mesh) /Creator (BAE Studio) >>`));
-    const xr=len; put(`xref\n0 7\n0000000000 65535 f \n`+[1,2,3,4,5,6].map(n=>String(offs[n]).padStart(10,"0")+" 00000 n \n").join("")+`trailer\n<< /Size 7 /Root 1 0 R /Info 6 0 R >>\nstartxref\n${xr}\n%%EOF\n`);
-    return {blob:new Blob(parts,{type:"application/pdf"}),nx,ny}; }
+      for(const [u,v] of [[i,j],[i,j+1],[i+1,j+1],[i+1,j]]){ const c=fSample(F,u/nx,v/ny); data[p++]=Math.round(c[0]); data[p++]=Math.round(c[1]); data[p++]=Math.round(c[2]); } } return data; }
+  /* the colour points: an even grid, plus the lightest and the darkest spot when the grid misses them */
+  function ffPoints(F,o,g){ const land=o.w>=o.h, nx=land?g[0]:g[1], ny=land?g[1]:g[0], P=[]; for(let j=0;j<ny;j++) for(let i=0;i<nx;i++){ const x=.05+.9*i/(nx-1), y=.05+.9*j/(ny-1); P.push({x,y,c:fSample(F,x,y)}); }
+    const L=c=>c[0]*.299+c[1]*.587+c[2]*.114; let hi=null, lo=null; for(let y=0;y<F.h;y+=2) for(let x=0;x<F.w;x+=2){ const i=(y*F.w+x)*3, c=[F.d[i],F.d[i+1],F.d[i+2]], l=L(c), q={x:clamp(x/(F.w-1),.02,.98),y:clamp(y/(F.h-1),.02,.98),c,l}; if(!hi||l>hi.l) hi=q; if(!lo||l<lo.l) lo=q; }
+    for(const q of [hi,lo]){ const near=P.reduce((m,p)=>Math.min(m,Math.hypot(p.x-q.x,p.y-q.y)),9), at=fSample(F,q.x,q.y); if(near>.12&&P.every(p=>Math.hypot(p.x-q.x,p.y-q.y)>.2||Math.abs(L(p.c)-q.l)>10)) P.push({x:q.x,y:q.y,c:at}); }
+    return P; }
+  let ffTpl=null;
+  async function ffTemplate(){ if(ffTpl) return ffTpl; const t=await (await fetch("ai/freeform.gz.txt")).text(), bin=atob(t.trim()), u=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i);
+    const raw=new Uint8Array(await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer()); let s=""; for(let i=0;i<raw.length;i+=32768) s+=String.fromCharCode.apply(null,raw.subarray(i,i+32768)); return ffTpl=s; } /* byte for byte: the browser's "latin1" decoder is windows-1252 and would change 0x80–0x9F */
+  async function tplFreeform(o,g){ const {w,h}=o, it=o.it, F=gField(it,o.blobs,w,h,240), P=ffPoints(F,o,g), n=v=>String(+(+v).toFixed(6)), ox=n(8191-w/2), oy=n(8191-h/2);
+    const pts=P.map(p=>{ const [r,gg,b]=p.c.map(v=>v/255), k=1-Math.max(r,gg,b), f=v=>k>=1?0:(1-v-k)/(1-k); return `${n(f(r))} ${n(f(gg))} ${n(f(b))} ${n(k)} ${n(r)} ${n(gg)} ${n(b)} Xa\r1 1 0 ${n(p.x)} ${n(p.y)}\r/ColorPoint ,\r`; }).join("");
+    const rep={BB:`-5 -${h+5} ${w+5} 5`,W:String(w),H:String(h),TB:`${w/2+.5} -${h/2+.5} ${w/2+.5} -${h/2+.5}`,TILE:`${w/2-391.5} -${h/2+279.5} ${w/2+391.5} -${h/2-279.5}`,OX:ox,OY:oy,N:String(P.length),PTS:pts};
+    const txt=(await ffTemplate()).replace(/@(BB|W|H|TB|TILE|OX|OY|N|PTS)@/g,(m,k)=>rep[k]), priv=new Uint8Array(txt.length); for(let i=0;i<txt.length;i++) priv[i]=txt.charCodeAt(i)&255;
+    const metaEnd=txt.indexOf("%%EndComments\r")+14, SZ=65536, blocks=[]; for(let i=0;i<priv.length;i+=SZ) blocks.push(priv.subarray(i,Math.min(priv.length,i+SZ)));
+    const long=Math.max(w,h), nx=Math.max(2,Math.round(12*w/long)), ny=Math.max(2,Math.round(12*h/long)), d=new Date(), z=x=>String(x).padStart(2,"0"), stamp=`(D:${d.getUTCFullYear()}${z(d.getUTCMonth()+1)}${z(d.getUTCDate())}${z(d.getUTCHours())}${z(d.getUTCMinutes())}${z(d.getUTCSeconds())}Z)`, box=`[0 0 ${w} ${h}]`, te=new TextEncoder();
+    const objs=["<< /Type /Catalog /Pages 2 0 R >>","<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      `<< /Type /Page /Parent 2 0 R /MediaBox ${box} /CropBox ${box} /BleedBox ${box} /TrimBox ${box} /ArtBox ${box} /Resources << /Shading << /Sh0 5 0 R >> >> /Contents 4 0 R /LastModified ${stamp} /PieceInfo << /Illustrator << /LastModified ${stamp} /Private 7 0 R >> >> >>`,
+      ["",te.encode(`q 0 0 ${w} ${h} re W n /Sh0 sh Q`)],[`/ShadingType 6 /ColorSpace /DeviceRGB /BitsPerCoordinate 16 /BitsPerComponent 8 /BitsPerFlag 8 /Decode [0 ${w} 0 ${h} 0 1 0 1 0 1]`,meshBytes(F,w,h,nx,ny)],
+      `<< /Title (${tplName(o)}) /Creator (Adobe Illustrator 30.0 \\(BAE Studio\\)) /Producer (BAE Studio) /CreationDate ${stamp} /ModDate ${stamp} >>`,
+      `<< /AIMetaData 8 0 R ${blocks.map((b,i)=>`/AIPrivateData${i+1} ${9+i} 0 R`).join(" ")} /ContainerVersion 12 /CreatorVersion 30 /NumBlock ${blocks.length} /RoundtripVersion 24 >>`,
+      ["",priv.subarray(0,metaEnd)],...blocks.map(b=>["",b])];
+    return {blob:new Blob(pdfWrite(objs,1,6),{type:"application/illustrator"}),n:P.length}; }
   /* ----- state, names ----- */
   const cur=(over)=>{ const f=FLAT[TP.fmt], it=item(TP.item); return {...f,it,blobs:blobs(),layout:TP.layout,lang:TP.lang,head:TP.head,sub:TP.sub,...over}; };
   const tplName=o=>{ const it=o.it, rk=ratioKey(o.w,o.h); let n=it.file.replace("{r}",rk); if(it.kind==="shape"&&!(o.layout==="grad")) n+="_"+rk; if(o.custom) n+="_custom"; if(o.layout!=="grad") n+="_"+o.layout+"_"+o.lang.toUpperCase(); return n; };
@@ -5200,7 +5215,7 @@ function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span
             <div class="tp-edrow">${rng("tpS","Size",5,220,sel.s*100,"%")}${rng("tpRot","Rotation",-180,180,sel.r,"°")}${rng("tpE","Stretch",50,300,sel.e*100,"%")}${rng("tpBl","Blur",0,200,sel.bl)}${rng("tpA","Fill angle",0,360,((sel.a%360)+360)%360,"°")}${rng("tpO","Strength",10,100,sel.o*100,"%")}</div>
             <div class="tp-edrow"><button type="button" class="btn small" data-tp="up">Bring forward</button><button type="button" class="btn small" data-tp="down">Send back</button><button type="button" class="btn small" data-tp="dup">Duplicate</button><button type="button" class="bi-x" data-tp="del">Remove shape</button></div>`:`<span class="t12 muted">No shape selected. Pick a handle on the image or a layer in the list.</span>`}</div>
           <div class="tp-out"><span class="lbl">PNG quality</span><div class="a-seg" role="group" aria-label="PNG quality">${QUAL.map(([k,l])=>`<button type="button" data-tpq="${k}" aria-pressed="${TP.q===k}">${l}</button>`).join("")}</div><span class="t12 muted">${ow} × ${oh} px${it.kind==="shape"&&TP.layout==="grad"?" · transparent background":""} · fine dither, no banding</span></div>
-          ${false&&it.kind!=="shape"?`<div class="tp-out"><span class="lbl">Illustrator mesh</span><div class="a-seg" role="group" aria-label="Mesh points">${MESH.map(([k,l])=>`<button type="button" data-tpmesh="${k}" aria-pressed="${TP.mesh===k}">${l}</button>`).join("")}</div><button type="button" class="btn small primary" data-tp="mesh">Download mesh for Illustrator</button><span class="t12 muted">One gradient mesh with mesh points, no shapes. The file is a PDF: open it in Illustrator (File, Open), edit it with the Mesh tool, then save it as .ai.</span></div>`:""}
+          ${it.kind!=="shape"?`<div class="tp-out"><span class="lbl">Illustrator freeform gradient</span><div class="a-seg" role="group" aria-label="Colour points">${MESH.map(([k,l])=>`<button type="button" data-tpmesh="${k}" aria-pressed="${TP.mesh===k}">${l}</button>`).join("")}</div><button type="button" class="btn small primary" data-tp="ff">Download .ai for Illustrator</button><span class="t12 muted">A real Illustrator file with one Freeform Gradient: colour points you move and recolour with the Gradient tool (G). It downloads as a ZIP with the .ai inside.</span></div>`:""}
           <div class="rl-btns"><button type="button" class="btn small primary" data-tp="fig">Copy for Figma</button><button type="button" class="btn small" data-tp="svg">Download SVG</button><button type="button" class="btn small" data-tp="png">Download PNG</button><button type="button" class="btn small" data-tp="copy">Copy as image</button><button type="button" class="btn small" data-tp="zip">All sizes as ZIP</button><button type="button" class="btn small" data-tp="set">Official set as ZIP</button></div>
           <p class="t12 muted"><b>Copy for Figma</b> pastes an open file (⌘V / Ctrl+V on the canvas): the base colour, every organic shape as a vector with its gradient fill and its layer blur, the logo symbol and live text, all editable. ${it.kind==="shape"?"The soft side of a circle or lozenge is a progressive blur: in Figma, select the group and add Layer blur, Progressive. ":""}Download SVG is the same file to drag into Figma. The organic shapes here are drawn close to the guideline; they are not the official library shapes. Use only the official logo lockups from Assets for final work.</p>
         </div>
@@ -5243,7 +5258,7 @@ Return ONLY JSON: {"size":"exact size name","item":"library key","layout":"grad|
     else if(k==="up"||k==="down"){ const i=TP.sel, j=i+(k==="up"?1:-1); if(L[i]&&L[j]){ [L[i],L[j]]=[L[j],L[i]]; TP.sel=j; TP.custom=true; tplDraw(); } }
     else if(k==="ask") tplAsk();
     else if(k==="png"){ a.disabled=true; try{ const b=await tplPNG(o,qSide(),p=>{ a.textContent=`Rendering ${Math.round(p*100)}%`; }); if(b) await save(b,tplName(o)+".png"); }catch(err){ TP.err="Couldn't make the PNG in this browser. Try a smaller quality."; tplDraw(); return; } a.disabled=false; a.textContent="Download PNG"; }
-    else if(k==="mesh"){ const m=tplMesh(o,MESH.find(x=>x[0]===TP.mesh)?.[2]||8); await save(m.blob,tplName({...o,layout:"grad"})+"_mesh.pdf"); }
+    else if(k==="ff"){ if(!window.JSZip||!window.DecompressionStream){ TP.err="This browser can't build the Illustrator file. Try Chrome."; tplDraw(); return; } a.disabled=true; a.textContent="Building…"; try{ const x={...o,layout:"grad"}, m=await tplFreeform(x,MESH.find(q=>q[0]===TP.mesh)?.[2]||[4,3]), z=new JSZip(), nm=tplName(x)+"_freeform"; z.file(nm+".ai",m.blob); await save(await z.generateAsync({type:"blob",compression:"DEFLATE"}),nm+".zip"); }catch(err){ TP.err="Couldn't build the Illustrator file."; tplDraw(); return; } a.disabled=false; a.textContent="Download .ai for Illustrator"; }
     else if(k==="fig"){ let ok=false; try{ await navigator.clipboard.writeText(tplFig(o)); ok=true; }catch{} flash(a,ok?"Copied. Paste in Figma":"Copy blocked. Use Download SVG","Copy for Figma"); }
     else if(k==="svg") saveText(tplFig(o),tplName(o)+".svg","image/svg+xml");
     else if(k==="copy"){ a.disabled=true; a.textContent="Rendering…"; let ok=false; try{ const b=await tplPNG(o,Math.min(qSide(),3840)); await navigator.clipboard.write([new ClipboardItem({"image/png":b})]); ok=true; }catch{} a.disabled=false; flash(a,ok?"Image copied":"Copy blocked. Use Download PNG","Copy as image"); }
