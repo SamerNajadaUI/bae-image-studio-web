@@ -14,7 +14,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 127 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 129 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openBrand`):
 
@@ -147,63 +147,27 @@ It learns: `LVT` (localStorage `bae_lv_taste` + `data/users/<uid>/lvtaste`) stor
 A server version exists in `bae-image-studio-web/bae-upscale-space/` (Hugging Face Docker Space: FastAPI job queue, Real-ESRGAN `realesr-general-x4v3` + GFPGAN v1.4, returns an image link). Tested locally only. Samer has to create the Hugging Face Space himself and send the URL; then the studio must be wired to it.
 **Samer's verdict on the current quality: "dumb and not strong".** He wants it stronger than Magnific, built in Claude Code, learning by itself, on his **Apple M5**. Honest position already given to him: beating Magnific and true self-training cannot be promised; the realistic plan is a strong open model (SUPIR class) run locally on his Mac with an automatic check-and-adjust loop and optional fine-tuning. **Open question: his RAM (16 / 24 / 32 GB).** Ask before choosing the model.
 
-## 9. THE NEXT TASK — rebuild the brand gradient properly
+## 9. Brand gradient — rebuilt in v128 (waiting for Samer's verdict)
 
-Samer rejected the gradient builder twice. He sent 11 pages of the official guideline and asked for a deep study. The study is below. **He has not yet said "انطلق". Confirm with him before building.**
+Samer rejected the old builder twice (blurred circles, card-style frame, flat black, white behind the PNG). After his "انطلق" it was rebuilt from the guideline. He does **not** have the brand library shapes, so the organic shapes are drawn by us and the page says so.
 
-### What the guideline actually says
+### What the guideline says (keep following it)
+1. Solid brand colour. 2. A brand shape (organic blob). 3. Linear gradient fill `#C13A23` 0% → `#FA6428` 61% → `#C13A23` 100%, at an angle. 4. Layer blur 75. 5. More shapes, lighter shades on top.
+- Palette: `#FFFAF4`, `#FDCBB4`, `#FB9A75`, `#FA6428`, `#C13A23`. One colour family.
+- **Background**: dark masses at corners and edges, diagonal flow, clean orange middle, one small light highlight at an edge.
+- **Frame**: a soft **L** from two adjacent sides fading into Light Orange. 01 = gradient bottom + right, 02 = the inverse; Arabic is mirrored. Stone frames use Stone and Light Orange.
+- **Shape** (image-led layouts): circle, lozenge horizontal, lozenge vertical; progressive blur 0 → 100; two directions each: sharp top / soft bottom (`_1`) and sharp right / soft left (`_2`).
+- **Dark**: navy-violet `#0E0C26` with grey-violet lights up to `#626079`; internal and corporate only.
 
-**Construction (five steps, Figma):**
-1. A solid brand colour background.
-2. Place one of the **brand shapes** — organic blobs from the brand library, not circles.
-3. Fill the shape with a **linear gradient**: `#C13A23` at 0% → `#FA6428` at 61% → `#C13A23` at 100%, set at an angle.
-4. **Layer blur 75**, uniform.
-5. Add more shapes, **lighter shades on top**, for movement and depth.
+### How it is built now (app.js, "Templates and gradients (v128)")
+- `TONES` (fill of one shape: colour at 0 / 61 / 100%), `FAMS`, `BLOBS` (six organic outlines), `LIB` (18 library items with the official file names), `B(b,x,y,s,r,e,t,a,bl,o)` = one shape.
+- Engine: `gField` draws each shape small, blurs it in floating point and layers it; `gPrep` + `gRows` scale it to any size with a fine dither (no banding) and cut the circle / lozenge with the progressive soft edge (edge softness was measured on the six official PNGs in `grad/`). `BLUR_K` maps "layer blur 75" to pixels.
+- `tplPNG` writes the PNG itself row by row (CompressionStream), so 8K works without an 8K canvas and shapes keep a clean transparent background. `tplOverlay` draws logo / copy / image frame and picks ink or white from the colour underneath.
+- UI: library gallery in the chosen size → editor (numbered handles move a shape; panel changes outline, tone, size, rotation, stretch, blur, fill angle, strength, order) → Download PNG (Standard / 4K / 8K), Copy for Figma (PNG image), All sizes as ZIP, Official set as ZIP.
+- **Copy for Figma = editable layers** (Samer asked for an open file, not an image). `tplFig` writes an SVG the way Figma itself exports one (its own layer-blur filter pattern): base rect, one vector per organic shape with gradient fill + layer blur, logo symbol, live text. `Download SVG` is the same file. `Copy as image` keeps the PNG. The circle / lozenge soft side cannot be written in SVG: it pastes crisp and the page tells him to add Layer blur → Progressive in Figma.
+- **Not confirmed in real Figma.** The v127 paste lost the blur (plain filter). If the Figma-format filter is also dropped, the reliable route is a small Figma plugin that builds the nodes (frame, vectors, gradient fills, layer blur, progressive blur) from the studio's JSON. Offer it; it needs his yes.
 
-"Our gradients are built from soft, blurred organic shapes rather than from linear blends." "All gradients should be built using the shapes provided in the brand library."
-
-**Palette of the gradient:** `#FFFAF4`, `#FDCBB4`, `#FB9A75`, `#FA6428`, `#C13A23`. One colour family, never a second hue.
-
-**Three official uses:**
-
-1. **Background** (full bleed). Dark masses are large and sit at corners and edges with a diagonal flow; the middle band stays clean orange; the light peach highlight is small and sits at one edge.
-2. **Frame.** NOT a card with a border. It is a soft **L**: the gradient comes in from two adjacent sides and fades into Light Orange.
-   - Frame 01 English: gradient on the bottom and the right, light area top-left.
-   - Frame 02 English: the inverse (gradient fills top-left, light on the bottom and right).
-   - Arabic versions are mirrored horizontally.
-   - Stone frames: same L logic with Stone and Light Orange.
-3. **Shape** (image-led layouts only, layered with photography): **Circle, Lozenge horizontal, Lozenge vertical.** Blur is **progressive, start 0 → end 100**, horizontal or vertical. Each shape has exactly two focus directions: **sharp top / soft bottom** and **sharp right / soft left**.
-
-**Dark gradient:** deep navy-violet (about `#0E0C26`) with grey-violet lights (about `#626079`). Internal communications and corporate / high-earning audiences only, minimum use.
-
-**Official asset names (use them for exports):**
-- `gr_orange_{9x16,3x4,1x1,16x9}_{01,02,03}`
-- `gr_frame_{9x16,3x4,1x1,16x9}_{01,02}` (Stone set)
-- Frame gradient 01 / 02 — English / Arabic (Orange set)
-- `gr_dark_{9x16,3x4,1x1,16x9}_{01,02,03}`
-- Shapes: the six files already in `grad/`
-
-### What is wrong in the current build (v127)
-
-- It draws **blurred circles in a fixed arrangement**, not blurred organic shapes with a gradient fill. Every result looks the same.
-- "Frame" is a white card with a rim. Wrong.
-- Shapes have an "all soft" variant that does not exist, and "sharp top / soft bottom" is missing.
-- Ink is a flat black, not the navy-violet dark gradient.
-- **Download PNG has white behind it.** Render directly on a canvas; backgrounds full bleed, shapes on a transparent background.
-- **Copy for Figma pastes plain circles**, because Figma drops SVG blur filters on paste. Decision agreed with Samer: Copy for Figma copies a finished **PNG image** for now; the editable/SVG route is to be solved later ("svg بعدين بنحل مشكلته").
-- He wants **ultra high quality PNG**: offer 4K and 8K, and add very fine noise/dither so the gradient does not band.
-
-### Agreed plan
-
-1. New engine that follows the five steps exactly: organic shapes, gradient fill at an angle, blur, layers (dark first, light on top).
-2. A library organised and named like the guideline: Orange ×3 per ratio, Frame 01/02 × English/Arabic × Orange/Stone, Dark ×3 per ratio (labelled internal only), Shapes ×2 directions each.
-3. A gallery showing every variation side by side.
-4. An editor that moves the **shape itself**: position, rotation, size, colour, blur.
-5. Export: high-quality PNG, organised ZIP with the official names, all digital sizes (`FORMATS` already lists 28).
-
-**Still unanswered:** does Samer have the brand library shapes (SVG or Figma)? If yes, build on them. If not, draw close organic shapes and tell him they are not the official ones.
-
-Keep the parts that already work: the size list, the layouts (gradient only / logo / logo + copy / image + copy), English/Arabic, the "Ask for a file" box (`tplAsk`).
+Tested with Playwright from disk only (rendering, editor, every export, both ZIPs, SVG rendered next to the canvas). Never tested for real: inside claude.ai, the paste in Figma, "Ask for a file" with real Claude, Safari / iPhone.
 
 ## 10. Other things waiting on Samer
 
