@@ -14,7 +14,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 127 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 137 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openBrand`):
 
@@ -41,8 +41,9 @@ After every change: commit and push here, then copy `app.js` and `index.html` (a
 ```
 index.html   ~1750 lines. All markup and ALL CSS (one <style> block; new CSS goes before the last </style>)
 app.js       ~5500 lines. One outer IIFE. All logic.
-refs/        photography references, studio references (st_minimal_01/02), outfit sheets (of_01..of_15) + _t.jpg thumbs
+refs/        photography references, studio references (st_minimal_01/02), outfit sheets (of_01..of_17) + _t.jpg thumbs
 grad/        the six OFFICIAL gradient elements: BAE_gradient_{circle_1,circle_2,lozenge_h_1,lozenge_h_2,lozenge_v_1,lozenge_v_2}.png + _preview.webp
+ai/          freeform.gz.txt: the Illustrator freeform-gradient template (see section 9)
 up/          BAE Upscale engine: tf.min.js, x2/ and x4/ model weights as base64 text parts (net.json, w0.txt, w1.txt)
 anim/        animation template previews (v/*.mp4, p/*.jpg)
 ```
@@ -51,7 +52,7 @@ anim/        animation template previews (v/*.mp4, p/*.jpg)
 
 | Around line | Block |
 |---|---|
-| 7 | Rich fields and the `@` picker: `AT`, `AT_SHOTS` (20 camera angles), `AT_OUTFITS` (15 outfit sheets), `atMake`, `atVal/atRead/atWrite`. Chips serialise as `@Name`, `[shot: Name]`, `[outfit: Name]` |
+| 7 | Rich fields and the `@` picker: `AT`, `AT_SHOTS` (20 camera angles), `AT_OUTFITS` (17 outfit sheets), `atMake`, `atVal/atRead/atWrite`. Chips serialise as `@Name`, `[shot: Name]`, `[outfit: Name]` |
 | 210 | References: `MAX_REFS=10`, `REF_USES` (colour + light / colour grading / lighting / style) |
 | 280–360 | **The brand locks**: `JO_CANDID`, `CLIENT_RULES`, `COMPOSITION_RULE`, `STUDIO_RULE`, `LOCATION_BG` |
 | 1314 | `ANGLES4` — the "Create image, different angles" button (4 candid angles) |
@@ -107,7 +108,7 @@ A mock proves the UI and the wiring only. Always tell Samer what was tested with
 - Never copy a real person's face. Do not download photos of public figures.
 - Do not embed copyrighted reference images (his camera-angle guide image was deliberately not used).
 - **Never redraw or recolour the BAE logo.** Only the symbol already shipped in the page may be placed; final work uses the official lockups.
-- Outfit sheets are unbranded (no logos).
+- Outfit sheets are unbranded (no logos). The one exception, added by Samer himself: `of_16` / `of_17`, the official BAE staff uniform (black polo with the white emblem on the chest and the lockup on the back), whose prompt says to keep the marks exactly as on the sheet.
 - For the upscaler: he wants it **his own, free, named "BAE Upscale"**, never a paid service. Do not route it through Magnific. Avoid non-commercial licences (CodeFormer was rejected for that reason).
 - A new public GitHub repo needs his explicit yes.
 
@@ -147,63 +148,34 @@ It learns: `LVT` (localStorage `bae_lv_taste` + `data/users/<uid>/lvtaste`) stor
 A server version exists in `bae-image-studio-web/bae-upscale-space/` (Hugging Face Docker Space: FastAPI job queue, Real-ESRGAN `realesr-general-x4v3` + GFPGAN v1.4, returns an image link). Tested locally only. Samer has to create the Hugging Face Space himself and send the URL; then the studio must be wired to it.
 **Samer's verdict on the current quality: "dumb and not strong".** He wants it stronger than Magnific, built in Claude Code, learning by itself, on his **Apple M5**. Honest position already given to him: beating Magnific and true self-training cannot be promised; the realistic plan is a strong open model (SUPIR class) run locally on his Mac with an automatic check-and-adjust loop and optional fine-tuning. **Open question: his RAM (16 / 24 / 32 GB).** Ask before choosing the model.
 
-## 9. THE NEXT TASK — rebuild the brand gradient properly
+## 9. Brand gradient — rebuilt in v128 (waiting for Samer's verdict)
 
-Samer rejected the gradient builder twice. He sent 11 pages of the official guideline and asked for a deep study. The study is below. **He has not yet said "انطلق". Confirm with him before building.**
+Samer rejected the old builder twice (blurred circles, card-style frame, flat black, white behind the PNG). After his "انطلق" it was rebuilt from the guideline. He does **not** have the brand library shapes, so the organic shapes are drawn by us and the page says so.
 
-### What the guideline actually says
+### What the guideline says (keep following it)
+1. Solid brand colour. 2. A brand shape (organic blob). 3. Linear gradient fill `#C13A23` 0% → `#FA6428` 61% → `#C13A23` 100%, at an angle. 4. Layer blur 75. 5. More shapes, lighter shades on top.
+- Palette: `#FFFAF4`, `#FDCBB4`, `#FB9A75`, `#FA6428`, `#C13A23`. One colour family.
+- **Background**: dark masses at corners and edges, diagonal flow, clean orange middle, one small light highlight at an edge.
+- **Frame**: a soft **L** from two adjacent sides fading into Light Orange. 01 = gradient bottom + right, 02 = the inverse; Arabic is mirrored. Stone frames use Stone and Light Orange.
+- **Shape** (image-led layouts): circle, lozenge horizontal, lozenge vertical; progressive blur 0 → 100; two directions each: sharp top / soft bottom (`_1`) and sharp right / soft left (`_2`).
+- **Dark**: navy-violet `#0E0C26` with grey-violet lights up to `#626079`; internal and corporate only.
 
-**Construction (five steps, Figma):**
-1. A solid brand colour background.
-2. Place one of the **brand shapes** — organic blobs from the brand library, not circles.
-3. Fill the shape with a **linear gradient**: `#C13A23` at 0% → `#FA6428` at 61% → `#C13A23` at 100%, set at an angle.
-4. **Layer blur 75**, uniform.
-5. Add more shapes, **lighter shades on top**, for movement and depth.
+### How it is built now (app.js, "Templates and gradients (v128)")
+- `TONES` (fill of one shape: colour at 0 / 61 / 100%), `FAMS`, `BLOBS` (six organic outlines), `LIB` (18 library items with the official file names), `B(b,x,y,s,r,e,t,a,bl,o)` = one shape.
+- Engine: `gField` draws each shape small, blurs it in floating point and layers it; `gPrep` + `gRows` scale it to any size with a fine dither (no banding) and cut the circle / lozenge with the progressive soft edge (edge softness was measured on the six official PNGs in `grad/`). `BLUR_K` maps "layer blur 75" to pixels.
+- `tplPNG` writes the PNG itself row by row (CompressionStream), so 8K works without an 8K canvas and shapes keep a clean transparent background. `tplOverlay` draws logo / copy / image frame and picks ink or white from the colour underneath.
+- UI: library gallery in the chosen size → editor (numbered handles move a shape; panel changes outline, tone, size, rotation, stretch, blur, fill angle, strength, order) → Download PNG (Standard / 4K / 8K), Copy for Figma (PNG image), All sizes as ZIP, Official set as ZIP.
+- **Copy for Figma = editable layers** (Samer asked for an open file, not an image). `tplFig` writes an SVG the way Figma itself exports one (its own layer-blur filter pattern): base rect, one vector per organic shape with gradient fill + layer blur, logo symbol, live text. `Download SVG` is the same file. `Copy as image` keeps the PNG. The circle / lozenge soft side cannot be written in SVG: it pastes crisp and the page tells him to add Layer blur → Progressive in Figma.
+- **Not confirmed in real Figma.** The v127 paste lost the blur (plain filter). If the Figma-format filter is also dropped, the reliable route is a small Figma plugin that builds the nodes (frame, vectors, gradient fills, layer blur, progressive blur) from the studio's JSON. Offer it; it needs his yes.
 
-"Our gradients are built from soft, blurred organic shapes rather than from linear blends." "All gradients should be built using the shapes provided in the brand library."
+- **Illustrator = Freeform Gradient (v133).** What Samer really wants is Illustrator's **Freeform Gradient** (colour points), not shapes and not a mesh (the PDF patch-mesh test opened as "Non-Native Art" and was dropped; `meshBytes` survives only as the PDF preview inside the .ai). There is no open format for it, so `tplFreeform` fills in Samer's own saved sample: `ai/freeform.gz.txt` = gzip + base64 of that file's Illustrator private data, with blanks `@W@ @H@ @BB@ @TB@ @TILE@ @OX@ @OY@ @N@ @PTS@` (artboard size, ruler origin = 8191 − half size, and the colour points). In the private data a freeform gradient is `/SmoothShadingStyle : (Adobe Diffusion Coloring Style) N /ColorPoints`, then per point `c m y k r g b Xa` / `1 1 0 x y` (x, y = 0..1 from the top left) / `/ColorPoint ,`. The data is wrapped in a minimal PDF (`pdfWrite`) with `/PieceInfo /Illustrator /Private` (AIMetaData + 64 KB blocks), exactly how an .ai is stored. Points = an even grid (Few 3×2, Medium 4×3, Many 6×4) + the lightest / darkest spot (`ffPoints`). The download is a ZIP with the .ai inside, because the artifact download list refuses `.ai`. Backgrounds, frames and dark only; not the circle / lozenge.
+  - Proven: a hand-made test (sample + 13 new points, original PDF container, 1920×1080) opened in Illustrator 2026 as an editable freeform gradient ("زبط"). The studio's output at 1920×1080 is byte-identical to the sample outside the points and the tile box.
+  - **Not yet confirmed by Samer:** the studio's own minimal PDF container, and sizes other than 1920×1080.
+  - Careful: decode the template byte for byte (`String.fromCharCode`), never `TextDecoder("latin1")` (it is windows-1252 and corrupts the embedded binary).
 
-**Palette of the gradient:** `#FFFAF4`, `#FDCBB4`, `#FB9A75`, `#FA6428`, `#C13A23`. One colour family, never a second hue.
+Tested with Playwright from disk only (rendering, editor, every export, both ZIPs, SVG rendered next to the canvas). Never tested for real: inside claude.ai, the paste in Figma, "Ask for a file" with real Claude, Safari / iPhone.
 
-**Three official uses:**
-
-1. **Background** (full bleed). Dark masses are large and sit at corners and edges with a diagonal flow; the middle band stays clean orange; the light peach highlight is small and sits at one edge.
-2. **Frame.** NOT a card with a border. It is a soft **L**: the gradient comes in from two adjacent sides and fades into Light Orange.
-   - Frame 01 English: gradient on the bottom and the right, light area top-left.
-   - Frame 02 English: the inverse (gradient fills top-left, light on the bottom and right).
-   - Arabic versions are mirrored horizontally.
-   - Stone frames: same L logic with Stone and Light Orange.
-3. **Shape** (image-led layouts only, layered with photography): **Circle, Lozenge horizontal, Lozenge vertical.** Blur is **progressive, start 0 → end 100**, horizontal or vertical. Each shape has exactly two focus directions: **sharp top / soft bottom** and **sharp right / soft left**.
-
-**Dark gradient:** deep navy-violet (about `#0E0C26`) with grey-violet lights (about `#626079`). Internal communications and corporate / high-earning audiences only, minimum use.
-
-**Official asset names (use them for exports):**
-- `gr_orange_{9x16,3x4,1x1,16x9}_{01,02,03}`
-- `gr_frame_{9x16,3x4,1x1,16x9}_{01,02}` (Stone set)
-- Frame gradient 01 / 02 — English / Arabic (Orange set)
-- `gr_dark_{9x16,3x4,1x1,16x9}_{01,02,03}`
-- Shapes: the six files already in `grad/`
-
-### What is wrong in the current build (v127)
-
-- It draws **blurred circles in a fixed arrangement**, not blurred organic shapes with a gradient fill. Every result looks the same.
-- "Frame" is a white card with a rim. Wrong.
-- Shapes have an "all soft" variant that does not exist, and "sharp top / soft bottom" is missing.
-- Ink is a flat black, not the navy-violet dark gradient.
-- **Download PNG has white behind it.** Render directly on a canvas; backgrounds full bleed, shapes on a transparent background.
-- **Copy for Figma pastes plain circles**, because Figma drops SVG blur filters on paste. Decision agreed with Samer: Copy for Figma copies a finished **PNG image** for now; the editable/SVG route is to be solved later ("svg بعدين بنحل مشكلته").
-- He wants **ultra high quality PNG**: offer 4K and 8K, and add very fine noise/dither so the gradient does not band.
-
-### Agreed plan
-
-1. New engine that follows the five steps exactly: organic shapes, gradient fill at an angle, blur, layers (dark first, light on top).
-2. A library organised and named like the guideline: Orange ×3 per ratio, Frame 01/02 × English/Arabic × Orange/Stone, Dark ×3 per ratio (labelled internal only), Shapes ×2 directions each.
-3. A gallery showing every variation side by side.
-4. An editor that moves the **shape itself**: position, rotation, size, colour, blur.
-5. Export: high-quality PNG, organised ZIP with the official names, all digital sizes (`FORMATS` already lists 28).
-
-**Still unanswered:** does Samer have the brand library shapes (SVG or Figma)? If yes, build on them. If not, draw close organic shapes and tell him they are not the official ones.
-
-Keep the parts that already work: the size list, the layouts (gradient only / logo / logo + copy / image + copy), English/Arabic, the "Ask for a file" box (`tplAsk`).
+**Recent thumbnails (v136).** Samer saw 40 grey tiles ("16:9 · 2K") in Recent. Two causes fixed: `addHistory` only made a thumbnail when Magnific had sent image bytes (`o.img`), and `saveHist` dropped thumbnails first when localStorage was full. Now `histFill` fetches a 512 px view of every entry without one (`creations_read` with `{creationIdentifier, hq:"low"}`, called directly, no Claude call), one at a time once Magnific is connected, and saves it locally and to the cloud copy; `saveHist` shortens the stored prompts before it gives up any thumbnail. Tested with a mocked connector only.
 
 ## 10. Other things waiting on Samer
 
@@ -216,3 +188,18 @@ Keep the parts that already work: the size list, the layouts (gradient only / lo
 4. Three directions with a quick thumbnail each (spends Magnific credits — ask first).
 5. Put the generated image back inside the layout to preview the final result.
 6. A pre-generation check that the prompt follows the house rules.
+
+## 12. Photography becomes a chat — plan agreed with Samer (he approved all of it)
+
+"The chat above" = the brief box on the Photography page. He wants it clearly stronger and interactive. Publish each stage on its own and let him test before the next.
+
+1. **Done (v135): the `@` picker is a grid.** Three tabs (Characters / Outfits / Camera angles), cards with a landscape 16:9 picture and the name under it, 3 columns on a computer and 2 on a phone, arrows move in two directions (`atDraw`, `O.tab`, `O.vis`, `O.cols`). Tested with a mocked library only.
+2. **Done (v137): chat core.** Module "Art Director" at the end of `app.js` (IIFE, state `PC`, classes `.pc-`). It sits at the top of `#briefCard`; the old brief, presets, layout drop and Create buttons moved into `<details class="pc-classic">` ("Brief and classic controls") and still work. One Claude call per message (`ask()` builds the prompt, `handle()` reads the JSON: `say`, `card`, `ask`, `do` = talk / ready / edit / angles / directions / layout, `check`, `directions`, `image`, `source`, `keep`). The **shot card** (`PC.card`: who, outfit, action, place, camera, light, setting, aspect) is turned into the brief by `compose()` and handed to the untouched pipeline: `apply()` → `createAll()`; edits by talking go to `editImage()`. `S.quiet` stops the page from scrolling while the chat generates. Card fields are clickable (the editor reuses the `@` picker with `data-only`). Hidden in Icons mode and in the web runtime.
+3. **Done (v137): "make one like this, but change…"** A photo attached in the chat becomes `PC.src` (what it shows, per field) with keep / change per field in the card (`PC.keep`; who is never kept). `remake()` uploads the photo (`rlUploadMag`) as `@img1`, the library character(s) and the outfit sheet as the next references (`magId`), Claude writes a LOCK / REPLACE prompt, `rlImage` renders, the result becomes the normal result card. If the photo breaks a rule the chat asks: fix it or keep it like the original (`PC.fix`).
+4. **Done (v137): check before spending and taste.** `do:"ready"` shows the five house rules ticked (with what the Art Director adjusted) and the Create buttons; nothing is generated without a press, except an edit he asked for in words. 👍 / 👎 + a reason are stored in `PCT` (localStorage `bae_pc_taste` + `data/users/<uid>/pctaste`) and fed back by `taste()`.
+5. **Done (v137): extras.** Voice (`#pcMic`, shares the dictation capability with Reels through `S.mic`), Compare A / B (`compare()`), three directions (text first; "Render all three" spends 3 images and says so), "See it in the layout" (`inLayout()`: Claude marks the picture area and the boxes to keep on top; a rough preview).
+
+Tested with Playwright and a mocked Claude + Magnific only (desktop and phone width): talk → question → ready check → create → edit by talking → compare → taste → directions → card edit → remake to the end → layout preview. **Never tested for real:** how well the real Claude fills the card, real generation and real remake fidelity (same camera / action), credits line, voice, the chat inside claude.ai. The chat is not saved across a reload.
+
+Open choice left to us ("see what fits"): whether the current options (Photo / Icon, Studio / Location, aspect, references) stay visible beside the chat or fold into "advanced". The brand locks (candid, centre, soft background, studio) do not change; the chat works on top of them.
+
