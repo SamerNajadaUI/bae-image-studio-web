@@ -16,7 +16,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 `https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 137 at the time of writing)
 
-Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openBrand`):
+Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openResize`, `openBrand`):
 
 | App | Section id | What it does |
 |---|---|---|
@@ -24,6 +24,7 @@ Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpsca
 | Reels | `#reels` | Idea → script → characters → locations → scenes → Seedance 2.5 video, with a "Director" chat and a learning "brain" |
 | Animation templates | `#anim` | After Effects template downloads |
 | BAE Upscale | `#upscale` | The studio's own free upscaler (runs in the browser) |
+| BAE Resize | `#resize` | One approved picture → every screen size; crop or AI background extension, original pixels put back (section 13) |
 | Brand Identity | `#brand` | Colours, logo, type, grid, assets, and **Templates and gradients** |
 
 ## 3. Repositories
@@ -80,7 +81,7 @@ The page uses `await claude.use(name)`:
 
 - `sample` — Claude (text + images). Helper in the code: `rlAsk(prompt, opts)` returns parsed JSON.
 - `mcp` — connectors, called as the viewer:
-  - **Magnafic** (Magnific): generation, upload, wait, spaces, upscale, etc. (35 tools declared)
+  - **Magnafic** (Magnific): generation, upload, wait, spaces, upscale, expand, crop, etc. (37 tools declared, `images_expand` and `images_crop` added for BAE Resize)
   - **BAE Gemini Eye**: `watch_video`, `gemini_status`, `upload_start`, `upload_chunk`, `host_file`
 - `db` — collections with rules (read: view, write: admin): `brain`, `research`, `advisors`, `mem`, `memmeta`, `archive`, `chars`, `charimg`, `brandfiles`, `brandblob`, `upscale`. Private per-person data lives under `data/users/<uid>/…` (Recent history, reels, `lvtaste`).
 - `user`, `downloads`, `assets`, `dictation`.
@@ -203,3 +204,24 @@ Tested with Playwright and a mocked Claude + Magnific only (desktop and phone wi
 
 Open choice left to us ("see what fits"): whether the current options (Photo / Icon, Studio / Location, aspect, references) stay visible beside the chat or fold into "advanced". The brand locks (candid, centre, soft background, studio) do not change; the chat works on top of them.
 
+
+## 13. BAE Resize (v138)
+
+Samer studied tadvio.com and asked for the same idea inside the studio: give one clean visual (no text, no logo) and get all his screen sizes, with a Download All ZIP. His ten sizes are the default preset (`DEF`): 1920×1080, 3840×2160, 1920×3240, 256×512, 1080×3840, 128×640, 1920×2160, 1080×1920, 128×512, 1920×3840.
+
+**Decision, from a real paid test on his picture (350 credits):**
+- Never regenerate (Seedream redraws the person). Extend the background only (outpainting) and keep the original.
+- Engine = Magnific `images_expand` with `mode:"magnific-expand"` (30 credits): it follows the fill instruction and did not repeat the subject. `bfl-outpainting` (130) rewrites the prompt itself and **tripled the man at 1:5**. Do not switch to it.
+- Extend toward the easy side (sky, plain wall) and say exactly what continues there ("cloudless sky…"), otherwise it invents clouds and furniture.
+- Magnific returns at most about 5 MP whatever is asked, and the page cannot fetch the CDN file, so the result is read back in 768 px tiles: `images_crop` (free, instant, square custom size) then `creations_read` `hq:"medium"` (returns up to about 800 px, so 768 is 1:1).
+
+**How it works (module "BAE Resize" at the end of `app.js`, state `R`, classes `.rz-`):**
+- `analyse()`: Claude returns the subject box and, per side, `ease` and a `fill` sentence.
+- `makePlan()` (pure arithmetic): each size is `same` (resize), `crop` (subject still fits) or `ext`. Sizes that need extending share **masters**: the source is cropped to the subject width ×1.3, extended once (up to 2.5× per step), then again for the extreme ratios; each size is a window cut from the smallest master that holds it. Two extensions cover all eight of his tall sizes.
+- `family()` uploads the base (`rlUploadMag`), calls `images_expand`, waits, reads the size with `creations_get`, `readBack()` fetches only the tiles the extension needs, `compose()` puts the previous layer (the original, then the master before) back on top with a tone match and a feathered edge. So the person is always the original pixels.
+- `check()`: Claude looks at each master and flags repeats, new objects, seams ("Review"); "Make it again" redoes one extension with an optional note.
+- Per size: slider to move the window, "Actual pixels" for the small LED sizes, "High quality" = the same ratio at the native size. ZIP has `exact/` and `HQ/`.
+- Finished extensions are remembered in localStorage (`bae_rz_runs`, by file name + size + dimensions) and reused free after a reload.
+
+**Tested** with Playwright and a mocked Magnific + Claude only (plan, both extensions, tiles, compose, check, ZIP, phone width). **Never tested for real inside the studio:** the upload through BAE Gemini Eye, real tiles, the tone match on a real extension, the check with real Claude.
+Known limits: tiles appear in his Magnific history; a 2560×1440 source means the 1920-wide tall sizes are enlarged ×1.4 (the card says so, a 4K source fixes it); not yet reachable from a Photography result (upload only).
