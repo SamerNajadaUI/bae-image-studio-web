@@ -5021,7 +5021,7 @@ function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span
     SH("loz_v_2","BAE_gradient_lozenge_v_2","Lozenge vertical · sharp right","loz_v","right",[B(1,.28,.08,.7,20,1.3,"light",30,170,.75),B(0,1.04,.44,.55,80,1.3,"deep",0,170,.95),B(2,.4,1.0,.65,10,1.3,"deep",0,170,.7)])];
   const item=k=>LIB.find(i=>i.k===k)||LIB[0];
   const QUAL=[["x1","Standard",0],["4k","4K",3840],["8k","8K",7680]];
-  const TP={fmt:3,item:"orange_01",layout:"grad",lang:"en",blobs:null,sel:-1,q:"x1",head:"",sub:"",ask:"",busy:"",err:"",note:"",custom:false,seed:0};
+  const TP={fmt:3,item:"orange_01",layout:"grad",lang:"en",blobs:null,sel:-1,q:"x1",mesh:"mid",head:"",sub:"",ask:"",busy:"",err:"",note:"",custom:false,seed:0};
   const clone=L=>L.map(q=>({...q}));
   const blobs=()=>TP.blobs||(TP.blobs=clone(item(TP.item).blobs));
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -5137,6 +5137,26 @@ function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span
         if(!tiny) s+=`<text id="Subhead" x="${n(side)}" y="${n(pad+fs+fs2*1.9)}" font-family="${font}" font-size="${fs2}" font-weight="400" fill="${ink(tx+dx*fs*2.5,ty-fs*.35)}" text-anchor="${anchor}">${xml(sub)}</text>\n`;
         if(!tiny&&!wide){ const axp=ar?pad:w-pad; s+=`<text id="Address" x="${n(axp)}" y="${n(h-pad-2)}" font-family="GT Walsheim, Figtree, Arial, sans-serif" font-size="${Math.max(11,Math.round(fs2*.5))}" fill="${ink(axp+(ar?1:-1)*fs2*3,h-pad-4)}" text-anchor="${ar?"start":"end"}">www.bankaletihad.com</text>\n`; } } }
     return s+`<defs>\n${defs}</defs>\n</svg>`; }
+  /* ----- Illustrator: the gradient as ONE gradient mesh (mesh points, no shapes). The colour field is sampled on a grid and written as a
+     PDF patch mesh (shading type 6), the form Illustrator's own mesh takes inside a PDF; the file opens in Illustrator. ----- */
+  const MESH=[["few","Few",5],["mid","Medium",8],["many","Many",12]];
+  function tplMesh(o,N){ const {w,h}=o, it=o.it, F=gField(it,o.blobs,w,h,240), long=Math.max(w,h), nx=Math.max(2,Math.round(N*w/long)), ny=Math.max(2,Math.round(N*h/long));
+    const col=(u,v)=>{ const x=clamp(u*(F.w-1),0,F.w-1.001), y=clamp(v*(F.h-1),0,F.h-1.001), xi=Math.floor(x), yi=Math.floor(y), fx=x-xi, fy=y-yi, a=(yi*F.w+xi)*3, b=a+F.w*3; return [0,1,2].map(c=>{ const t0=F.d[a+c]+(F.d[a+3+c]-F.d[a+c])*fx, t1=F.d[b+c]+(F.d[b+3+c]-F.d[b+c])*fx; return clamp(Math.round(t0+(t1-t0)*fy),0,255); }); };
+    const X=i=>Math.round(i/nx*65535), Y=j=>Math.round((1-j/ny)*65535), data=new Uint8Array(nx*ny*61), dv=new DataView(data.buffer); let p=0;
+    const pt=(x,y)=>{ dv.setUint16(p,x); dv.setUint16(p+2,y); p+=4; }, edge=(a,b)=>{ pt(a[0],a[1]); pt(Math.round(a[0]+(b[0]-a[0])/3),Math.round(a[1]+(b[1]-a[1])/3)); pt(Math.round(a[0]+(b[0]-a[0])*2/3),Math.round(a[1]+(b[1]-a[1])*2/3)); };
+    for(let j=0;j<ny;j++) for(let i=0;i<nx;i++){ const A=[X(i),Y(j)], Bq=[X(i),Y(j+1)], C=[X(i+1),Y(j+1)], D=[X(i+1),Y(j)]; data[p++]=0; edge(A,Bq); edge(Bq,C); edge(C,D); edge(D,A);
+      for(const [u,v] of [[i,j],[i,j+1],[i+1,j+1],[i+1,j]]){ const c=col(u/nx,v/ny); data[p++]=c[0]; data[p++]=c[1]; data[p++]=c[2]; } }
+    const te=new TextEncoder(), parts=[], offs=[]; let len=0; const put=x=>{ const u=typeof x==="string"?te.encode(x):x; parts.push(u); len+=u.length; }, obj=(n,s)=>{ offs[n]=len; put(`${n} 0 obj\n`); s(); put(`\nendobj\n`); };
+    const content=`q 0 0 ${w} ${h} re W n /Sh0 sh Q`;
+    put("%PDF-1.4\n%âãÏÓ\n");
+    obj(1,()=>put("<< /Type /Catalog /Pages 2 0 R >>"));
+    obj(2,()=>put("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"));
+    obj(3,()=>put(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${w} ${h}] /Resources << /Shading << /Sh0 5 0 R >> >> /Contents 4 0 R >>`));
+    obj(4,()=>put(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`));
+    obj(5,()=>{ put(`<< /ShadingType 6 /ColorSpace /DeviceRGB /BitsPerCoordinate 16 /BitsPerComponent 8 /BitsPerFlag 8 /Decode [0 ${w} 0 ${h} 0 1 0 1 0 1] /Length ${data.length} >>\nstream\n`); put(data); put("\nendstream"); });
+    obj(6,()=>put(`<< /Title (${tplName(o)} mesh) /Creator (BAE Studio) >>`));
+    const xr=len; put(`xref\n0 7\n0000000000 65535 f \n`+[1,2,3,4,5,6].map(n=>String(offs[n]).padStart(10,"0")+" 00000 n \n").join("")+`trailer\n<< /Size 7 /Root 1 0 R /Info 6 0 R >>\nstartxref\n${xr}\n%%EOF\n`);
+    return {blob:new Blob(parts,{type:"application/pdf"}),nx,ny}; }
   /* ----- state, names ----- */
   const cur=(over)=>{ const f=FLAT[TP.fmt], it=item(TP.item); return {...f,it,blobs:blobs(),layout:TP.layout,lang:TP.lang,head:TP.head,sub:TP.sub,...over}; };
   const tplName=o=>{ const it=o.it, rk=ratioKey(o.w,o.h); let n=it.file.replace("{r}",rk); if(it.kind==="shape"&&!(o.layout==="grad")) n+="_"+rk; if(o.custom) n+="_custom"; if(o.layout!=="grad") n+="_"+o.layout+"_"+o.lang.toUpperCase(); return n; };
@@ -5180,6 +5200,7 @@ function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span
             <div class="tp-edrow">${rng("tpS","Size",5,220,sel.s*100,"%")}${rng("tpRot","Rotation",-180,180,sel.r,"°")}${rng("tpE","Stretch",50,300,sel.e*100,"%")}${rng("tpBl","Blur",0,200,sel.bl)}${rng("tpA","Fill angle",0,360,((sel.a%360)+360)%360,"°")}${rng("tpO","Strength",10,100,sel.o*100,"%")}</div>
             <div class="tp-edrow"><button type="button" class="btn small" data-tp="up">Bring forward</button><button type="button" class="btn small" data-tp="down">Send back</button><button type="button" class="btn small" data-tp="dup">Duplicate</button><button type="button" class="bi-x" data-tp="del">Remove shape</button></div>`:`<span class="t12 muted">No shape selected. Pick a handle on the image or a layer in the list.</span>`}</div>
           <div class="tp-out"><span class="lbl">PNG quality</span><div class="a-seg" role="group" aria-label="PNG quality">${QUAL.map(([k,l])=>`<button type="button" data-tpq="${k}" aria-pressed="${TP.q===k}">${l}</button>`).join("")}</div><span class="t12 muted">${ow} × ${oh} px${it.kind==="shape"&&TP.layout==="grad"?" · transparent background":""} · fine dither, no banding</span></div>
+          ${it.kind!=="shape"?`<div class="tp-out"><span class="lbl">Illustrator mesh</span><div class="a-seg" role="group" aria-label="Mesh points">${MESH.map(([k,l])=>`<button type="button" data-tpmesh="${k}" aria-pressed="${TP.mesh===k}">${l}</button>`).join("")}</div><button type="button" class="btn small primary" data-tp="mesh">Download mesh for Illustrator</button><span class="t12 muted">One gradient mesh with mesh points, no shapes. Open the file in Illustrator and edit it with the Mesh tool.</span></div>`:""}
           <div class="rl-btns"><button type="button" class="btn small primary" data-tp="fig">Copy for Figma</button><button type="button" class="btn small" data-tp="svg">Download SVG</button><button type="button" class="btn small" data-tp="png">Download PNG</button><button type="button" class="btn small" data-tp="copy">Copy as image</button><button type="button" class="btn small" data-tp="zip">All sizes as ZIP</button><button type="button" class="btn small" data-tp="set">Official set as ZIP</button></div>
           <p class="t12 muted"><b>Copy for Figma</b> pastes an open file (⌘V / Ctrl+V on the canvas): the base colour, every organic shape as a vector with its gradient fill and its layer blur, the logo symbol and live text, all editable. ${it.kind==="shape"?"The soft side of a circle or lozenge is a progressive blur: in Figma, select the group and add Layer blur, Progressive. ":""}Download SVG is the same file to drag into Figma. The organic shapes here are drawn close to the guideline; they are not the official library shapes. Use only the official logo lockups from Assets for final work.</p>
         </div>
@@ -5206,6 +5227,7 @@ Return ONLY JSON: {"size":"exact size name","item":"library key","layout":"grad|
     const ib=t.closest("[data-tpitem]"); if(ib){ pick(ib.dataset.tpitem); tplDraw(); $("tpStage")?.scrollIntoView({block:"nearest",behavior:"smooth"}); return; }
     const la=t.closest("[data-tplay]"); if(la){ TP.layout=la.dataset.tplay; if(TP.layout==="image"&&item(TP.item).kind==="shape") TP.layout="copy"; tplDraw(); return; }
     const lg=t.closest("[data-tplang]"); if(lg){ TP.lang=lg.dataset.tplang; tplDraw(); return; }
+    const mb=t.closest("[data-tpmesh]"); if(mb){ TP.mesh=mb.dataset.tpmesh; tplDraw(); return; }
     const qb=t.closest("[data-tpq]"); if(qb){ TP.q=qb.dataset.tpq; tplDraw(); return; }
     const sl=t.closest("[data-tpsel]"); if(sl){ TP.sel=TP.sel===+sl.dataset.tpsel?-1:+sl.dataset.tpsel; tplDraw(); return; }
     const fm=t.closest("[data-tpform]"); if(fm){ const q=blobs()[TP.sel]; if(q){ q.b=+fm.dataset.tpform; TP.custom=true; tplDraw(); } return; }
@@ -5221,6 +5243,7 @@ Return ONLY JSON: {"size":"exact size name","item":"library key","layout":"grad|
     else if(k==="up"||k==="down"){ const i=TP.sel, j=i+(k==="up"?1:-1); if(L[i]&&L[j]){ [L[i],L[j]]=[L[j],L[i]]; TP.sel=j; TP.custom=true; tplDraw(); } }
     else if(k==="ask") tplAsk();
     else if(k==="png"){ a.disabled=true; try{ const b=await tplPNG(o,qSide(),p=>{ a.textContent=`Rendering ${Math.round(p*100)}%`; }); if(b) await save(b,tplName(o)+".png"); }catch(err){ TP.err="Couldn't make the PNG in this browser. Try a smaller quality."; tplDraw(); return; } a.disabled=false; a.textContent="Download PNG"; }
+    else if(k==="mesh"){ const m=tplMesh(o,MESH.find(x=>x[0]===TP.mesh)?.[2]||8); await save(m.blob,tplName({...o,layout:"grad"})+"_mesh.ai"); }
     else if(k==="fig"){ let ok=false; try{ await navigator.clipboard.writeText(tplFig(o)); ok=true; }catch{} flash(a,ok?"Copied. Paste in Figma":"Copy blocked. Use Download SVG","Copy for Figma"); }
     else if(k==="svg") saveText(tplFig(o),tplName(o)+".svg","image/svg+xml");
     else if(k==="copy"){ a.disabled=true; a.textContent="Rendering…"; let ok=false; try{ const b=await tplPNG(o,Math.min(qSide(),3840)); await navigator.clipboard.write([new ClipboardItem({"image/png":b})]); ok=true; }catch{} a.disabled=false; flash(a,ok?"Image copied":"Copy blocked. Use Download PNG","Copy as image"); }

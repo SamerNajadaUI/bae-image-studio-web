@@ -14,7 +14,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 129 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 130 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openBrand`):
 
@@ -166,6 +166,8 @@ Samer rejected the old builder twice (blurred circles, card-style frame, flat bl
 - UI: library gallery in the chosen size → editor (numbered handles move a shape; panel changes outline, tone, size, rotation, stretch, blur, fill angle, strength, order) → Download PNG (Standard / 4K / 8K), Copy for Figma (PNG image), All sizes as ZIP, Official set as ZIP.
 - **Copy for Figma = editable layers** (Samer asked for an open file, not an image). `tplFig` writes an SVG the way Figma itself exports one (its own layer-blur filter pattern): base rect, one vector per organic shape with gradient fill + layer blur, logo symbol, live text. `Download SVG` is the same file. `Copy as image` keeps the PNG. The circle / lozenge soft side cannot be written in SVG: it pastes crisp and the page tells him to add Layer blur → Progressive in Figma.
 - **Not confirmed in real Figma.** The v127 paste lost the blur (plain filter). If the Figma-format filter is also dropped, the reliable route is a small Figma plugin that builds the nodes (frame, vectors, gradient fills, layer blur, progressive blur) from the studio's JSON. Offer it; it needs his yes.
+
+- **Illustrator mesh (v130, first test).** Samer wants ONE gradient mesh with mesh points, not shapes ("مين حكالك بدي Shapes"). `tplMesh` samples the colour field on a grid (Few 5 / Medium 8 / Many 12 patches on the long side) and writes a PDF patch mesh (shading type 6) saved as `_mesh.ai`. Backgrounds, frames and dark only; circle / lozenge are not done (their soft edge needs transparency). The PDF renders correctly (checked with poppler). **Unknown: whether Illustrator opens it as an editable mesh object or as non-native art — waiting for Samer's answer.** His connector "BAE Layout Fixer for Illustrator" was switched on in his UI but its tools never reached the session; if the file route fails, build the mesh through that connector.
 
 Tested with Playwright from disk only (rendering, editor, every export, both ZIPs, SVG rendered next to the canvas). Never tested for real: inside claude.ai, the paste in Figma, "Ask for a file" with real Claude, Safari / iPhone.
 
