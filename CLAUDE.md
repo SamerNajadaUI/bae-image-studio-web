@@ -14,7 +14,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 134 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 135 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openBrand`):
 
@@ -186,3 +186,16 @@ Tested with Playwright from disk only (rendering, editor, every export, both ZIP
 4. Three directions with a quick thumbnail each (spends Magnific credits — ask first).
 5. Put the generated image back inside the layout to preview the final result.
 6. A pre-generation check that the prompt follows the house rules.
+
+## 12. Photography becomes a chat — plan agreed with Samer (he approved all of it)
+
+"The chat above" = the brief box on the Photography page. He wants it clearly stronger and interactive. Publish each stage on its own and let him test before the next.
+
+1. **Done (v135): the `@` picker is a grid.** Three tabs (Characters / Outfits / Camera angles), cards with a landscape 16:9 picture and the name under it, 3 columns on a computer and 2 on a phone, arrows move in two directions (`atDraw`, `O.tab`, `O.vis`, `O.cols`). Tested with a mocked library only.
+2. **Chat core.** An "Art Director" conversation instead of the one-shot box: a one-line "what I understood", at most ONE question when something is missing, with quick-answer buttons; a live **shot card** (who, outfit, location, action, camera, light, aspect) where every field is clickable; the result appears inside the chat and he keeps editing by talking ("make the shirt blue", "closer", "same from the side") on the same image (`editImage` already exists).
+3. **"Make one like this, but change…"** He uploads a photo; Claude breaks it into the same card; each field gets keep / change (for example change the character and the place, keep the action, camera and light); his photo goes in as the composition reference, the library character and outfit as the second reference. Never copy a real face: the person is always replaced by a library character. If the source breaks a BAE rule (eye contact, subject off centre) say so and ask: fix it or keep it like the original.
+4. **Check before spending** (house rules ticked, credits shown) and **taste memory** (👍 / 👎 with a short reason, fed back like `LVT`).
+5. **Extras:** voice (dictation capability is already declared), A/B compare, three thumbnail directions (spends credits: ask first), the image placed back in the layout.
+
+Open choice left to us ("see what fits"): whether the current options (Photo / Icon, Studio / Location, aspect, references) stay visible beside the chat or fold into "advanced". The brand locks (candid, centre, soft background, studio) do not change; the chat works on top of them.
+
