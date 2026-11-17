@@ -6447,5 +6447,116 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
   window.__rz={makePlan,steps,R};
 })();
 
+/* ======================================================================================================
+   BAE 3D Booth (phase 1): the studio sends booth jobs to the render Mac and shows what comes back.
+   Studio  ->  "BAE 3D Booth" connector (Cloudflare worker: booth/bridge)  ->  Blender add-on on the Mac.
+   The Mac pairs once: its add-on shows a 6-digit code, someone approves it here. Jobs run in a background Blender
+   on the Mac (Metal GPU); the pictures, previews and the .blend come back through the connector in 512 KB pieces.
+   Phase 1 = the plumbing + a test build. Plan / designs / result / film come in the next phases.
+   ====================================================================================================== */
+(()=>{
+  const P=$("booth"); if(!P) return; const body=$("boBody");
+  const BSRV="BAE 3D Booth", CHB=524288;
+  const DEMO={"name":"Test booth","file":"BAE_test_booth","units":"cm","width":1000,"depth":488,"height":250,"orbit_frames":84,"floors":[{"name":"Booth floor","x":0,"y":0,"w":660,"d":488,"colour":"#D9D4CA"},{"name":"Outdoor seating floor (Area 5)","x":660,"y":0,"w":340,"d":488,"colour":"#C9C2B5"}],"walls":[{"name":"Exterior front","from":[0,0],"to":[660,0],"thick":25,"openings":[{"name":"Door 01","at":144,"width":399,"height":190,"post":{"width":10,"height":185},"radius":30}]},{"name":"Exterior back","from":[660,488],"to":[0,488],"thick":25,"openings":[{"name":"Door 02","at":117,"width":399,"height":190,"post":{"width":10,"height":185},"radius":30}]},{"name":"Exterior left","from":[0,488],"to":[0,0],"thick":10},{"name":"Exterior right","from":[660,0],"to":[660,488],"thick":10,"openings":[{"name":"Door 03","at":163,"width":170,"height":190,"radius":30}]},{"name":"Star advent wall (Area 3)","from":[543,463],"to":[650,342],"thick":4,"colour":"#C8321E","height":250}],"pieces":[{"type":"box","name":"Area 1 units (photobooth, post cards, storage)","x":10,"y":0,"w":120,"d":488,"h":200,"z":0,"colour":"#D62D20"},{"type":"table","name":"Bar table 1 (60 cm)","x":164,"y":347,"r":30,"h":110,"colour":"#2B2B2B"},{"type":"table","name":"Bar table 2 (60 cm)","x":164,"y":226,"r":30,"h":110,"colour":"#2B2B2B"},{"type":"cylinder","name":"Activities table (180 cm)","x":406,"y":218,"r":90,"h":75,"z":0,"colour":"#E8451E"},{"type":"ring","name":"Stool","x":406,"y":218,"ring":116,"r":15,"h":45,"count":10,"start":18,"colour":"#B9301C"},{"type":"cylinder","name":"Pendant light 1","x":406,"y":218,"r":16,"h":22,"z":178,"colour":"#B9301C"},{"type":"cylinder","name":"Pendant cord 1","x":406,"y":218,"r":0.6,"h":50,"z":200,"colour":"#222222"},{"type":"cylinder","name":"Pendant light 2","x":451,"y":218,"r":16,"h":22,"z":178,"colour":"#B9301C"},{"type":"cylinder","name":"Pendant cord 2","x":451,"y":218,"r":0.6,"h":50,"z":200,"colour":"#222222"},{"type":"cylinder","name":"Pendant light 3","x":361,"y":218,"r":16,"h":22,"z":178,"colour":"#B9301C"},{"type":"cylinder","name":"Pendant cord 3","x":361,"y":218,"r":0.6,"h":50,"z":200,"colour":"#222222"},{"type":"cylinder","name":"Pendant light 4","x":406,"y":263,"r":16,"h":22,"z":178,"colour":"#B9301C"},{"type":"cylinder","name":"Pendant cord 4","x":406,"y":263,"r":0.6,"h":50,"z":200,"colour":"#222222"},{"type":"cylinder","name":"Pendant light 5","x":406,"y":173,"r":16,"h":22,"z":178,"colour":"#B9301C"},{"type":"cylinder","name":"Pendant cord 5","x":406,"y":173,"r":0.6,"h":50,"z":200,"colour":"#222222"},{"type":"box","name":"Glass wall back","x":660,"y":486,"w":340,"d":2,"h":250,"z":0,"colour":"#DCEBF0","alpha":0.25},{"type":"box","name":"Glass wall right","x":998,"y":0,"w":2,"d":488,"h":250,"z":0,"colour":"#DCEBF0","alpha":0.25},{"type":"box","name":"Glass wall front","x":660,"y":0,"w":340,"d":2,"h":250,"z":0,"colour":"#DCEBF0","alpha":0.25},{"type":"box","name":"Glass post front right","x":994,"y":0,"w":6,"d":6,"h":250,"z":0,"colour":"#D62D20"},{"type":"box","name":"Glass post back right","x":994,"y":482,"w":6,"d":6,"h":250,"z":0,"colour":"#D62D20"},{"type":"box","name":"Glass post front 773","x":773,"y":0,"w":6,"d":6,"h":250,"z":0,"colour":"#D62D20"},{"type":"box","name":"Glass post back 773","x":773,"y":482,"w":6,"d":6,"h":250,"z":0,"colour":"#D62D20"},{"type":"box","name":"Glass post front 886","x":886,"y":0,"w":6,"d":6,"h":250,"z":0,"colour":"#D62D20"},{"type":"box","name":"Glass post back 886","x":886,"y":482,"w":6,"d":6,"h":250,"z":0,"colour":"#D62D20"},{"type":"box","name":"Glass post right 160","x":994,"y":160,"w":6,"d":6,"h":250,"z":0,"colour":"#D62D20"},{"type":"box","name":"Glass post right 322","x":994,"y":322,"w":6,"d":6,"h":250,"z":0,"colour":"#D62D20"},{"type":"box","name":"Glass top beam back","x":660,"y":482,"w":340,"d":6,"h":6,"z":244,"colour":"#D62D20"},{"type":"box","name":"Glass top beam front","x":660,"y":0,"w":340,"d":6,"h":6,"z":244,"colour":"#D62D20"},{"type":"box","name":"Glass top beam right","x":994,"y":0,"w":6,"d":488,"h":6,"z":244,"colour":"#D62D20"},{"type":"box","name":"Table 1 base","x":735,"y":85,"w":50,"d":50,"h":61,"z":0,"colour":"#D62D20"},{"type":"box","name":"Table 1 top (70 x 70)","x":725,"y":75,"w":70,"d":70,"h":4,"z":61,"colour":"#F15A22"},{"type":"box","name":"Chair 1","x":676,"y":88,"w":44,"d":44,"h":45,"z":0,"colour":"#B9301C"},{"type":"box","name":"Chair 2","x":800,"y":88,"w":44,"d":44,"h":45,"z":0,"colour":"#B9301C"},{"type":"box","name":"Chair 3","x":738,"y":150,"w":44,"d":44,"h":45,"z":0,"colour":"#B9301C"},{"type":"box","name":"Table 2 base","x":855,"y":219,"w":50,"d":50,"h":61,"z":0,"colour":"#D62D20"},{"type":"box","name":"Table 2 top (70 x 70)","x":845,"y":209,"w":70,"d":70,"h":4,"z":61,"colour":"#F15A22"},{"type":"box","name":"Chair 4","x":796,"y":222,"w":44,"d":44,"h":45,"z":0,"colour":"#B9301C"},{"type":"box","name":"Chair 5","x":920,"y":222,"w":44,"d":44,"h":45,"z":0,"colour":"#B9301C"},{"type":"box","name":"Chair 6","x":858,"y":284,"w":44,"d":44,"h":45,"z":0,"colour":"#B9301C"},{"type":"box","name":"Table 3 base","x":735,"y":353,"w":50,"d":50,"h":61,"z":0,"colour":"#D62D20"},{"type":"box","name":"Table 3 top (70 x 70)","x":725,"y":343,"w":70,"d":70,"h":4,"z":61,"colour":"#F15A22"},{"type":"box","name":"Chair 7","x":676,"y":356,"w":44,"d":44,"h":45,"z":0,"colour":"#B9301C"},{"type":"box","name":"Chair 8","x":800,"y":356,"w":44,"d":44,"h":45,"z":0,"colour":"#B9301C"},{"type":"box","name":"Chair 9","x":738,"y":418,"w":44,"d":44,"h":45,"z":0,"colour":"#B9301C"},{"type":"cylinder","name":"Floor lamp 1 pole","x":690,"y":450,"r":2,"h":150,"z":0,"colour":"#B8935A","metal":1,"rough":0.3},{"type":"cylinder","name":"Floor lamp 1 shade","x":690,"y":450,"r":18,"h":26,"z":150,"colour":"#FFD9B0","emit":3},{"type":"cylinder","name":"Floor lamp 2 pole","x":968,"y":40,"r":2,"h":150,"z":0,"colour":"#B8935A","metal":1,"rough":0.3},{"type":"cylinder","name":"Floor lamp 2 shade","x":968,"y":40,"r":18,"h":26,"z":150,"colour":"#FFD9B0","emit":3},{"type":"box","name":"Gift box 02 (back end of the star)","x":481,"y":401,"w":60,"d":45,"h":90,"z":0,"colour":"#F15A22"},{"type":"box","name":"Gift box 01 (back end, front)","x":442,"y":384,"w":50,"d":40,"h":45,"z":0,"colour":"#D62D20"},{"type":"box","name":"Gift box 03 (back end, small)","x":497,"y":366,"w":40,"d":30,"h":35,"z":0,"colour":"#E8451E"},{"type":"box","name":"Gift box 02 (door end of the star)","x":579,"y":294,"w":55,"d":45,"h":80,"z":0,"colour":"#D62D20"},{"type":"box","name":"Gift box 04 (door end, front)","x":535,"y":290,"w":50,"d":35,"h":40,"z":0,"colour":"#F15A22"},{"type":"box","name":"Gift box 01 (door end, top)","x":589,"y":298,"w":35,"d":35,"h":30,"z":80,"colour":"#F15A22"},{"type":"box","name":"TV 65 inch (on the TV wall)","x":645,"y":25,"w":4,"d":138,"h":89.6,"z":121.5,"colour":"#151515","rough":0.2}],"orbit_fps":12,"cameras":[{"file":"08_star_corner","name":"Star corner","eye":[300,205,135],"look":[590,400,100],"lens":22},{"file":"09_buzzer_corner","name":"Buzzer corner","eye":[455,185,140],"look":[640,60,122],"lens":20}]};
+  const B={st:null,err:"",errCode:"",jobs:[],job:null,busy:"",imgs:{},timer:0,open:false};
+  const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
+  const ago=t=>{ if(!t) return ""; const s=Math.max(0,(Date.now()-t)/1000); return s<60?"just now":s<3600?Math.round(s/60)+" min ago":s<86400?Math.round(s/3600)+" h ago":new Date(t).toLocaleDateString(); };
+  const bcall=async(tool,input)=>{ if(!mcp) throw {code:"capability_disabled"}; log("→","booth "+tool,tool==="booth_upload"?{...input,data:"…"}:input);
+    try{ const r=await mcp.callTool(BSRV,tool,input||{},{cache:false}); const v=r?.payload&&typeof r.payload==="object"?r.payload:(()=>{ try{ return JSON.parse((r?.content||[]).map(c=>c.text||"").join("")); }catch{ return {}; } })(); return v; }
+    catch(e){ log("✕","booth "+tool,{code:e?.code,message:e?.message}); throw e; } };
+  const setupCode=c=>/server_not_connected|not_in_manifest|selection_required|needs_reauth|not_granted|capability_disabled|server_not_found/.test(String(c||""));
+
+  async function refresh(){
+    try{ B.st=await bcall("booth_status"); B.err=""; B.errCode="";
+      const j=await bcall("booth_jobs",{limit:8}); B.jobs=j.jobs||[];
+      if(B.job){ const k=await bcall("booth_job",{job_id:B.job.id}); B.job=k; if(k.status==="done") await previews(k); }
+    }catch(e){ B.errCode=e?.code||"error"; B.err=e?.message||String(e?.code||e); }
+    draw(); schedule();
+  }
+  function schedule(){ clearTimeout(B.timer); if(!B.open||P.hidden) return;
+    const live=(B.st?.devices||[]).some(d=>d.status==="pending")||B.jobs.some(j=>j.status==="queued"||j.status==="running");
+    if(setupCode(B.errCode)) return; B.timer=setTimeout(refresh,live?4000:20000); }
+
+  async function fetchFile(o){ let off=0, parts=[];
+    while(off!=null){ const p=await bcall("booth_download",{file_id:o.file_id,offset:off}); parts.push(b64Blob(p.data,o.mime)); off=p.next; }
+    return new Blob(parts,{type:o.mime}); }
+  async function previews(k){ for(const o of k.outputs||[]){ if(!/_preview\.jpg$/.test(o.path)||B.imgs[o.file_id]) continue;
+      try{ B.imgs[o.file_id]=URL.createObjectURL(await fetchFile(o)); }catch{} } }
+  const saveB=async(b,name)=>{ if(S.web||!downloads){ const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1500); return; }
+    try{ await downloads.save({filename:name,data:b}); }catch(e){ if(e?.code!=="declined") throw e; } };
+  async function download(o,btn){ const was=btn.textContent; btn.disabled=true; btn.textContent="Downloading…";
+    try{ let b=await fetchFile(o), name=o.path;
+      if(/\.blend$/.test(name)){ if(!window.JSZip) throw new Error("zip library didn't load"); const z=new JSZip(); z.file(name,b); b=await z.generateAsync({type:"blob"}); name=name.replace(/\.blend$/,"_blend.zip"); }
+      await saveB(b,name); btn.textContent="Saved"; }
+    catch(e){ btn.textContent="Couldn't download"; log("✕","booth download",{code:e?.code,message:e?.message}); }
+    setTimeout(()=>{ btn.disabled=false; btn.textContent=was; },2500); }
+
+  async function test(){ B.busy="Sending the test booth…"; draw();
+    try{ const r=await bcall("booth_submit",{title:"Test booth",kind:"build",spec:DEMO,options:{views:["01_front_left","05_inside"],width:1920,height:1080,samples:64,blend:true}});
+      B.job={id:r.job_id,status:"queued",pct:0,msg:"Waiting for a render Mac",outputs:[]}; }
+    catch(e){ B.err=e?.message||String(e?.code); B.errCode=e?.code||""; }
+    B.busy=""; refresh(); }
+  async function devAct(id,action,btn){ btn.disabled=true; try{ await bcall("booth_device",{device_id:id,action}); }catch(e){ B.err=e?.message||String(e?.code); } refresh(); }
+  async function cancel(id){ try{ await bcall("booth_cancel",{job_id:id}); }catch{} refresh(); }
+
+  function setupHTML(){
+    const why=B.errCode==="needs_reauth"?"The BAE 3D Booth connector needs to be reconnected (claude.ai → Settings → Connectors).":B.errCode==="not_in_manifest"?"The BAE 3D Booth connector is turned off for this page. Turn it on from this page's permissions menu, then press Check again.":"The BAE 3D Booth connector is not added to your claude.ai yet.";
+    return `<section class="rl-card bo-card"><b>Set up (once)</b><p class="muted">${esc(why)}</p>
+      <ol class="bo-steps"><li><b>The bridge</b> (done once, by the studio owner): deploy it from the <i>booth/bridge</i> folder (Deploy to Cloudflare). Its home page shows the connector address and the Blender add-on.</li>
+      <li><b>The connector</b> (every person in the team): claude.ai → Settings → Connectors → Add custom connector. Name <b>BAE 3D Booth</b>, address from the bridge page, or ask the studio owner for it.</li>
+      <li><b>The render Mac</b> (once): download the add-on from the bridge page; in Blender: Edit → Preferences → Add-ons → Install from Disk. It shows a 6-digit code.</li>
+      <li><b>Approve the Mac</b> here, with that code.</li></ol>
+      <div class="btns"><button class="btn primary" type="button" data-bo="check">Check again</button></div></section>`; }
+
+  function macsHTML(){ const ds=B.st?.devices||[];
+    const row=d=>{ const pill=d.status==="pending"?`<span class="bo-pill wait">Waiting for approval</span>`:d.online?(d.job?`<span class="bo-pill on">Working</span>`:`<span class="bo-pill on">Online</span>`):`<span class="bo-pill off">Offline · ${esc(ago(Date.now()-d.last_seen_s*1000))}</span>`;
+      return `<div class="bo-mac"><div class="bo-mac-t"><b>${esc(d.name)}</b>${pill}</div>
+        ${d.status==="pending"?`<p class="muted">Approve only if Blender on your Mac shows this code:</p><div class="bo-code">${esc((d.code||"").replace(/(\d{3})(\d{3})/,"$1 $2"))}</div><div class="btns"><button class="btn primary small" type="button" data-bo="approve" data-id="${esc(d.id)}">Approve this Mac</button><button class="btn small" type="button" data-bo="remove" data-id="${esc(d.id)}">Not mine</button></div>`
+        :`<div class="btns"><button class="btn small" type="button" data-bo="remove" data-id="${esc(d.id)}">Remove</button></div>`}</div>`; };
+    return `<section class="rl-card bo-card"><b>Render Mac</b>${ds.length?ds.map(row).join(""):`<p class="muted">No Mac yet. On the render Mac, install the Blender add-on from the bridge page. It appears here with a code to approve.</p>`}
+      ${B.st?.addon_url?`<p class="muted bo-small">Add-on: <a href="${esc(B.st.addon_url)}" target="_blank" rel="noopener">${esc(B.st.addon_url)}</a></p>`:""}</section>`; }
+
+  function jobHTML(k){ const outs=k.outputs||[];
+    const stills=outs.filter(o=>/\.png$/.test(o.path)), blend=outs.find(o=>/\.blend$/.test(o.path));
+    const prev=v=>outs.find(o=>o.path===v.replace(/\.png$/,"_preview.jpg"));
+    const live=k.status==="queued"||k.status==="running";
+    return `<div class="bo-job"><div class="bo-mac-t"><b>${esc(k.title)}</b><span class="bo-pill ${k.status==="done"?"on":k.status==="failed"?"bad":live?"wait":"off"}">${esc(k.status)}</span></div>
+      ${live?`<div class="bo-bar"><i style="width:${Math.max(3,k.pct||0)}%"></i></div><p class="muted">${esc(k.msg||"")}${k.status==="queued"&&!(B.st?.devices||[]).some(d=>d.online&&d.status==="approved")?" · the Mac is offline: it starts when Blender is open on it":""}</p><div class="btns"><button class="btn small" type="button" data-bo="cancel" data-id="${esc(k.id)}">Cancel</button></div>`:""}
+      ${k.status==="failed"?`<p class="bo-err">${esc((k.error||"").slice(0,400))}</p>`:""}
+      ${k.status==="done"?`<div class="bo-shots">${stills.map(s=>{ const pv=prev(s.path); return `<figure>${pv&&B.imgs[pv.file_id]?`<img src="${B.imgs[pv.file_id]}" alt="${esc(s.label)}">`:`<div class="bo-ph">Loading…</div>`}<figcaption>${esc(s.label)}</figcaption><button class="btn small" type="button" data-bo="dl" data-f="${esc(s.file_id)}">Download PNG</button></figure>`; }).join("")}</div>
+        <div class="btns">${blend?`<button class="btn small" type="button" data-bo="dl" data-f="${esc(blend.file_id)}">Download the Blender file</button>`:""}<span class="muted bo-small">${k.result?.device?esc("Rendered on "+k.result.device.split(" (")[0]+" in "+k.result.seconds+" s"+(k.device?" · "+k.device:"")):""}</span></div>`:""}</div>`; }
+
+  function draw(){
+    if(!mcp){ body.innerHTML=`<section class="rl-card bo-card"><b>Open BAE Studio in claude.ai</b><p class="muted">The 3D Booth works through a claude.ai connector.</p></section>`; return; }
+    if(setupCode(B.errCode)){ body.innerHTML=setupHTML(); return; }
+    if(!B.st){ body.innerHTML=`<section class="rl-card bo-card"><p class="muted">${B.err?esc(B.err):"Connecting to the render Mac…"}</p>${B.err?`<div class="btns"><button class="btn small" type="button" data-bo="check">Try again</button></div>`:""}</section>`; return; }
+    const ready=(B.st.devices||[]).some(d=>d.status==="approved");
+    const others=B.jobs.filter(j=>!B.job||j.id!==B.job.id);
+    body.innerHTML=`<div class="bo-grid"><div class="bo-col">${macsHTML()}
+      <section class="rl-card bo-card"><b>Test the Mac</b><p class="muted">Builds a test booth (the Christmas booth's walls and furniture, no designs) and renders two views at 1920×1080, plus the Blender file.</p>
+        <div class="btns"><button class="btn primary" type="button" data-bo="test" ${!ready||B.busy?"disabled":""}>${B.busy?esc(B.busy):"Build a test booth"}</button></div>${!ready?`<p class="muted bo-small">Approve a Mac first.</p>`:""}</section>
+      <details class="rl-card bo-card"><summary><b>Team</b></summary><p class="muted">Everyone who uses the 3D Booth adds the connector once: claude.ai → Settings → Connectors → Add custom connector, name <b>BAE 3D Booth</b>, this address. Share it only inside the team.</p>
+        <code class="bo-addr" data-noi18n>${esc(B.st.connector_url||"")}</code><div class="btns"><button class="btn small" type="button" data-bo="copy">Copy the address</button></div></details></div>
+      <div class="bo-col">${B.job?`<section class="rl-card bo-card"><b>This job</b>${jobHTML(B.job)}</section>`:""}
+      <section class="rl-card bo-card"><b>Recent jobs</b>${others.length?others.map(j=>`<button class="bo-row" type="button" data-bo="open" data-id="${esc(j.id)}"><span>${esc(j.title)}</span><span class="muted">${esc(j.status)} · ${esc(ago(j.created))}</span></button>`).join(""):`<p class="muted">Nothing yet.</p>`}</section></div></div>
+      ${B.err?`<p class="bo-err">${esc(B.err)}</p>`:""}`;
+  }
+
+  body.addEventListener("click",async e=>{ const b=e.target.closest("[data-bo]"); if(!b) return; const a=b.dataset.bo;
+    if(a==="check"){ B.err=""; B.errCode=""; B.st=null; draw(); refresh(); }
+    else if(a==="test") test();
+    else if(a==="approve"||a==="remove") devAct(b.dataset.id,a,b);
+    else if(a==="cancel") cancel(b.dataset.id);
+    else if(a==="open"){ B.job={id:b.dataset.id,status:"",outputs:[]}; refresh(); }
+    else if(a==="dl"){ const o=(B.job?.outputs||[]).find(x=>x.file_id===b.dataset.f); if(o) download(o,b); }
+    else if(a==="copy"){ try{ await navigator.clipboard.writeText(B.st?.connector_url||""); b.textContent="Copied"; }catch{ const r=document.createRange(); r.selectNodeContents(body.querySelector(".bo-addr")); getSelection().removeAllRanges(); getSelection().addRange(r); b.textContent="Selected: press Copy"; } setTimeout(()=>b.textContent="Copy the address",2000); }
+  });
+  const open=()=>{ P.hidden=false; P.scrollTop=0; B.open=true; draw(); refresh(); };
+  $("openBooth")?.addEventListener("click",open);
+  $("closeBooth")?.addEventListener("click",()=>{ P.hidden=true; B.open=false; clearTimeout(B.timer); $("openBooth")?.focus(); });
+  document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&B.open&&!P.hidden) refresh(); });
+  window.__bo={B,refresh};
+})();
+
 boot();
 })();
