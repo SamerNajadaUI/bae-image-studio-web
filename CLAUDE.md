@@ -15,7 +15,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 151 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 152 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openResize`, `openBrand`):
 
@@ -144,7 +144,7 @@ Concept: **Deep Clarity**. Pillars: Intelligence (precise, clear) and Warmth (pr
 **Layout advisor (Photography page).** Drop a layout screenshot → Claude reads the copy, names the product and the promise, scores four options (Photo Studio, Photo Lifestyle, 3D icon, Copy-led), writes a brief for each, proposes a library character and an outfit **for every person** in the scene. "Another idea", "tell me what you have in mind", "Add a scene photo". "Use this brief" fills the brief, sets mode/setting/aspect and appends `LV_CENTER`.
 It learns: `LVT` (localStorage `bae_lv_taste` + `data/users/<uid>/lvtaste`) stores what he used, rejected and wrote himself, and `lvTaste()` feeds it back into every prompt. A zone-based composition (subject opposite the text) was built and **rejected by Samer** — do not bring it back.
 
-**The box under each advisor idea is a conversation (v151).** Samer: he wants to discuss the idea, not have it rewritten "randomly from its own head". `lvTalk(i,say)` keeps a thread per option (`x.chat`): the art director answers in his language, may ask ONE question, and only **proposes** a brief (`m.prop`). The option's brief changes only when he presses "Use this version" (`lvApply`); "No, keep talking" records a rejection. "Another idea" and "Add a scene photo" still call `lvRedo`. Tested with a mocked Claude only.
+**The box under each advisor idea is a conversation (v152).** Samer: he wants to discuss the idea, not have it rewritten "randomly from its own head". `lvTalk(i,say)` keeps a thread per option (`x.chat`): the art director answers in his language, may ask ONE question, and only **proposes** a brief (`m.prop`). The option's brief changes only when he presses "Use this version" (`lvApply`); "No, keep talking" records a rejection. "Another idea" and "Add a scene photo" still call `lvRedo`. Tested with a mocked Claude only.
 
 **Edit one thing in a finished image.** `editImage(key, ask)`: Claude writes a strict edit prompt, the result is used as `@img1`, an outfit sheet as `@img2`.
 
