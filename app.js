@@ -2145,19 +2145,89 @@ const rlDocId=id=>"reel_"+String(id).replace(/[^A-Za-z0-9_-]/g,"");
 function rlClean(p){ const o=JSON.parse(JSON.stringify(p,(k,v)=>(k.startsWith("_")||k==="thumbs"||k==="thumb")?undefined:v)); o.chat=(o.chat||[]).slice(-80); o.kind="reel"; return o; }
 function rlCover(p){ const f=(p.scenes||[]).find(s=>s.frame?.id); if(f) return f.frame.id; const e=[...(p.characters||[]),...(p.locations||[])].find(x=>x.id&&!x.lib); if(e) return e.id; const l=(p.characters||[]).find(x=>x.lib); return l?"lib:ch_"+String(l.lib).toLowerCase():null; }
 const rlMeta=p=>({id:p.id,title:p.title||"Untitled reel",stage:p.stage||"idea",updatedAt:p.updatedAt||0,createdAt:p.createdAt||0,cover:rlCover(p),n:{cast:(p.characters||[]).length,loc:(p.locations||[]).length,shots:(p.scenes||[]).length,done:(p.scenes||[]).filter(s=>s.status==="done").length}});
+/* ---------- where a reel lives (v154) ----------
+   One account document holds at most 262,144 bytes (measured 17 Nov 2026). A long Director chat alone passes that, and from then on every
+   save to the account was refused while the page only said "Saved in this browser": Samer worked three days on a reel that existed on one
+   laptop only, and another device showed him the version of three days before.
+   So: the chat is its own document (reelchat_<id>) and both documents are trimmed to fit; what reached the account is remembered per reel
+   on this device (RL_SYNC); when this device and the account hold different versions, nobody is overwritten: he chooses, and the other
+   version stays as a copy; and a save that did not reach the account says so in a bar he cannot miss. */
+const RL_SYNC="bae_reels_v3_sync", RL_MAX=235000;
+const rlBytes=o=>new Blob([JSON.stringify(o)]).size;
+const rlSyncGet=id=>lsGet(RL_SYNC,{})[id]||null;
+const rlSyncSet=(id,v)=>{ const m=lsGet(RL_SYNC,{}); if(v) m[id]=v; else delete m[id]; lsSet(RL_SYNC,m); };
+const rlChatId=id=>"reelchat_"+String(id).replace(/[^A-Za-z0-9_-]/g,"");
+const rlClock=t=>{ if(!t) return ""; const d=new Date(t), n=new Date(), same=d.toDateString()===n.toDateString(); return (same?"today ":d.toLocaleDateString("en-GB",{day:"numeric",month:"short"})+" ")+d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}); };
+/* the chat as the account can hold it: the words always stay; the working data of older replies goes first, then the oldest messages */
+function rlFitChat(chat){ let c=(chat||[]).map(m=>({...m})); const big=()=>rlBytes(c)>RL_MAX;
+  for(let i=0;i<c.length-12&&big();i++){ delete c[i].prompt; delete c[i].mem; delete c[i].advisors; }
+  for(let i=0;i<c.length&&big();i++) if(String(c[i].text||"").length>6000) c[i].text=String(c[i].text).slice(0,6000)+" …";
+  while(c.length>8&&big()) c.shift();
+  return c; }
+function rlFitMain(body){ const m={...body,chat:[],chatDoc:1}; if(rlBytes(m)<=RL_MAX) return m;
+  m.scenes=(m.scenes||[]).map(x=>{ const y={...x}; delete y.history; return y; }); if(rlBytes(m)<=RL_MAX) return m;
+  m.events=(m.events||[]).slice(-20); m.ideasPrev=[]; if(rlBytes(m)<=RL_MAX) return m;
+  if(rlBytes(m)>258000) throw {code:"too_big",message:"This reel is larger than one account document can hold, even without its chat."}; return m; }
+async function rlCloudGet(id){ const s=await rlCol().doc(rlDocId(id)).get(); if(!s.exists) return null; const p=JSON.parse(JSON.stringify(s.data()));
+  if(p.chatDoc){ try{ const c=await rlCol().doc(rlChatId(id)).get(); p.chat=c.exists?(c.data()?.chat||[]):[]; }catch{ p.chat=[]; } delete p.chatDoc; }
+  return p; }
+/* send one version to the account. force = he chose this version over the account's, which is already kept as a copy */
+async function rlPush(body,force){ const id=body.id, sy=rlSyncGet(id);
+  if(!force){ const r=await rlCol().doc(rlDocId(id)).get(), at=r.exists?(r.data()?.updatedAt||0):0;
+    if(at&&at!==body.updatedAt&&(sy?at>sy.at:at>(body.updatedAt||0))) throw {code:"conflict",at}; }
+  const main=rlFitMain(body);
+  await rlCol().doc(rlChatId(id)).set({kind:"reelchat",id,updatedAt:body.updatedAt,chat:rlFitChat(body.chat)});
+  await rlCol().doc(rlDocId(id)).set(main);
+  rlSyncSet(id,{at:body.updatedAt}); }
+/* keep a version as a project of its own, so choosing one version never loses the other */
+async function rlStash(p,label){ const c=rlClean(p); c.id=rlNew().id; c.title=((p.title||"Untitled reel").slice(0,48)+" · "+label).slice(0,80); c.space=null;
+  const okLocal=lsSet(RL_P+c.id,c); if(okLocal){ const idx=lsGet(RL_IDX,[]); idx.unshift(rlMeta(c)); lsSet(RL_IDX,idx.slice(0,80)); } let okCloud=false;
+  if(RLS.mode==="account"){ try{ await rlPush(c,true); okCloud=true; }catch(e){ log("✕","reel copy",{code:e?.code,message:e?.message}); } }
+  if(!okLocal&&!okCloud) throw {code:"no_room",message:"The other version could not be kept as a copy (this browser's storage is full and the account refused it). Nothing was changed."};
+  return c.id; }
 async function rlList(){
   await rlStoreInit();
   let list=[];
   if(RLS.mode==="account"){ try{ const snap=await rlCol().where("kind","==","reel").get(); list=snap.docs.map(d=>d.data()).filter(Boolean).map(rlMeta); }catch(e){ log("✕","reels list",{code:e?.code}); } }
-  const m=new Map(); for(const x of [...lsGet(RL_IDX,[]),...list]){ const o=m.get(x.id); if(!o||(x.updatedAt||0)>=(o.updatedAt||0)) m.set(x.id,x); }
-  return [...m.values()].filter(x=>!lsGet("bae_reels_v3_del",[]).includes(x.id)).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  const loc=lsGet(RL_IDX,[]), lAt=new Map(loc.map(x=>[x.id,x.updatedAt||0])), cAt=new Map(list.map(x=>[x.id,x.updatedAt||0]));
+  const m=new Map(); for(const x of [...loc,...list]){ const o=m.get(x.id); if(!o||(x.updatedAt||0)>=(o.updatedAt||0)) m.set(x.id,x); }
+  return [...m.values()].filter(x=>!lsGet("bae_reels_v3_del",[]).includes(x.id)).map(x=>({...x,lAt:lAt.get(x.id)||0,cAt:cAt.get(x.id)||0,two:rlTwo(x.id,lAt.get(x.id)||0,cAt.get(x.id)||0)})).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
 }
+/* does this device hold a version that the account does not? "ask" = both moved or nobody knows: he must choose. "local" = only here. */
+function rlTwo(id,l,c){ if(RLS.mode!=="account"||!l) return ""; if(!c) return lsGet(RL_P+id,null)?"local":""; if(l===c) return ""; const sy=rlSyncGet(id);
+  if(sy) return c<=sy.at?(l>c?"local":""):(l<=sy.at?"":"ask");   /* the account still holds what this device sent: this device leads. It moved on elsewhere: fine if nothing new here, else ask */
+  return l>c?"local":(lsGet(RL_P+id,null)?"ask":""); }
 async function rlLoadProject(id){
-  await rlStoreInit(); let p=null;
-  if(RLS.mode==="account"){ try{ const s=await rlCol().doc(rlDocId(id)).get(); if(s.exists) p=JSON.parse(JSON.stringify(s.data())); }catch{} }
-  const lp=lsGet(RL_P+id,null); if(lp&&(!p||(lp.updatedAt||0)>(p.updatedAt||0))) p=lp;
+  await rlStoreInit(); let c=null;
+  if(RLS.mode==="account"){ try{ c=await rlCloudGet(id); }catch(e){ log("✕","reel load",{code:e?.code,message:e?.message}); } }
+  const l=lsGet(RL_P+id,null); let p=c||l;
+  if(c&&l){ const how=rlTwo(id,l.updatedAt||0,c.updatedAt||0);
+    if(how==="ask"){ p=await rlChoose(l,c); if(!p) return null; }
+    else p=(how==="local"||(l.updatedAt||0)===(c.updatedAt||0))?l:c;
+    if(p===c) rlSyncSet(id,{at:c.updatedAt||0}); }
+  else if(c) rlSyncSet(id,{at:c.updatedAt||0});
   if(p) rlUpgrade(p); return p;
 }
+/* two different versions of one reel: show both, let him pick, keep the other as a copy */
+function rlChoose(l,c){ return new Promise(done=>{
+  const facts=p=>{ const sc=p.scenes||[], cast=(p.characters||[]).map(x=>x.name).filter(Boolean).slice(0,4).join(", "), last=[...(p.chat||[])].reverse().find(m=>m.role==="u"&&m.text);
+    return `<ul><li><b>${esc(rlClock(p.updatedAt))}</b><span>last saved</span></li><li><b>${sc.length}</b><span>${sc.length===1?"scene":"scenes"}${sc[0]?.title?`: <span dir="auto">${esc(String(sc[0].title).slice(0,70))}</span>`:""}</span></li><li><b>${(p.characters||[]).length}</b><span>cast${cast?`: <span dir="auto">${esc(cast)}</span>`:""}</span></li><li><b>${(p.locations||[]).length}</b><span>places and props</span></li><li><b>${(p.chat||[]).length}</b><span>chat messages${last?`, last: <span dir="auto">“${esc(String(last.text).slice(0,60))}”</span>`:""}</span></li></ul>`; };
+  const d=document.createElement("div"); d.className="rl-vs"; d.setAttribute("role","dialog"); d.setAttribute("aria-modal","true"); d.setAttribute("aria-label","Two versions of this reel");
+  d.innerHTML=`<div class="rl-vs-box"><h2>Two versions of this reel</h2><p>This device and your account hold different versions of <b dir="auto">${esc(l.title||c.title||"this reel")}</b>. Choose the one to continue with. The other one is not deleted: it stays in your Reels as a copy.</p>
+    <div class="rl-vs-two"><section><h3>On this device</h3>${facts(l)}<button type="button" class="btn primary" data-pick="l">Continue with this device's version</button></section>
+    <section><h3>In your account</h3>${facts(c)}<button type="button" class="btn" data-pick="c">Continue with the account's version</button></section></div>
+    <button type="button" class="a-btn rl-vs-x" data-pick="">Decide later</button></div>`;
+  $("reels").appendChild(d); d.querySelector("[data-pick]").focus();
+  d.addEventListener("click",async e=>{ const b=e.target.closest("[data-pick]"); if(!b||d.dataset.busy) return; const k=b.dataset.pick; if(!k){ d.remove(); return done(null); }
+    d.dataset.busy="1"; b.textContent="Keeping the other version as a copy…";
+    const mine=k==="l"?l:c, other=k==="l"?c:l;
+    try{ await rlStash(other,k==="l"?"account version":"this device's version"); }
+    catch(err){ log("✕","reel stash",{message:err?.message}); delete d.dataset.busy; b.textContent="Try again"; let w=d.querySelector(".rl-warn"); if(!w){ w=document.createElement("p"); w.className="rl-warn"; d.querySelector(".rl-vs-box").appendChild(w); } w.textContent=(err?.message||"The other version could not be kept as a copy. Nothing was changed.")+" Use Backup on the card first."; return; }
+    /* the chosen version is a new, deliberate save: it gets today's time, so no other device mistakes an older copy for the newer one */
+    mine.updatedAt=Date.now();
+    if(k==="l") rlSyncSet(l.id,{at:c.updatedAt||0,chose:1}); else { lsSet(RL_P+c.id,rlClean(c)); rlSyncSet(c.id,{at:c.updatedAt||0,chose:1}); }
+    d.remove(); done(mine); });
+}); }
 function rlUpgrade(p){
   p.settings={...RL_DEF_SET,...(p.settings||{})}; p.ideas=p.ideas||[]; p.ideasPrev=p.ideasPrev||[]; p.characters=p.characters||[]; p.locations=p.locations||[]; p.scenes=p.scenes||[]; p.chat=p.chat||[];
   if(p.picked==null&&p.pickedIdea!=null&&p.ideas[p.pickedIdea]) p.picked=p.ideas[p.pickedIdea]; delete p.pickedIdea;
@@ -2174,17 +2244,43 @@ async function rlFlush(){
   if(!RL) return; const body=rlClean(RL);
   const okLocal=lsSet(RL_P+body.id,body);
   const idx=lsGet(RL_IDX,[]).filter(x=>x.id!==body.id); idx.unshift(rlMeta(body)); lsSet(RL_IDX,idx.slice(0,80));
-  if(RLS.mode!=="account"){ rlSavedState(okLocal?"local":"fail"); return; }
-  rlChain=rlChain.then(()=>rlCol().doc(rlDocId(body.id)).set(body)).then(()=>rlSavedState("saved"),e=>{ log("✕","reel save",{code:e?.code,message:e?.message}); rlSavedState(okLocal?"local":"fail"); });
+  if(RLS.mode!=="account"){ rlSavedState(okLocal?"local":"fail",okLocal?"":"This browser's storage is full."); return; }
+  if(RLS.clash===body.id){ rlSavedState("clash"); return; }
+  const force=!!rlSyncGet(body.id)?.chose;
+  rlChain=rlChain.then(()=>rlPush(body,force)).then(()=>rlSavedState("saved"),e=>{ log("✕","reel save",{code:e?.code,message:e?.message});
+    if(e?.code==="conflict"){ RLS.clash=body.id; RLS.clashAt=e.at; return rlSavedState("clash"); }
+    rlSavedState(okLocal?"local":"fail",e?.code==="too_big"?e.message:String(e?.message||e?.code||"").replace(/\(request_id[^)]*\)/i,"").slice(0,140)); });
   return rlChain;
 }
-function rlSavedState(s){ const el=$("rlSaved"); if(!el) return; el.dataset.s=s; el.textContent={saving:"Saving…",saved:"Saved to your account",local:"Saved in this browser",fail:"Couldn't save — storage is full"}[s]||""; }
+/* the small line beside the title, and a bar nobody can miss when the work is NOT in the account */
+function rlSavedState(s,why){ const el=$("rlSaved"); if(el){ el.dataset.s=s; el.textContent={saving:"Saving…",saved:"Saved to your account",local:"NOT in your account",clash:"NOT in your account",fail:"Couldn't save"}[s]||""; }
+  const bar=$("rlSyncBar"); if(!bar) return; if(s==="saving") return; if(s==="saved"){ bar.hidden=true; return; }
+  if(s==="local"&&RLS.mode!=="account"){ bar.hidden=true; if(el) el.textContent="Saved in this browser"; return; }
+  bar.hidden=false; bar.dataset.s=s;
+  bar.innerHTML=s==="clash"?`<span><b>This reel was changed on another device</b> (${esc(rlClock(RLS.clashAt))}). Your work here is safe in this browser, but it is not in your account yet.</span><span class="rl-sync-act"><button type="button" class="a-btn" data-rlsync="mine">Keep my version</button><button type="button" class="a-btn" data-rlsync="theirs">Open the other version</button><button type="button" class="a-btn" data-rlsync="bak">Download a backup</button></span>`
+    :s==="fail"?`<span><b>This reel could not be saved.</b> ${esc(why||"")} Download a backup now, before you close this page.</span><span class="rl-sync-act"><button type="button" class="a-btn" data-rlsync="bak">Download a backup</button><button type="button" class="a-btn" data-rlsync="retry">Try again</button></span>`
+    :`<span><b>Not saved to your account.</b> This reel is saved in this browser only, so your other devices do not have it. ${esc(why||"")}</span><span class="rl-sync-act"><button type="button" class="a-btn" data-rlsync="retry">Try again</button><button type="button" class="a-btn" data-rlsync="bak">Download a backup</button></span>`; }
+async function rlSyncAct(k){ if(!RL) return; const id=RL.id;
+  if(k==="bak") return rlBackup(RL);
+  if(k==="retry"){ rlSavedState("saving"); return rlFlush(); }
+  let other=null; try{ other=await rlCloudGet(id); }catch{}
+  if(k==="mine"){ if(other) await rlStash(other,"other device's version"); RLS.clash=null; RL.updatedAt=Date.now(); rlSyncSet(id,{at:other?.updatedAt||0,chose:1}); rlSavedState("saving"); return rlFlush(); }
+  if(k==="theirs"&&other){ await rlStash(RL,"this device's version"); RLS.clash=null; lsSet(RL_P+id,rlClean(other)); rlSyncSet(id,{at:other.updatedAt||0}); rlUpgrade(other); RL=other; rlSavedState("saved"); rlRender(); } }
+/* a reel as one file: the safety net that does not depend on any storage */
+async function rlBackup(p){ const body=rlClean(p), name=`BAE-reel-${String(body.title||"reel").replace(/[^\p{L}\p{N}]+/gu,"-").replace(/^-|-$/g,"").slice(0,40)||"reel"}-${(d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}-${String(d.getHours()).padStart(2,"0")}${String(d.getMinutes()).padStart(2,"0")}`)(new Date(body.updatedAt||Date.now()))}.json`;
+  const blob=new Blob([JSON.stringify({bae_reel_backup:1,savedAt:Date.now(),project:body})],{type:"application/json"});
+  try{ if(downloads&&!S.web){ await downloads.save({filename:name,data:blob}); return; } }catch(e){ if(e?.code==="declined") return; }
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click(); }
+async function rlRestore(file){ let o=null; try{ o=JSON.parse(await file.text()); }catch{} const p=o?.project; if(!o?.bae_reel_backup||!p||p.kind!=="reel") throw {message:"This file is not a BAE reel backup."};
+  const c=JSON.parse(JSON.stringify(p)); c.id=rlNew().id; c.title=((p.title||"Untitled reel").slice(0,60)+" · restored").slice(0,80); c.space=null; c.updatedAt=Date.now();
+  lsSet(RL_P+c.id,c); const idx=lsGet(RL_IDX,[]); idx.unshift(rlMeta(c)); lsSet(RL_IDX,idx.slice(0,80));
+  if(RLS.mode==="account"){ try{ await rlPush(c,true); }catch(e){ log("✕","reel restore",{code:e?.code,message:e?.message}); } } return c.id; }
 async function rlDelete(id){
   lsSet("bae_reels_v3_del",[...lsGet("bae_reels_v3_del",[]),id].slice(-200));
-  try{ localStorage.removeItem(RL_P+id); }catch{} lsSet(RL_IDX,lsGet(RL_IDX,[]).filter(x=>x.id!==id));
-  if(RLS.mode==="account"){ try{ await rlCol().doc(rlDocId(id)).delete(); }catch{} }
+  try{ localStorage.removeItem(RL_P+id); }catch{} lsSet(RL_IDX,lsGet(RL_IDX,[]).filter(x=>x.id!==id)); rlSyncSet(id,null);
+  if(RLS.mode==="account"){ try{ await rlCol().doc(rlDocId(id)).delete(); }catch{} try{ await rlCol().doc(rlChatId(id)).delete(); }catch{} }
 }
-async function rlDuplicate(id){ const p=await rlLoadProject(id); if(!p) return; const c=JSON.parse(JSON.stringify(p)); c.id=rlNew().id; c.title=(p.title||"Untitled reel")+" copy"; c.space=null; c.createdAt=c.updatedAt=Date.now(); const keep=RL; RL=c; await rlFlush(); RL=keep; }
+async function rlDuplicate(id){ const p=await rlLoadProject(id); if(!p) return; const c=JSON.parse(JSON.stringify(p)); c.id=rlNew().id; c.title=(p.title||"Untitled reel")+" copy"; c.space=null; c.createdAt=c.updatedAt=Date.now(); const keep=RL; RL=c; await rlFlush(); await rlChain; RL=keep; }
 
 /* ---------- thumbnails: cached in this browser by Magnific creation id, fetched again when missing ---------- */
 const rlTmem={}, rlFull={}, rlTQ=new Set(), rlTTried=new Set(); let rlTBusy=0;
@@ -3105,16 +3201,16 @@ function rlShowLib(){
   rlList().then(list=>{
     const box=$("rlProjects");
     const card=p=>{ const im=rlTGet(p.cover); if(!im&&p.cover) rlNeed(p.cover); const st=RL_STAGES.find(([k])=>k===p.stage)?.[1]||"Idea";
-      return `<article class="rl-pc"><button type="button" class="rl-pc-open" data-open="${esc(p.id)}"><span class="rl-pc-cover">${im?`<img src="${im}" alt="">`:`<i aria-hidden="true">${esc((p.title||"R").trim().slice(0,1).toUpperCase())}</i>`}</span><span class="rl-pc-meta"><b dir="auto">${esc(p.title)}</b><span>${esc(st)} · ${p.n?.cast||0} cast · ${p.n?.shots||0} shots${p.n?.done?` · ${p.n.done} filmed`:""}</span><span class="t12 muted">Edited ${rlAgo(p.updatedAt)}</span></span></button>
-        <div class="rl-pc-act"><button type="button" class="a-btn" data-dup="${esc(p.id)}">Duplicate</button><button type="button" class="a-btn" data-del="${esc(p.id)}">Delete</button></div></article>`; };
+      return `<article class="rl-pc"><button type="button" class="rl-pc-open" data-open="${esc(p.id)}"><span class="rl-pc-cover">${im?`<img src="${im}" alt="">`:`<i aria-hidden="true">${esc((p.title||"R").trim().slice(0,1).toUpperCase())}</i>`}</span><span class="rl-pc-meta"><b dir="auto">${esc(p.title)}</b><span>${esc(st)} · ${p.n?.cast||0} cast · ${p.n?.shots||0} shots${p.n?.done?` · ${p.n.done} filmed`:""}</span><span class="t12 muted">Edited ${rlAgo(p.updatedAt)}</span>${p.two==="ask"?`<span class="rl-pc-two">Two versions: this device ${esc(rlClock(p.lAt))}, account ${esc(rlClock(p.cAt))}. Open it to choose.</span>`:p.two==="local"?`<span class="rl-pc-two">The newest version is on this device only. Open it to send it to your account.</span>`:""}</span></button>
+        <div class="rl-pc-act">${p.two==="ask"?"":`<button type="button" class="a-btn" data-dup="${esc(p.id)}">Duplicate</button>`}<button type="button" class="a-btn" data-bak="${esc(p.id)}">Backup</button>${p.two?"":`<button type="button" class="a-btn" data-del="${esc(p.id)}">Delete</button>`}</div></article>`; };
     box.innerHTML=`<button type="button" class="rl-pc rl-pc-new" id="rlNewCard"><span class="plus" aria-hidden="true">+</span><b>New reel</b><span class="t12 muted">Start from an idea, a brief or a storyboard</span></button><button type="button" class="rl-pc rl-pc-new ux-pgcard" data-uxpg><span class="plus" aria-hidden="true">✎</span><b>Prompt Generator</b><span class="t12 muted">A ready prompt for a character, a place or a prop</span></button>`+list.map(card).join("");
   });
 }
 async function rlOpen(id){
-  const p=id?await rlLoadProject(id):null;
-  RL=p||rlNew(); if(!p) rlSave();
+  const p=id?await rlLoadProject(id):null; if(id&&!p) return rlShowLib();
+  RLS.clash=null; RL=p||rlNew(); if(!p) rlSave();
   $("rlLib").hidden=true; $("rlProjView").hidden=false; $("reels").dataset.mode="proj"; $("reels").dataset.view="chat";
-  clLoad().then(()=>{ if(RL){ rlLinkLibrary(); rlBoard(); } }); rlLinkLibrary(); rlSyncSettings(); rlSavedState(p?(RLS.mode==="account"?"saved":"local"):"saving"); rlRender();
+  clLoad().then(()=>{ if(RL){ rlLinkLibrary(); rlBoard(); } }); rlLinkLibrary(); rlSyncSettings(); rlSavedState("saving"); rlRender(); if(p) rlFlush();
   setTimeout(rlResume,400);
   $("reels").scrollTop=0; setTimeout(()=>$("rlInput").focus({preventScroll:true}),60);
 }
@@ -4805,9 +4901,13 @@ function uxInit(){
     if(e.target.closest("#rlNewCard")) return rlOpen(null);
     const o=e.target.closest("[data-open]"); if(o) return rlOpen(o.dataset.open);
     const d=e.target.closest("[data-dup]"); if(d){ d.disabled=true; await rlDuplicate(d.dataset.dup); return rlShowLib(); }
+    const k=e.target.closest("[data-bak]"); if(k){ const l=lsGet(RL_P+k.dataset.bak,null); let c=null; if(RLS.mode==="account"){ try{ c=await rlCloudGet(k.dataset.bak); }catch{} } const p=l&&c?((l.updatedAt||0)>=(c.updatedAt||0)?l:c):(l||c); if(l&&c&&(l.updatedAt||0)!==(c.updatedAt||0)){ await rlBackup(l); await rlBackup(c); } else if(p) await rlBackup(p); return; }
     const x=e.target.closest("[data-del]"); if(x){ if(x.dataset.sure){ await rlDelete(x.dataset.del); return rlShowLib(); } x.dataset.sure="1"; x.textContent="Delete for good?"; x.classList.add("danger"); setTimeout(()=>{ if(x.isConnected){ delete x.dataset.sure; x.textContent="Delete"; x.classList.remove("danger"); } },3500); }
   });
   $("rlOpenBrain").onclick=()=>rlShowBrain();
+  $("rlSyncBar")?.addEventListener("click",async e=>{ const b=e.target.closest("[data-rlsync]"); if(!b||b.disabled) return; b.disabled=true; try{ await rlSyncAct(b.dataset.rlsync); }catch(err){ log("✕","reel sync",{message:err?.message}); const w=$("rlSyncBar"); if(w&&err?.message) w.insertAdjacentHTML("beforeend",`<span class="t12">${esc(err.message)}</span>`); } finally{ if(b.isConnected) b.disabled=false; } });
+  $("rlRestoreBtn")?.addEventListener("click",()=>$("rlRestoreFile").click());
+  $("rlRestoreFile")?.addEventListener("change",async e=>{ const f=e.target.files?.[0]; e.target.value=""; if(!f) return; const st=$("rlStore"); try{ await rlRestore(f); rlShowLib(); }catch(err){ if(st) st.textContent=err?.message||"That file could not be restored."; } });
   $("rlBrainBack").onclick=()=>{ $("rlBrain").hidden=true; rlShowLib(); };
   $("rlBrainBody").addEventListener("submit",e=>{ const f=e.target.closest("#brcForm"); if(!f) return; e.preventDefault(); if(BRC.busy){ BRC.abort?.abort(); return; } brcSend(f.q.value); });
   $("rlBrainBody").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&e.target.closest?.("#brcForm textarea")){ e.preventDefault(); if(!BRC.busy) brcSend(e.target.value); } });
@@ -5451,10 +5551,11 @@ Return ONLY JSON: {"copy":"…","headline":"…","product":"…","message":"the 
     o.options=o.options.filter(x=>LV_TYPES[x?.type]).map(lvClean).sort((x,y)=>(+y.score||0)-(+x.score||0)); o.text_box=null; o.visual_box=lvBox(o.visual_box); o.visual_kind=o.visual_kind==="frame"?"frame":"full_bleed"; o.comp=lvComp(o); o.aspect=lvAspect(o); LV.out=o;
   }catch(e){ log("✕","layout advisor",{code:e?.code,message:e?.message}); LV.err=e?.code==="rate_limited"?"Too many requests. Try again in a minute.":"Couldn't read the layout. Try again."; }
   LV.busy=false; lvDraw(); }
-function lvDraw(){ const box=$("lvOut"); if(!box) return; const o=LV.out;
+function lvDraw(focus){ const box=$("lvOut"); if(!box) return; const o=LV.out;
   box.innerHTML=LV.busy?`<div class="lv-wait"><img src="${LV.thumb}" alt=""><span role="status">Reading your layout…</span></div>`:LV.err?`<p class="t12 bad" role="alert">${esc(LV.err)}</p>`:!o?"":`<div class="lv-res"><div class="lv-top"><div class="lv-map"><img src="${LV.thumb}" alt="Your layout"></div><div>${o.product||o.message?`<p class="lv-msg" dir="auto" data-noi18n>${o.product?`<b>${esc(String(o.product).slice(0,40))}</b>`:""}${o.message?` ${esc(String(o.message).slice(0,160))}`:""}</p>`:""}<span class="t12 muted">Copy</span><p dir="auto" data-noi18n>${esc(String(o.copy||"").slice(0,240))}</p><p class="lv-verdict" dir="auto" data-noi18n>${esc(o.verdict||"")}</p><p class="t12 muted lv-key"><span>Subject always in the centre</span><span data-noi18n>${esc(o.aspect||"")}</span></p></div><button type="button" class="bi-x" data-lvx aria-label="Close the suggestions">Close</button></div>
-    <div class="lv-opts">${o.options.map((x,i)=>{ const [label,mode]=LV_TYPES[x.type]; return `<div class="lv-opt${i===0?" best":""}"><div class="h"><b>${label}</b><span class="sc">${Math.round(+x.score||0)}%</span>${i===0?`<span class="tag">Best fit</span>`:""}</div><p class="t12" dir="auto" data-noi18n>${esc(x.why||"")}</p>${mode!=="none"&&x.brief?`<p class="br" dir="auto" data-noi18n>${esc(x.brief)}</p>${(x.people||[]).map((p,k)=>`<div class="lv-cast"><span class="t12 muted" data-noi18n>${esc(p.role||"Suggested")}</span>${p.cast?`<span class="pill">${p.castSrc?`<img src="${esc(p.castSrc)}" alt="">`:""}<span data-noi18n>${esc(p.cast)}</span><button type="button" data-lvdrop="${i}" data-k="cast" data-p="${k}" aria-label="Remove the suggested character">×</button></span>`:""}${p.outfit?`<span class="pill">${p.outfitSrc?`<img class="of" src="${esc(p.outfitSrc)}" alt="">`:""}<span data-noi18n>${esc(p.outfit)}</span><button type="button" data-lvdrop="${i}" data-k="outfit" data-p="${k}" aria-label="Remove the suggested outfit">×</button></span>`:""}</div>`).join("")}${x.sceneUrl?`<div class="lv-cast"><span class="t12 muted">Scene reference</span><span class="pill"><img class="of" src="${x.sceneUrl}" alt="Your scene reference"><button type="button" data-lvdrop="${i}" data-k="scene" aria-label="Remove the scene reference">×</button></span></div>`:""}<div class="rl-btns"><button type="button" class="btn small ${i===0?"primary":""}" data-lvuse="${i}">Use this brief</button><button type="button" class="btn small" data-lvmore="${i}" ${x.busy?"disabled":""}>${x.busy?"Thinking…":"Another idea"}</button>${mode==="photo"?`<label class="btn small lv-scene">Add a scene photo<input type="file" accept="image/*" data-lvscene="${i}" ${x.busy?"disabled":""}></label>`:""}</div><form class="lv-say" data-lvsay="${i}"><input class="rl-field" name="q" dir="auto" placeholder="Or tell me what you have in mind…" aria-label="Your own idea for ${label}" ${x.busy?"disabled":""}><button type="submit" class="btn small" ${x.busy?"disabled":""}>Rewrite</button></form>${x.err?`<p class="t12 bad" role="alert">${esc(x.err)}</p>`:""}`:`<p class="t12 muted">No image. Let the copy lead.</p>`}</div>`; }).join("")}</div>${LVT.length?`<p class="t12 muted lv-learn"><span>Learning from ${LVT.length} of your choices.</span> <button type="button" class="bi-x" data-lvforget>Forget them</button></p>`:""}</div>`;
-  if(typeof uxT==="function") uxT(box); }
+    <div class="lv-opts">${o.options.map((x,i)=>{ const [label,mode]=LV_TYPES[x.type]; return `<div class="lv-opt${i===0?" best":""}"><div class="h"><b>${label}</b><span class="sc">${Math.round(+x.score||0)}%</span>${i===0?`<span class="tag">Best fit</span>`:""}</div><p class="t12" dir="auto" data-noi18n>${esc(x.why||"")}</p>${mode!=="none"&&x.brief?`<p class="br" dir="auto" data-noi18n>${esc(x.brief)}</p>${(x.people||[]).map((p,k)=>`<div class="lv-cast"><span class="t12 muted" data-noi18n>${esc(p.role||"Suggested")}</span>${p.cast?`<span class="pill">${p.castSrc?`<img src="${esc(p.castSrc)}" alt="">`:""}<span data-noi18n>${esc(p.cast)}</span><button type="button" data-lvdrop="${i}" data-k="cast" data-p="${k}" aria-label="Remove the suggested character">×</button></span>`:""}${p.outfit?`<span class="pill">${p.outfitSrc?`<img class="of" src="${esc(p.outfitSrc)}" alt="">`:""}<span data-noi18n>${esc(p.outfit)}</span><button type="button" data-lvdrop="${i}" data-k="outfit" data-p="${k}" aria-label="Remove the suggested outfit">×</button></span>`:""}</div>`).join("")}${x.sceneUrl?`<div class="lv-cast"><span class="t12 muted">Scene reference</span><span class="pill"><img class="of" src="${x.sceneUrl}" alt="Your scene reference"><button type="button" data-lvdrop="${i}" data-k="scene" aria-label="Remove the scene reference">×</button></span></div>`:""}<div class="rl-btns"><button type="button" class="btn small ${i===0?"primary":""}" data-lvuse="${i}">Use this brief</button><button type="button" class="btn small" data-lvmore="${i}" ${x.busy?"disabled":""}>${x.busy?"Thinking…":"Another idea"}</button>${mode==="photo"?`<label class="btn small lv-scene">Add a scene photo<input type="file" accept="image/*" data-lvscene="${i}" ${x.busy?"disabled":""}></label>`:""}</div>${(x.chat||[]).length||x.talking?`<div class="lv-chat" data-lvchat="${i}">${(x.chat||[]).map((m,k)=>m.r==="u"?`<div class="lv-m u" dir="auto" data-noi18n>${esc(m.t)}</div>`:`<div class="lv-m a">${m.t?`<p dir="auto" data-noi18n>${esc(m.t)}</p>`:""}${m.prop?`<div class="lv-prop${m.done?" done":""}"><span class="t12 muted">${m.done==="used"?"This is the brief now":m.done==="no"?"Not used":"Proposed brief"}</span><p class="br" dir="auto" data-noi18n>${esc(m.prop.brief)}</p>${m.done?"":`<div class="rl-btns"><button type="button" class="btn small primary" data-lvapply="${i}" data-k="${k}">Use this version</button><button type="button" class="btn small" data-lvskip="${i}" data-k="${k}">No, keep talking</button></div>`}</div>`:""}</div>`).join("")}${x.talking?`<div class="lv-m a"><span class="rl-typing"><i></i><i></i><i></i></span></div>`:""}</div>`:""}<form class="lv-say" data-lvsay="${i}"><input class="rl-field" name="q" dir="auto" placeholder="Talk it over: what do you have in mind, or what should change?" aria-label="Discuss the idea for ${label}" ${x.busy||x.talking?"disabled":""}><button type="submit" class="btn small" ${x.busy||x.talking?"disabled":""}>Send</button></form><p class="t12 muted lv-hint">Nothing changes in the brief until you press "Use this version".</p>${x.err?`<p class="t12 bad" role="alert">${esc(x.err)}</p>`:""}`:`<p class="t12 muted">No image. Let the copy lead.</p>`}</div>`; }).join("")}</div>${LVT.length?`<p class="t12 muted lv-learn"><span>Learning from ${LVT.length} of your choices.</span> <button type="button" class="bi-x" data-lvforget>Forget them</button></p>`:""}</div>`;
+  if(typeof uxT==="function") uxT(box);
+  if(focus!==undefined){ const c=box.querySelector(`[data-lvchat="${focus}"]`); if(c) c.scrollTop=c.scrollHeight; const f=box.querySelector(`[data-lvsay="${focus}"] input`); if(f&&!f.disabled) f.focus({preventScroll:true}); } }
 /* a different scene for one option: a fresh idea, or the user's own idea turned into a brief */
 async function lvRedo(i,say,file){ const o=LV.out, x=o?.options?.[i]; if(!x||x.busy) return; const [label]=LV_TYPES[x.type]; say=String(say||"").trim(); const photo=x.type!=="icon";
   if(say) lvtAdd("own",o,x,{say}); else if(!file&&x.brief) lvtAdd("rejected",o,x);
@@ -5478,6 +5579,31 @@ Return ONLY JSON: {"brief":"…","why":"one short sentence in ${UX.lang==="ar"?"
     const b=String(r?.brief||"").trim(); if(!b) throw {code:"bad_answer"}; x.brief=b; if(r.why) x.why=String(r.why); if(photo){ x.people=r.people; x.cast=r.cast; x.outfit=r.outfit; lvClean(x); } }
   catch(e){ log("✕","layout idea",{code:e?.code}); x.err=e?.code==="rate_limited"?"Too many requests. Try again in a minute.":"Couldn't write another idea. Try again."; }
   x.busy=false; lvDraw(); }
+/* talk an idea over before anything is rewritten: the art director answers, may ask one question, and only PROPOSES a brief; the option changes when the designer accepts it */
+async function lvTalk(i,say){ const o=LV.out, x=o?.options?.[i]; say=String(say||"").trim(); if(!x||x.busy||x.talking||!say) return; const [label]=LV_TYPES[x.type], photo=x.type!=="icon"; x.chat=x.chat||[]; x.chat.push({r:"u",t:say}); x.talking=true; x.err=""; lvDraw(i);
+  try{ const r=await rlAsk(`You are the senior art director for Bank al Etihad (Jordan), talking with the designer about ONE visual idea for a layout. This is a conversation between two colleagues: answer what he says, think with him, be honest. You do NOT rewrite anything on your own.
+THE VISUAL TYPE: ${label} (${x.type==="photo_studio"?"one person on a plain warm cream wall, minimal, tailored, calm":x.type==="photo_lifestyle"?"real people in a real modern place in Amman, candid daily life":"one BAE 3D glass icon with a single focal object, no people"}).
+LAYOUT COPY: "${String(o.copy||"").slice(0,400)}"
+PRODUCT: ${o.product||"unknown"} · THE PROMISE OF THE COPY: ${o.message||"unknown"} · SPEAKS TO: ${o.audience||"unknown"} · TONE: ${o.tone||"unknown"}
+THE BRIEF ON THE TABLE NOW: "${x.brief}"
+HOUSE RULES (never broken): ${photo?"candid, nobody looks at the camera, people caught in a real action; camera three-quarter, side, behind or over the shoulder; ":""}the subject in the CENTRE of the frame with calm space on both sides; a quiet uncluttered scene with one focus; Jordanian context; no text and no other brands in the image; show the human result of the product, never the product itself, a branch, cash or a phone screen with UI.
+THE TALK SO FAR:
+${x.chat.slice(-10).map(m=>`${m.r==="u"?"DESIGNER":"YOU"}: ${m.t||""}${m.prop?` [you proposed: "${m.prop.brief}"${m.done==="no"?" — he said no":m.done==="used"?" — he accepted it":""}]`:""}`).join("\n")}
+HOW TO ANSWER
+- "say": 1 to 3 short sentences in the DESIGNER'S language (he usually writes Jordanian Arabic; answer the same way, warm and direct). React to what he actually said. If his idea is good, say why it fits the copy. If it weakens the message or breaks a house rule, say so plainly and offer the nearest thing that works. If what he wants is not clear yet, ask ONE short question and propose nothing.
+- "proposal": null while you are still discussing or asking. Give a proposal ONLY when he asked for a change or agreed to one and it is clear enough to write. Then change ONLY what was discussed and keep everything else of the brief on the table. The proposal is a brief in English for the image generator, 25 to 45 words, concrete: who or what, doing what, wardrobe or object, mood, the subject centred with calm space on both sides.
+${photo?lvCastInfo():""}
+${lvTaste()}
+Return ONLY JSON: {"say":"…","proposal":null}  or  {"say":"…","proposal":{"brief":"…","why":"one short sentence in the designer's language on how it fits the copy"${photo?`,"people":[{"role":"","cast":"","outfit":""}]`:""}}}`,{modelTier:"default",cache:false});
+    const m={r:"a",t:String(r?.say||"").trim().slice(0,700)}, b=String(r?.proposal?.brief||"").trim();
+    if(b){ const tmp={people:r.proposal.people}; if(photo) lvClean(tmp); m.prop={brief:b.slice(0,900),why:String(r.proposal.why||"").slice(0,300),people:photo?tmp.people:[]}; }
+    if(!m.t&&!m.prop) throw {code:"bad_answer"}; x.chat.push(m); }
+  catch(e){ log("✕","layout talk",{code:e?.code}); x.err=e?.code==="rate_limited"?"Too many requests. Try again in a minute.":"I couldn't answer that. Try again."; }
+  x.talking=false; lvDraw(i); }
+function lvApply(i,k,yes){ const o=LV.out, x=o?.options?.[i], m=x?.chat?.[k]; if(!m?.prop||m.done) return;
+  if(yes){ x.past=x.past||[]; if(x.brief&&!x.past.includes(x.brief)) x.past.push(x.brief); x.brief=m.prop.brief; if(m.prop.why) x.why=m.prop.why; if(x.type!=="icon"&&m.prop.people?.length) x.people=m.prop.people; m.done="used"; lvtAdd("own",o,x,{say:[...x.chat].slice(0,k).reverse().find(q=>q.r==="u")?.t||""}); }
+  else { m.done="no"; lvtAdd("rejected",o,{...x,brief:m.prop.brief}); }
+  lvDraw(i); }
 function lvUse(i){ const o=LV.out, x=o?.options?.[i]; if(!x) return; const mode=LV_TYPES[x.type][1]; if(mode==="none") return;
   if(S.mode!==mode) setMode(mode);
   if(mode==="photo"){ const want=x.type==="photo_studio"?"Studio":"On-location"; document.querySelector(`.seg[data-key="setting"] button[data-v="${want}"]`)?.click(); }
@@ -5492,8 +5618,8 @@ function lvUse(i){ const o=LV.out, x=o?.options?.[i]; if(!x) return; const mode=
   card.addEventListener("dragleave",e=>{ if(!card.contains(e.relatedTarget)) d.classList.remove("over"); });
   card.addEventListener("drop",e=>{ const x=[...(e.dataTransfer?.files||[])].find(y=>/^image\//.test(y.type)); d.classList.remove("over"); if(x){ e.preventDefault(); e.stopPropagation(); lvRun(x); } });
   $("lvOut").addEventListener("change",e=>{ const s=e.target.matches?.("[data-lvscene]")?e.target:null; const f=s?.files?.[0]; if(f){ const i=+s.dataset.lvscene; const q=$("lvOut").querySelector(`[data-lvsay="${i}"] input`)?.value||""; lvRedo(i,q,f); } });
-  $("lvOut").addEventListener("submit",e=>{ const f=e.target.closest("[data-lvsay]"); if(!f) return; e.preventDefault(); const q=String(new FormData(f).get("q")||"").trim(); if(q) lvRedo(+f.dataset.lvsay,q); else f.querySelector("input")?.focus(); });
-  $("lvOut").addEventListener("click",e=>{ const u=e.target.closest("[data-lvuse]"); if(u){ lvUse(+u.dataset.lvuse); return; } const mo=e.target.closest("[data-lvmore]"); if(mo){ lvRedo(+mo.dataset.lvmore,""); return; }
+  $("lvOut").addEventListener("submit",e=>{ const f=e.target.closest("[data-lvsay]"); if(!f) return; e.preventDefault(); const q=String(new FormData(f).get("q")||"").trim(); if(q) lvTalk(+f.dataset.lvsay,q); else f.querySelector("input")?.focus(); });
+  $("lvOut").addEventListener("click",e=>{ const ap=e.target.closest("[data-lvapply],[data-lvskip]"); if(ap){ lvApply(+(ap.dataset.lvapply??ap.dataset.lvskip),+ap.dataset.k,ap.hasAttribute("data-lvapply")); return; } const u=e.target.closest("[data-lvuse]"); if(u){ lvUse(+u.dataset.lvuse); return; } const mo=e.target.closest("[data-lvmore]"); if(mo){ lvRedo(+mo.dataset.lvmore,""); return; }
     const dr=e.target.closest("[data-lvdrop]"); if(dr){ const x=LV.out?.options?.[+dr.dataset.lvdrop]; if(x){ const k=dr.dataset.k; if(k==="scene"){ try{ URL.revokeObjectURL(x.sceneUrl); }catch{} x.scene=null; x.sceneUrl=""; } else { const p=x.people?.[+dr.dataset.p]; if(p){ p[k]=""; p[k+"Src"]=""; x.people=x.people.filter(q=>q.cast||q.outfit); } } lvDraw(); } return; } if(e.target.closest("[data-lvforget]")){ LVT=[]; lvtSave(); lvDraw(); return; } if(e.target.closest("[data-lvx]")){ LV.out=null; lvDraw(); } });
 })();
 
@@ -6419,6 +6545,117 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
   const open=()=>{ P.hidden=false; P.scrollTop=0; draw(); };
   $("openResize")?.addEventListener("click",open); $("closeResize")?.addEventListener("click",()=>{ P.hidden=true; $("openResize")?.focus(); });
   window.__rz={makePlan,steps,R};
+})();
+
+/* ======================================================================================================
+   BAE 3D Booth (phase 1): the studio sends booth jobs to the render Mac and shows what comes back.
+   Studio  ->  "BAE 3D Booth" connector (Cloudflare worker: booth/bridge)  ->  Blender add-on on the Mac.
+   The Mac pairs once: its add-on shows a 6-digit code, someone approves it here. Jobs run in a background Blender
+   on the Mac (Metal GPU); the pictures, previews and the .blend come back through the connector in 512 KB pieces.
+   Phase 1 = the plumbing + a test build. Plan / designs / result / film come in the next phases.
+   ====================================================================================================== */
+(()=>{
+  const P=$("booth"); if(!P) return; const body=$("boBody");
+  const BSRV="BAE 3D Booth", CHB=524288;
+  const DEMO={"name":"Test booth","file":"BAE_test_booth","units":"cm","width":1000,"depth":488,"height":250,"orbit_frames":84,"floors":[{"name":"Booth floor","x":0,"y":0,"w":660,"d":488,"colour":"#D9D4CA"},{"name":"Outdoor seating floor (Area 5)","x":660,"y":0,"w":340,"d":488,"colour":"#C9C2B5"}],"walls":[{"name":"Exterior front","from":[0,0],"to":[660,0],"thick":25,"openings":[{"name":"Door 01","at":144,"width":399,"height":190,"post":{"width":10,"height":185},"radius":30}]},{"name":"Exterior back","from":[660,488],"to":[0,488],"thick":25,"openings":[{"name":"Door 02","at":117,"width":399,"height":190,"post":{"width":10,"height":185},"radius":30}]},{"name":"Exterior left","from":[0,488],"to":[0,0],"thick":10},{"name":"Exterior right","from":[660,0],"to":[660,488],"thick":10,"openings":[{"name":"Door 03","at":163,"width":170,"height":190,"radius":30}]},{"name":"Star advent wall (Area 3)","from":[543,463],"to":[650,342],"thick":4,"colour":"#C8321E","height":250}],"pieces":[{"type":"box","name":"Area 1 units (photobooth, post cards, storage)","x":10,"y":0,"w":120,"d":488,"h":200,"z":0,"colour":"#D62D20"},{"type":"table","name":"Bar table 1 (60 cm)","x":164,"y":347,"r":30,"h":110,"colour":"#2B2B2B"},{"type":"table","name":"Bar table 2 (60 cm)","x":164,"y":226,"r":30,"h":110,"colour":"#2B2B2B"},{"type":"cylinder","name":"Activities table (180 cm)","x":406,"y":218,"r":90,"h":75,"z":0,"colour":"#E8451E"},{"type":"ring","name":"Stool","x":406,"y":218,"ring":116,"r":15,"h":45,"count":10,"start":18,"colour":"#B9301C"},{"type":"cylinder","name":"Pendant light 1","x":406,"y":218,"r":16,"h":22,"z":178,"colour":"#B9301C"},{"type":"cylinder","name":"Pendant cord 1","x":406,"y":218,"r":0.6,"h":50,"z":200,"colour":"#222222"},{"type":"cylinder","name":"Pendant light 2","x":451,"y":218,"r":16,"h":22,"z":178,"colour":"#B9301C"},{"type":"cylinder","name":"Pendant cord 2","x":451,"y":218,"r":0.6,"h":50,"z":200,"colour":"#222222"},{"type":"cylinder","name":"Pendant light 3","x":361,"y":218,"r":16,"h":22,"z":178,"colour":"#B9301C"},{"type":"cylinder","name":"Pendant cord 3","x":361,"y":218,"r":0.6,"h":50,"z":200,"colour":"#222222"},{"type":"cylinder","name":"Pendant light 4","x":406,"y":263,"r":16,"h":22,"z":178,"colour":"#B9301C"},{"type":"cylinder","name":"Pendant cord 4","x":406,"y":263,"r":0.6,"h":50,"z":200,"colour":"#222222"},{"type":"cylinder","name":"Pendant light 5","x":406,"y":173,"r":16,"h":22,"z":178,"colour":"#B9301C"},{"type":"cylinder","name":"Pendant cord 5","x":406,"y":173,"r":0.6,"h":50,"z":200,"colour":"#222222"},{"type":"box","name":"Glass wall back","x":660,"y":486,"w":340,"d":2,"h":250,"z":0,"colour":"#DCEBF0","alpha":0.25},{"type":"box","name":"Glass wall right","x":998,"y":0,"w":2,"d":488,"h":250,"z":0,"colour":"#DCEBF0","alpha":0.25},{"type":"box","name":"Glass wall front","x":660,"y":0,"w":340,"d":2,"h":250,"z":0,"colour":"#DCEBF0","alpha":0.25},{"type":"box","name":"Glass post front right","x":994,"y":0,"w":6,"d":6,"h":250,"z":0,"colour":"#D62D20"},{"type":"box","name":"Glass post back right","x":994,"y":482,"w":6,"d":6,"h":250,"z":0,"colour":"#D62D20"},{"type":"box","name":"Glass post front 773","x":773,"y":0,"w":6,"d":6,"h":250,"z":0,"colour":"#D62D20"},{"type":"box","name":"Glass post back 773","x":773,"y":482,"w":6,"d":6,"h":250,"z":0,"colour":"#D62D20"},{"type":"box","name":"Glass post front 886","x":886,"y":0,"w":6,"d":6,"h":250,"z":0,"colour":"#D62D20"},{"type":"box","name":"Glass post back 886","x":886,"y":482,"w":6,"d":6,"h":250,"z":0,"colour":"#D62D20"},{"type":"box","name":"Glass post right 160","x":994,"y":160,"w":6,"d":6,"h":250,"z":0,"colour":"#D62D20"},{"type":"box","name":"Glass post right 322","x":994,"y":322,"w":6,"d":6,"h":250,"z":0,"colour":"#D62D20"},{"type":"box","name":"Glass top beam back","x":660,"y":482,"w":340,"d":6,"h":6,"z":244,"colour":"#D62D20"},{"type":"box","name":"Glass top beam front","x":660,"y":0,"w":340,"d":6,"h":6,"z":244,"colour":"#D62D20"},{"type":"box","name":"Glass top beam right","x":994,"y":0,"w":6,"d":488,"h":6,"z":244,"colour":"#D62D20"},{"type":"box","name":"Table 1 base","x":735,"y":85,"w":50,"d":50,"h":61,"z":0,"colour":"#D62D20"},{"type":"box","name":"Table 1 top (70 x 70)","x":725,"y":75,"w":70,"d":70,"h":4,"z":61,"colour":"#F15A22"},{"type":"box","name":"Chair 1","x":676,"y":88,"w":44,"d":44,"h":45,"z":0,"colour":"#B9301C"},{"type":"box","name":"Chair 2","x":800,"y":88,"w":44,"d":44,"h":45,"z":0,"colour":"#B9301C"},{"type":"box","name":"Chair 3","x":738,"y":150,"w":44,"d":44,"h":45,"z":0,"colour":"#B9301C"},{"type":"box","name":"Table 2 base","x":855,"y":219,"w":50,"d":50,"h":61,"z":0,"colour":"#D62D20"},{"type":"box","name":"Table 2 top (70 x 70)","x":845,"y":209,"w":70,"d":70,"h":4,"z":61,"colour":"#F15A22"},{"type":"box","name":"Chair 4","x":796,"y":222,"w":44,"d":44,"h":45,"z":0,"colour":"#B9301C"},{"type":"box","name":"Chair 5","x":920,"y":222,"w":44,"d":44,"h":45,"z":0,"colour":"#B9301C"},{"type":"box","name":"Chair 6","x":858,"y":284,"w":44,"d":44,"h":45,"z":0,"colour":"#B9301C"},{"type":"box","name":"Table 3 base","x":735,"y":353,"w":50,"d":50,"h":61,"z":0,"colour":"#D62D20"},{"type":"box","name":"Table 3 top (70 x 70)","x":725,"y":343,"w":70,"d":70,"h":4,"z":61,"colour":"#F15A22"},{"type":"box","name":"Chair 7","x":676,"y":356,"w":44,"d":44,"h":45,"z":0,"colour":"#B9301C"},{"type":"box","name":"Chair 8","x":800,"y":356,"w":44,"d":44,"h":45,"z":0,"colour":"#B9301C"},{"type":"box","name":"Chair 9","x":738,"y":418,"w":44,"d":44,"h":45,"z":0,"colour":"#B9301C"},{"type":"cylinder","name":"Floor lamp 1 pole","x":690,"y":450,"r":2,"h":150,"z":0,"colour":"#B8935A","metal":1,"rough":0.3},{"type":"cylinder","name":"Floor lamp 1 shade","x":690,"y":450,"r":18,"h":26,"z":150,"colour":"#FFD9B0","emit":3},{"type":"cylinder","name":"Floor lamp 2 pole","x":968,"y":40,"r":2,"h":150,"z":0,"colour":"#B8935A","metal":1,"rough":0.3},{"type":"cylinder","name":"Floor lamp 2 shade","x":968,"y":40,"r":18,"h":26,"z":150,"colour":"#FFD9B0","emit":3},{"type":"box","name":"Gift box 02 (back end of the star)","x":481,"y":401,"w":60,"d":45,"h":90,"z":0,"colour":"#F15A22"},{"type":"box","name":"Gift box 01 (back end, front)","x":442,"y":384,"w":50,"d":40,"h":45,"z":0,"colour":"#D62D20"},{"type":"box","name":"Gift box 03 (back end, small)","x":497,"y":366,"w":40,"d":30,"h":35,"z":0,"colour":"#E8451E"},{"type":"box","name":"Gift box 02 (door end of the star)","x":579,"y":294,"w":55,"d":45,"h":80,"z":0,"colour":"#D62D20"},{"type":"box","name":"Gift box 04 (door end, front)","x":535,"y":290,"w":50,"d":35,"h":40,"z":0,"colour":"#F15A22"},{"type":"box","name":"Gift box 01 (door end, top)","x":589,"y":298,"w":35,"d":35,"h":30,"z":80,"colour":"#F15A22"},{"type":"box","name":"TV 65 inch (on the TV wall)","x":645,"y":25,"w":4,"d":138,"h":89.6,"z":121.5,"colour":"#151515","rough":0.2}],"orbit_fps":12,"cameras":[{"file":"08_star_corner","name":"Star corner","eye":[300,205,135],"look":[590,400,100],"lens":22},{"file":"09_buzzer_corner","name":"Buzzer corner","eye":[455,185,140],"look":[640,60,122],"lens":20}]};
+  const B={st:null,err:"",errCode:"",jobs:[],job:null,busy:"",imgs:{},timer:0,open:false};
+  const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
+  const ago=t=>{ if(!t) return ""; const s=Math.max(0,(Date.now()-t)/1000); return s<60?"just now":s<3600?Math.round(s/60)+" min ago":s<86400?Math.round(s/3600)+" h ago":new Date(t).toLocaleDateString(); };
+  const bcall=async(tool,input)=>{ if(!mcp) throw {code:"capability_disabled"}; log("→","booth "+tool,tool==="booth_upload"?{...input,data:"…"}:input);
+    try{ const r=await mcp.callTool(BSRV,tool,input||{},{cache:false}); const v=r?.payload&&typeof r.payload==="object"?r.payload:(()=>{ try{ return JSON.parse((r?.content||[]).map(c=>c.text||"").join("")); }catch{ return {}; } })(); return v; }
+    catch(e){ log("✕","booth "+tool,{code:e?.code,message:e?.message}); throw e; } };
+  const setupCode=c=>/server_not_connected|not_in_manifest|selection_required|needs_reauth|not_granted|capability_disabled|server_not_found/.test(String(c||""));
+
+  async function refresh(){
+    try{ B.st=await bcall("booth_status"); B.err=""; B.errCode="";
+      const j=await bcall("booth_jobs",{limit:8}); B.jobs=j.jobs||[];
+      if(B.job){ const k=await bcall("booth_job",{job_id:B.job.id}); B.job=k; if(k.status==="done") await previews(k); }
+    }catch(e){ B.errCode=e?.code||"error"; B.err=e?.message||String(e?.code||e); }
+    draw(); schedule();
+  }
+  function schedule(){ clearTimeout(B.timer); if(!B.open||P.hidden) return;
+    const live=(B.st?.devices||[]).some(d=>d.status==="pending")||B.jobs.some(j=>j.status==="queued"||j.status==="running");
+    if(setupCode(B.errCode)) return; B.timer=setTimeout(refresh,live?4000:20000); }
+
+  async function fetchFile(o){ let off=0, parts=[];
+    while(off!=null){ const p=await bcall("booth_download",{file_id:o.file_id,offset:off}); parts.push(b64Blob(p.data,o.mime)); off=p.next; }
+    return new Blob(parts,{type:o.mime}); }
+  async function previews(k){ for(const o of k.outputs||[]){ if(!/_preview\.jpg$/.test(o.path)||B.imgs[o.file_id]) continue;
+      try{ B.imgs[o.file_id]=URL.createObjectURL(await fetchFile(o)); }catch{} } }
+  const saveB=async(b,name)=>{ if(S.web||!downloads){ const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1500); return; }
+    try{ await downloads.save({filename:name,data:b}); }catch(e){ if(e?.code!=="declined") throw e; } };
+  async function download(o,btn){ const was=btn.textContent; btn.disabled=true; btn.textContent="Downloading…";
+    try{ let b=await fetchFile(o), name=o.path;
+      if(/\.blend$/.test(name)){ if(!window.JSZip) throw new Error("zip library didn't load"); const z=new JSZip(); z.file(name,b); b=await z.generateAsync({type:"blob"}); name=name.replace(/\.blend$/,"_blend.zip"); }
+      await saveB(b,name); btn.textContent="Saved"; }
+    catch(e){ btn.textContent="Couldn't download"; log("✕","booth download",{code:e?.code,message:e?.message}); }
+    setTimeout(()=>{ btn.disabled=false; btn.textContent=was; },2500); }
+
+  async function test(){ B.busy="Sending the test booth…"; draw();
+    try{ const r=await bcall("booth_submit",{title:"Test booth",kind:"build",spec:DEMO,options:{views:["01_front_left","05_inside"],width:1920,height:1080,samples:64,blend:true}});
+      B.job={id:r.job_id,status:"queued",pct:0,msg:"Waiting for a render Mac",outputs:[]}; }
+    catch(e){ B.err=e?.message||String(e?.code); B.errCode=e?.code||""; }
+    B.busy=""; refresh(); }
+  async function devAct(id,action,btn){ btn.disabled=true; try{ await bcall("booth_device",{device_id:id,action}); }catch(e){ B.err=e?.message||String(e?.code); } refresh(); }
+  async function cancel(id){ try{ await bcall("booth_cancel",{job_id:id}); }catch{} refresh(); }
+
+  function setupHTML(){
+    const why=B.errCode==="needs_reauth"?"The BAE 3D Booth connector needs to be reconnected (claude.ai → Settings → Connectors).":B.errCode==="not_in_manifest"?"The BAE 3D Booth connector is turned off for this page. Turn it on from this page's permissions menu, then press Check again.":"The BAE 3D Booth connector is not added to your claude.ai yet.";
+    return `<section class="rl-card bo-card"><b>Set up (once)</b><p class="muted">${esc(why)}</p>
+      <ol class="bo-steps"><li><b>The bridge</b> (done once, by the studio owner): deploy it from the <i>booth/bridge</i> folder (Deploy to Cloudflare). Its home page shows the connector address and the Blender add-on.</li>
+      <li><b>The connector</b> (every person in the team): claude.ai → Settings → Connectors → Add custom connector. Name <b>BAE 3D Booth</b>, address from the bridge page, or ask the studio owner for it.</li>
+      <li><b>The render Mac</b> (once): download the add-on from the bridge page; in Blender: Edit → Preferences → Add-ons → Install from Disk. It shows a 6-digit code.</li>
+      <li><b>Approve the Mac</b> here, with that code.</li></ol>
+      <div class="btns"><button class="btn primary" type="button" data-bo="check">Check again</button></div></section>`; }
+
+  function macsHTML(){ const ds=B.st?.devices||[];
+    const row=d=>{ const pill=d.status==="pending"?`<span class="bo-pill wait">Waiting for approval</span>`:d.online?(d.job?`<span class="bo-pill on">Working</span>`:`<span class="bo-pill on">Online</span>`):`<span class="bo-pill off">Offline · ${esc(ago(Date.now()-d.last_seen_s*1000))}</span>`;
+      return `<div class="bo-mac"><div class="bo-mac-t"><b>${esc(d.name)}</b>${pill}</div>
+        ${d.status==="pending"?`<p class="muted">Approve only if Blender on your Mac shows this code:</p><div class="bo-code">${esc((d.code||"").replace(/(\d{3})(\d{3})/,"$1 $2"))}</div><div class="btns"><button class="btn primary small" type="button" data-bo="approve" data-id="${esc(d.id)}">Approve this Mac</button><button class="btn small" type="button" data-bo="remove" data-id="${esc(d.id)}">Not mine</button></div>`
+        :`<div class="btns"><button class="btn small" type="button" data-bo="remove" data-id="${esc(d.id)}">Remove</button></div>`}</div>`; };
+    return `<section class="rl-card bo-card"><b>Render Mac</b>${ds.length?ds.map(row).join(""):`<p class="muted">No Mac yet. On the render Mac, install the Blender add-on from the bridge page. It appears here with a code to approve.</p>`}
+      ${B.st?.addon_url?`<p class="muted bo-small">Add-on: <a href="${esc(B.st.addon_url)}" target="_blank" rel="noopener">${esc(B.st.addon_url)}</a></p>`:""}</section>`; }
+
+  function jobHTML(k){ const outs=k.outputs||[];
+    const stills=outs.filter(o=>/\.png$/.test(o.path)), blend=outs.find(o=>/\.blend$/.test(o.path));
+    const prev=v=>outs.find(o=>o.path===v.replace(/\.png$/,"_preview.jpg"));
+    const live=k.status==="queued"||k.status==="running";
+    return `<div class="bo-job"><div class="bo-mac-t"><b>${esc(k.title)}</b><span class="bo-pill ${k.status==="done"?"on":k.status==="failed"?"bad":live?"wait":"off"}">${esc(k.status)}</span></div>
+      ${live?`<div class="bo-bar"><i style="width:${Math.max(3,k.pct||0)}%"></i></div><p class="muted">${esc(k.msg||"")}${k.status==="queued"&&!(B.st?.devices||[]).some(d=>d.online&&d.status==="approved")?" · the Mac is offline: it starts when Blender is open on it":""}</p><div class="btns"><button class="btn small" type="button" data-bo="cancel" data-id="${esc(k.id)}">Cancel</button></div>`:""}
+      ${k.status==="failed"?`<p class="bo-err">${esc((k.error||"").slice(0,400))}</p>`:""}
+      ${k.status==="done"?`<div class="bo-shots">${stills.map(s=>{ const pv=prev(s.path); return `<figure>${pv&&B.imgs[pv.file_id]?`<img src="${B.imgs[pv.file_id]}" alt="${esc(s.label)}">`:`<div class="bo-ph">Loading…</div>`}<figcaption>${esc(s.label)}</figcaption><button class="btn small" type="button" data-bo="dl" data-f="${esc(s.file_id)}">Download PNG</button></figure>`; }).join("")}</div>
+        <div class="btns">${blend?`<button class="btn small" type="button" data-bo="dl" data-f="${esc(blend.file_id)}">Download the Blender file</button>`:""}<span class="muted bo-small">${k.result?.device?esc("Rendered on "+k.result.device.split(" (")[0]+" in "+k.result.seconds+" s"+(k.device?" · "+k.device:"")):""}</span></div>`:""}</div>`; }
+
+  function draw(){
+    if(!mcp){ body.innerHTML=`<section class="rl-card bo-card"><b>Open BAE Studio in claude.ai</b><p class="muted">The 3D Booth works through a claude.ai connector.</p></section>`; return; }
+    if(setupCode(B.errCode)){ body.innerHTML=setupHTML(); return; }
+    if(!B.st){ body.innerHTML=`<section class="rl-card bo-card"><p class="muted">${B.err?esc(B.err):"Connecting to the render Mac…"}</p>${B.err?`<div class="btns"><button class="btn small" type="button" data-bo="check">Try again</button></div>`:""}</section>`; return; }
+    const ready=(B.st.devices||[]).some(d=>d.status==="approved");
+    const others=B.jobs.filter(j=>!B.job||j.id!==B.job.id);
+    body.innerHTML=`<div class="bo-grid"><div class="bo-col">${macsHTML()}
+      <section class="rl-card bo-card"><b>Test the Mac</b><p class="muted">Builds a test booth (the Christmas booth's walls and furniture, no designs) and renders two views at 1920×1080, plus the Blender file.</p>
+        <div class="btns"><button class="btn primary" type="button" data-bo="test" ${!ready||B.busy?"disabled":""}>${B.busy?esc(B.busy):"Build a test booth"}</button></div>${!ready?`<p class="muted bo-small">Approve a Mac first.</p>`:""}</section>
+      <details class="rl-card bo-card"><summary><b>Team</b></summary><p class="muted">Everyone who uses the 3D Booth adds the connector once: claude.ai → Settings → Connectors → Add custom connector, name <b>BAE 3D Booth</b>, this address. Share it only inside the team.</p>
+        <code class="bo-addr" data-noi18n>${esc(B.st.connector_url||"")}</code><div class="btns"><button class="btn small" type="button" data-bo="copy">Copy the address</button></div></details></div>
+      <div class="bo-col">${B.job?`<section class="rl-card bo-card"><b>This job</b>${jobHTML(B.job)}</section>`:""}
+      <section class="rl-card bo-card"><b>Recent jobs</b>${others.length?others.map(j=>`<button class="bo-row" type="button" data-bo="open" data-id="${esc(j.id)}"><span>${esc(j.title)}</span><span class="muted">${esc(j.status)} · ${esc(ago(j.created))}</span></button>`).join(""):`<p class="muted">Nothing yet.</p>`}</section></div></div>
+      ${B.err?`<p class="bo-err">${esc(B.err)}</p>`:""}`;
+  }
+
+  body.addEventListener("click",async e=>{ const b=e.target.closest("[data-bo]"); if(!b) return; const a=b.dataset.bo;
+    if(a==="check"){ B.err=""; B.errCode=""; B.st=null; draw(); refresh(); }
+    else if(a==="test") test();
+    else if(a==="approve"||a==="remove") devAct(b.dataset.id,a,b);
+    else if(a==="cancel") cancel(b.dataset.id);
+    else if(a==="open"){ B.job={id:b.dataset.id,status:"",outputs:[]}; refresh(); }
+    else if(a==="dl"){ const o=(B.job?.outputs||[]).find(x=>x.file_id===b.dataset.f); if(o) download(o,b); }
+    else if(a==="copy"){ try{ await navigator.clipboard.writeText(B.st?.connector_url||""); b.textContent="Copied"; }catch{ const r=document.createRange(); r.selectNodeContents(body.querySelector(".bo-addr")); getSelection().removeAllRanges(); getSelection().addRange(r); b.textContent="Selected: press Copy"; } setTimeout(()=>b.textContent="Copy the address",2000); }
+  });
+  const open=()=>{ P.hidden=false; P.scrollTop=0; B.open=true; draw(); refresh(); };
+  $("openBooth")?.addEventListener("click",open);
+  $("closeBooth")?.addEventListener("click",()=>{ P.hidden=true; B.open=false; clearTimeout(B.timer); $("openBooth")?.focus(); });
+  document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&B.open&&!P.hidden) refresh(); });
+  window.__bo={B,refresh};
 })();
 
 boot();
