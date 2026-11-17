@@ -15,7 +15,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 148 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 149 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openResize`, `openBrand`):
 
@@ -242,7 +242,14 @@ The mock that copies all of this is in `dev/resize-mock-test.js` (Playwright; ru
 
 **Interface (v145), phase 2 done:** the page is a dark "wall of screens" (`.rz-wall`, `screenHTML`): every size at its true shape; before paying, each screen already shows the original in place and the new parts tinted (teal = continued by the page, orange = AI) via `pending()`/`tint()`. A screen opens a focus view (`FO`, `focusDraw`): drag the picture to place it (arrow keys too), "Show what is new", "LED preview" for small sizes (one round dot per pixel), High quality, Download, previous / next, Esc. The source panel has the keep-frame (`#rzBox`): drag it or its corners, `setBox()` replans (and resets created sizes). Progress is a five-step stepper (`STEPS`, `stageOf`). The cost is one big number; credits used on this picture are shown after. On phones the wall is a swipe carousel. Samer confirmed the real run works ("زبط") before this was built. Phase 3 (several pictures, named size sets, history, button from Photography) is next.
 
-**Full resolution in pieces (v147).** Samer: quality over credits, always. Measured on his account (17 Nov 2026, 520 credits of real tests, `magnific-expand`):
+**v149: v147 and v148 were ROLLED BACK. The extension code is v146 again, plus the call pace (`paced()` / `mag()`).** Samer's verdict on the pieces, with two real results (a climber against a sky, 2048x4096 and 128x512): "the one before was better, this one has many visible cuts, not smooth at all". What his results show: a hard horizontal line at every join, the sky in bands of different tone (each piece is a separate generation with its own tone), and no overall sense (the rope ends in mid-air, because a strip does not see the whole picture). More pixels, worse picture.
+Lessons, keep them:
+- One generation that sees the whole picture is coherent; several pieces are not, however well they are blended. Sharpness must not be bought with seams.
+- v147 was shipped after a mock test only, and the mock paints a smooth gradient, so it cannot show seams or tone bands. **Never ship a change to how the picture is built without a real result looked at at 100%.** The mock proves wiring only.
+- The measurements below are still true and useful (size rule of `magnific-expand`, the other modes, the read being a JPEG of 800 px), but the "pieces" design built on them is not in the code any more. `images_resize` stays in the manifest, unused.
+- A better route to try, for real first, before touching the tool: one coherent extension as in v146, then an upscale of the new background only, original pixels put back as always.
+
+**(Rolled back) Full resolution in pieces (v147).** Samer: quality over credits, always. Measured on his account (17 Nov 2026, 520 credits of real tests, `magnific-expand`):
 - The result is exactly the size asked for only while **each new side is at most about 1536 px** and the **whole frame at most about 4.15 MP**. Exact: 1024x2304, 1024x2560, 1024x3008 (new side 1504), 1024x2048 (both sides), 2048x1536, 2048x1952 (4.0 MP). Shrunk: 1328x2928 -> 1136x2528, 1024x3136 -> 784x2416, 1024x4096 -> 528x2128 (new side lands near 1536 each time), 2048x2304 -> 1920x2160 (area cap). The old "about 5 MP" note was wrong.
 - Other expand modes, same request: `seedream-4-5` (50, returns 2720x6144) **moves and redraws the person**: unusable. `imagen-nano-banana-2-flash` (150, returns 2752x6200) keeps the person in place and is sharp, but rewrites the foreground; not needed because `magnific-expand` is already 1:1 with the source. `resolution:"4k"` does nothing for `magnific-expand`.
 - A piece that continues an earlier piece (context = the picture built so far) stays calm and consistent: tested once for real.
