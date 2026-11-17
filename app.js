@@ -5931,7 +5931,7 @@ Return ONLY JSON: {"prompt":"…","summary":"what changes, in 8 words or fewer"}
   const okSize=s=>Array.isArray(s)&&s.length===2&&s.every(n=>Number.isInteger(n)&&n>=16&&n<=8192);
   let SIZES=(()=>{ try{ const v=JSON.parse(localStorage.getItem(SKEY)||"null"); if(Array.isArray(v)&&v.length&&v.every(okSize)) return v; }catch{} return DEF.map(s=>[...s]); })();
   const saveSizes=()=>{ try{ localStorage.setItem(SKEY,JSON.stringify(SIZES)); }catch{} };
-  const R={file:null,name:"",bmp:null,sw:0,sh:0,thumb:"",busy:"",step:"",err:"",an:null,plan:null,M:{},qc:{},pos:{},px:{},fmt:"png",notes:{},done:false,stop:false,trash:[]};
+  const R={file:null,name:"",bmp:null,sw:0,sh:0,thumb:"",busy:"",step:"",err:"",an:null,plan:null,M:{},qc:{},pos:{},px:{},fmt:"png",notes:{},done:false,stop:false,trash:[],U:{},sharp:true};
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
   const mk=(w,h)=>{ const c=document.createElement("canvas"); c.width=Math.max(1,Math.round(w)); c.height=Math.max(1,Math.round(h)); return c; };
   const gcd=(a,b)=>b?gcd(b,a%b):a;
@@ -5976,12 +5976,20 @@ Return ONLY JSON: {"prompt":"…","summary":"what changes, in 8 words or fewer"}
     const lo=Math.max(0,1-(1-F.share)*(L-F.src)/d), hi=Math.min(1,F.share*(L-F.src)/d); if(hi-lo<.01) return {lo,hi:lo,def:.5,fixed:true};
     return {lo,hi,def:(clamp(F.share,lo,hi)-lo)/(hi-lo)}; }
   /* the part of the source (or of a master) that a size shows */
-  function region(it){ const pl=R.plan, rg=range(it), v=R.pos[sid(it)]??rg?.def??.5;
+  function region0(it){ const pl=R.plan, rg=range(it), v=R.pos[sid(it)]??rg?.def??.5;
     if(it.kind==="same") return {img:R.bmp,sx:0,sy:0,sw:R.sw,sh:R.sh};
     if(it.kind==="crop"){ const o=(rg?rg.max:0)*v; return it.axis==="x"?{img:R.bmp,sx:o,sy:0,sw:it.win,sh:R.sh}:{img:R.bmp,sx:0,sy:o,sw:R.sw,sh:it.win}; }
     const F=pl.fams[it.fam], M=R.M[it.fam]?.[it.m]; if(!M) return null;
     const t=rg?rg.lo+(rg.hi-rg.lo)*v:F.share, o=clamp(F.offs[it.m]-t*(it.len-F.src),0,F.masters[it.m]-it.len);
     return F.axis==="y"?{img:M.canvas,sx:0,sy:o,sw:F.cross,sh:it.len}:{img:M.canvas,sx:o,sy:0,sw:it.len,sh:F.cross}; }
+  /* Sharpened pictures (R.U). A size that needs more pixels than the picture has is no longer stretched: the picture it is cut from
+     (the original, or a finished master) is enlarged once by Magnific Precision "photo" (faithful, nothing invented, measured for real on
+     Samer's climber picture, 17 Nov 2026) and the size is cut from that. Sizes that fit inside the real pixels never touch it. */
+  const NEED=1.06, ukey=it=>it.kind==="ext"?it.fam+it.m:"src";
+  const grow=it=>{ if(it.kind==="same") return Math.max(it.w/R.sw,it.h/R.sh); if(it.kind==="crop") return it.axis==="x"?Math.max(it.w/it.win,it.h/R.sh):Math.max(it.w/R.sw,it.h/it.win);
+    const F=R.plan.fams[it.fam]; return F.axis==="y"?Math.max(it.w/F.cross,it.h/it.len):Math.max(it.w/it.len,it.h/F.cross); };
+  function region(it){ const r=region0(it), U=r&&R.U[ukey(it)]; if(!U||grow(it)<=NEED) return r;
+    return {img:U.canvas,sx:r.sx*U.zx,sy:r.sy*U.zy,sw:r.sw*U.zx,sh:r.sh*U.zy,sharp:true}; }
   /* resample in halving steps so big reductions stay clean */
   function scaled(img,sx,sy,sw,sh,dw,dh){ let src=img,x=sx,y=sy,w=sw,h=sh;
     for(;;){ const last=w<=dw*2&&h<=dh*2, tw=last?dw:Math.max(dw,Math.ceil(w/2)), th=last?dh:Math.max(dh,Math.ceil(h/2)), c=mk(tw,th), g=c.getContext("2d");
@@ -5995,7 +6003,7 @@ Return ONLY JSON: {"prompt":"…","summary":"what changes, in 8 words or fewer"}
     const small=await toJpeg(R.file,1568).catch(()=>R.file);
     const o=await rlAsk(`You prepare one approved photograph for resizing to many screen formats. The picture itself will never be redrawn: it is cropped, or its background is extended beyond its edges by an outpainting model. Look at the image and return what the layout engine needs.
 "subject": ONE box, as fractions of the image from 0 to 1 (x and y = top-left corner, w and h = size), around what must stay whole in every format: the main person (or the main object) only, with the whole head and hair, both arms and hands, and the one thing they are using (the laptop they type on, the phone or cup in their hand). TIGHT: the box hugs the person. Leave OUT the room, the wall, the rest of the table or sofa, plants, and anything blurred in the foreground or background; those may be cropped. Cut the box at the table edge or the waist if the picture does; never cut a head or a hand. The box is almost never the whole picture: if yours is wider than 0.75 or taller than 0.9, look again and tighten it to the person. If several people belong together, one box around all of them.
-For each side ("top","bottom","left","right"): "ease" from 0 to 1 = how safely the picture can be continued beyond that edge (1 = plain sky, plain wall, even floor, soft blur: easy and invisible · 0.5 = textured ground, simple furniture · 0 = the edge cuts through a person, a face, hands, text or a complex object), and "fill" = what should continue beyond that edge, in one plain sentence for the outpainting model, written from what is really at that edge (colour, material, focus), e.g. "a perfectly clear, cloudless, smooth deep blue sky, even colour, no clouds" or "the same plain warm limestone floor, softly out of focus, empty". Never ask for new objects or people. And "plain": true ONLY when the whole strip along that edge, from one end to the other, is a single plain featureless surface (a clear sky, a flat wall, a seamless studio backdrop) with nothing crossing it; false when anything else touches that edge (ground with texture, furniture, plants, a blurred object, a horizon).
+For each side ("top","bottom","left","right"): "ease" from 0 to 1 = how safely the picture can be continued beyond that edge (1 = plain sky, plain wall, even floor, soft blur: easy and invisible · 0.5 = textured ground, simple furniture · 0 = the edge cuts through a person, a face, hands, text or a complex object), and "fill" = what should continue beyond that edge, in one plain sentence for the outpainting model, written from what is really at that edge (colour, material, focus), e.g. "a perfectly clear, cloudless, smooth deep blue sky, even colour, no clouds" or "the same plain warm limestone floor, softly out of focus, empty". If a line or long object crosses that edge (a rope, a cable, a pole, a railing, a road, a horizon, a wall edge), say in the same sentence that it continues straight to the new edge of the frame, e.g. "clear deep blue sky; the climbing rope continues in one straight line up to the top edge". Keep each "fill" under 150 characters. Never ask for new objects or people. And "plain": true ONLY when the whole strip along that edge, from one end to the other, is a single plain featureless surface (a clear sky, a flat wall, a seamless studio backdrop) with nothing crossing it; false when anything else touches that edge (ground with texture, furniture, plants, a blurred object, a horizon).
 "scene": the picture in at most ten words.
 Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":"","plain":false},"bottom":{"ease":0,"fill":"","plain":false},"left":{"ease":0,"fill":"","plain":false},"right":{"ease":0,"fill":"","plain":false},"scene":""}`,{images:[small],modelTier:"default",cache:false});
     const n=v=>clamp(+v||0,0,1), b=o?.subject||{}; let x=n(b.x), y=n(b.y), w=clamp(+b.w||0,0,1-x), h=clamp(+b.h||0,0,1-y);
@@ -6006,9 +6014,9 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
 
   /* ---------- Magnific: extend, wait, read the result back in tiles ---------- */
   const pid=r=>r?.payload?.creation?.identifier||r?.payload?.creations?.[0]?.identifier||r?.payload?.identifier||readResult(r).ids[0]||null;
-  async function waitDone(id){ for(let i=0;i<14;i++){ if(R.stop) throw {code:"stopped"}; const r=await mag("creations_wait",{identifiers:[id],timeoutSeconds:55});
+  async function waitDone(id,what="extend"){ for(let i=0;i<14;i++){ if(R.stop) throw {code:"stopped"}; const r=await mag("creations_wait",{identifiers:[id],timeoutSeconds:55});
       const x=r?.payload?.results?.[0]||r?.payload?.creations?.[0]||{}, st=String(x.status||readResult(r).status||"").toLowerCase();
-      if(FAIL.test(st)) throw {code:"tool_error",message:"Magnific could not extend this picture ("+st+")."}; if(DONE.test(st)) return; }
+      if(FAIL.test(st)) throw {code:"tool_error",message:"Magnific could not "+what+" this picture ("+st+")."}; if(DONE.test(st)) return; }
     throw {code:"tool_error",message:"Magnific is still working on the extension. Open BAE Resize again in a few minutes and press Create: the finished extension is reused, free."}; }
   const rtxt=r=>{ const p=r?.payload; return (typeof p==="string"?p:JSON.stringify(p??""))+"\n"+(r?.content||[]).map(c=>c.text||"").join("\n"); };
   /* claude.ai allows only so many connector calls a minute ("Too many MCP tool calls this minute. Retry after 20 seconds").
@@ -6130,7 +6138,9 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
   const runs=()=>{ try{ return JSON.parse(localStorage.getItem(CKEY)||"{}"); }catch{ return {}; } };
   const runSave=o=>{ const all=runs(); all[cacheKey()]={...o,t:Date.now()}; const keys=Object.keys(all).sort((a,b)=>all[b].t-all[a].t); try{ localStorage.setItem(CKEY,JSON.stringify(Object.fromEntries(keys.slice(0,12).map(k=>[k,all[k]])))); }catch{} };
   const fillText=(F,an,doA=true,doB=true)=>{ const [sa,sbb,la,lb]=F.axis==="y"?[an.top,an.bottom,"Above the picture","Below the picture"]:[an.left,an.right,"To the left of the picture","To the right of the picture"];
-    return `${doA?`${la}: ${sa.fill||"the same background, plain and even"}. `:""}${doB?`${lb}: ${sbb.fill||"the same background, plain and even"}. `:""}Continue the same scene with the same light, colour, grain and focus blur. Keep the new area calm and empty: no people, no new objects, no furniture, no text, and nothing from the picture repeated.`; };
+    return `${doA?`${la}: ${sa.fill||"the same background, plain and even"}. `:""}${doB?`${lb}: ${sbb.fill||"the same background, plain and even"}. `:""}Same light, colour, grain and focus blur. Calm and empty: no people, no new objects, no text, nothing repeated.`; };
+  /* images_expand refuses a prompt longer than 500 characters (measured) */
+  const fit500=t=>{ t=String(t).replace(/\s+/g," ").trim(); if(t.length<=500) return t; const c=t.slice(0,497), i=Math.max(c.lastIndexOf(". "),c.lastIndexOf("; "),c.lastIndexOf(", ")); return (i>300?c.slice(0,i):c).trim()+"."; };
   const f16=v=>Math.max(32,Math.floor(v/16)*16);
   async function trash(){ const ids=[...new Set(R.trash)]; R.trash=[]; for(let i=0;i<ids.length;i+=150){ try{ await mag("creations_trash",{creationIdentifiers:ids.slice(i,i+150)}); }catch(e){ log("✕","resize tidy",{code:e?.code,message:e?.message}); return; } } }
   async function family(fam,redoFrom){ const pl=R.plan, F=pl.fams[fam], tall=F.axis==="y", saved=runs()[cacheKey()]?.[fam]||{};
@@ -6163,7 +6173,7 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
         if(!id){ if(!reuse.src[k]){ status(`Sending the picture to Magnific…`); const cut=tall?scaled(prev.canvas,0,p0,F.cross,sl,sc,sp):scaled(prev.canvas,p0,0,sl,F.cross,sp,sc);
             const blob=await new Promise(r=>cut.toBlob(r,"image/png")); reuse.src[k]=(await paced(()=>rlUploadMag(blob,(R.name||"image")+"_resize_"+(k+1)))).id; keep(); }
           status(`Extending the background · ${tag} · ${EXT_CREDITS} credits`);
-          const note=String(R.notes[fam+k]||"").trim(), args={creationIdentifier:reuse.src[k],aspectRatio:tall?"1:2":"2:1",customWidth:fw,customHeight:fh,imageX:tall?0:ia,imageY:tall?ia:0,mode:MODE,prompt:fillText(F,R.an,mA==="ai",mB==="ai")+(note?` Also: ${note.slice(0,200)}`:"")};
+          const note=String(R.notes[fam+k]||"").trim(), args={creationIdentifier:reuse.src[k],aspectRatio:tall?"1:2":"2:1",customWidth:fw,customHeight:fh,imageX:tall?0:ia,imageY:tall?ia:0,mode:MODE,prompt:fit500((note?`${note.slice(0,160)}. `:"")+fillText(F,R.an,mA==="ai",mB==="ai"))};
           const r=await mag("images_expand",args); id=pid(r); if(!id) throw {code:"tool_error",message:"Magnific accepted the extension but returned no identifier."};
           reuse.ids[k]=id; reuse.dims[k]=null; reuse.spent=(reuse.spent||0)+EXT_CREDITS; keep(); await waitDone(id); }
         else if(!wh) await waitDone(id);
@@ -6173,7 +6183,7 @@ Return ONLY JSON: {"subject":{"x":0,"y":0,"w":0,"h":0},"top":{"ease":0,"fill":""
         const P=await readBack(id,wh[0],wh[1],F.axis,[[0,mA==="ai"?(xa+bA)*ka:0],[mB==="ai"?(xa+sl-bB)*ka:ln,ln]],(d,t)=>status(`Reading the ${tag} back · ${d} / ${t}`));
         const m0=at+p0-xa; if(tall) ag.drawImage(P,0,0,P.width,P.height,0,m0,F.cross,fl); else ag.drawImage(P,0,0,P.width,P.height,m0,0,fl,F.cross); }
       status(`Putting the original back · ${tag}`); await new Promise(r=>setTimeout(r,20));
-      const canvas=compose(F,L,A,prev,at,bA,bB,{A:mA==="ai",B:mB==="ai"}); R.M[fam][k]={canvas,len:L,off,id,ai:!!id}; prev={canvas,len:L,off}; delete R.qc[fam+k]; paint(); if(id){ status(`Checking the ${tag}`); await check(fam,k).catch(()=>{}); } }
+      const canvas=compose(F,L,A,prev,at,bA,bB,{A:mA==="ai",B:mB==="ai"}); R.M[fam][k]={canvas,len:L,off,id,ai:!!id}; prev={canvas,len:L,off}; delete R.qc[fam+k]; delete R.U[fam+k]; paint(); if(id){ status(`Checking the ${tag}`); await check(fam,k).catch(()=>{}); } }
     trash().catch(()=>{});
   }
   /* a second look by Claude at every extension, so a bad one is flagged before it is downloaded */
@@ -6193,11 +6203,51 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
     const level=o?.verdict==="redo"?"redo":o?.verdict==="look"||(o?.verdict!=="ok"&&issues.length)?"look":"ok";
     R.qc[fam+k]={ok:level==="ok",level,issues:level==="ok"?[]:issues}; }
 
+  /* ---------- sharpen: real pixels for the sizes that would otherwise be stretched ---------- */
+  const UP={mode:"ultra-photo",scale:"2x",sharpness:7,grain:0,ultraDetail:7}, UPMAX=16e6, upEst=mp=>Math.max(90,Math.round(mp*6.6)*10);
+  try{ R.sharp=localStorage.getItem("bae_rz_sharp")!=="0"; }catch{}
+  /* one target per picture that has a stretched size: the original ("src") or a master (fam+index) */
+  function sharpTargets(all){ const pl=R.plan, T={}; if(!pl||(!R.sharp&&!all)) return [];
+    for(const it of pl.items){ const g=grow(it); if(g<=NEED) continue; const F=it.kind==="ext"?pl.fams[it.fam]:null, bw=F?(F.axis==="y"?F.cross:F.masters[it.m]):R.sw, bh=F?(F.axis==="y"?F.masters[it.m]:F.cross):R.sh;
+      if(bw*bh*4>UPMAX||Math.max(bw,bh)*2>8192) continue;                       /* too large to enlarge twice: that size stays as it is */
+      const k=ukey(it), t=T[k]=T[k]||{key:k,fam:it.fam,m:it.m,src:!F,bw,bh,z:1,n:0}; t.z=Math.max(t.z,g); t.n++; }
+    return Object.values(T); }
+  const upSaved=()=>runs()[R.file?cacheKey():""]?.up||{};
+  const sharpOpen=()=>sharpTargets().filter(t=>!R.U[t.key]);
+  const sharpCost=()=>sharpOpen().filter(t=>!upSaved()[t.key]?.id).reduce((a,t)=>a+upEst(t.bw*t.bh/1e6),0);
+  /* small copies of two pictures: how far apart they are, and by how much the colour moved */
+  function apart(a,b){ const n=48, px=c=>{ const t=mk(n,n), g=t.getContext("2d",{willReadFrequently:true}); g.imageSmoothingQuality="high"; g.drawImage(c,0,0,n,n); return g.getImageData(0,0,n,n).data; }, A=px(a), B=px(b), m=[0,0,0]; let e=0;
+    for(let i=0;i<A.length;i+=4) for(let c=0;c<3;c++){ const d=B[i+c]-A[i+c]; m[c]+=d; e+=d*d; } return {mean:m.map(v=>v/(n*n)),rms:Math.sqrt(e/(n*n*3))}; }
+  function addRGB(c,d){ const g=c.getContext("2d"), H=256; for(let y=0;y<c.height;y+=H){ const h=Math.min(H,c.height-y), im=g.getImageData(0,y,c.width,h), p=im.data; for(let i=0;i<p.length;i+=4){ p[i]+=d[0]; p[i+1]+=d[1]; p[i+2]+=d[2]; } g.putImageData(im,0,y); } }
+  async function sharpen(){ const list=sharpOpen().filter(t=>t.src||R.M[t.fam]?.[t.m]); if(!list.length) return;
+    const all=()=>runs()[cacheKey()]||{}, put=(k,o,add=0)=>{ const r=all(); runSave({...r,up:{...(r.up||{}),[k]:o},upSpent:(r.upSpent||0)+add}); };
+    const sigOf=t=>{ if(t.src) return "src"; const f=all()[t.fam]||{}; return (f.sig||"")+"|"+Array.from({length:t.m+1},(_,i)=>f.ids?.[i]||"-").join(","); };
+    const label=t=>t.src?"original":`${t.fam} extension ${t.m+1}`, pic=t=>t.src?R.bmp:R.M[t.fam][t.m].canvas;
+    /* 1. start every enlargement: they run at Magnific at the same time */
+    for(const t of list){ let o=all().up?.[t.key]||{}; if(o.of!==sigOf(t)) o={of:sigOf(t)};
+      if(!o.id){ if(!o.src){ status(`Sharpening · sending the ${label(t)}`); const c=mk(t.bw,t.bh); c.getContext("2d").drawImage(pic(t),0,0); const blob=await new Promise(r=>c.toBlob(r,"image/png")); c.width=c.height=0;
+          o.src=(await paced(()=>rlUploadMag(blob,(R.name||"image")+"_sharp_"+t.key))).id; put(t.key,o); }
+        status(`Sharpening the ${label(t)} · Magnific Precision`); const r=await mag("images_upscale",{creationIdentifier:o.src,...UP}), id=pid(r); if(!id) throw {code:"tool_error",message:"Magnific accepted the sharpening but returned no identifier."};
+        o.id=id; o.dims=null; o.credits=+r?.payload?.creation?.credits||upEst(t.bw*t.bh/1e6); put(t.key,o,o.credits); }
+      t.o=o; }
+    /* 2. wait for each, read it back whole, keep the pixels the sizes need */
+    for(const t of list){ const o=t.o; if(!o.dims){ status(`Sharpening the ${label(t)} · Magnific needs a few minutes`); await waitDone(o.id,"sharpen"); o.dims=await realSize(o.id,t.bw*2,t.bh*2); put(t.key,o); }
+      const [uw,uh]=o.dims; if(uw<t.bw*1.15||Math.abs(uw/t.bw-uh/t.bh)>.03) throw {code:"tool_error",message:`The sharpened ${label(t)} came back at an unexpected size (${uw} x ${uh}). The sizes keep their normal version.`};
+      const big=await readBack(o.id,uw,uh,"y",[[0,uh]],(d,n)=>status(`Reading the sharpened ${label(t)} · ${d} / ${n}`));
+      const z=Math.min(uw/t.bw,Math.max(1.25,t.z*1.02)), cw=Math.round(t.bw*z), ch=Math.round(t.bh*z); let c=big; if(cw<uw-4){ c=scaled(big,0,0,uw,uh,cw,ch); big.width=big.height=0; }
+      /* safety: it must be the same picture, in the same colour */
+      const d=apart(pic(t),c); log("·","resize sharp",{key:t.key,size:[uw,uh],kept:[cw,ch],rms:+d.rms.toFixed(1),mean:d.mean.map(v=>+v.toFixed(1))});
+      if(d.rms>24){ c.width=c.height=0; throw {code:"tool_error",message:`The sharpened ${label(t)} does not match the picture, so it was not used. The sizes keep their normal version.`}; }
+      if(d.mean.some(v=>Math.abs(v)>1.2)) addRGB(c,d.mean.map(v=>-Math.round(v)));
+      R.U[t.key]={canvas:c,zx:cw/t.bw,zy:ch/t.bh}; paint(); }
+    trash().catch(()=>{});
+  }
+
   /* ---------- run ---------- */
   const status=t=>{ R.step=t; const el=$("rzStep"); if(el) el.textContent=t; const st=stageOf(t); body.querySelectorAll(".rz-steps li").forEach((li,i)=>{ li.className=i<st?"done":i===st?"on":""; }); };
   async function load(f){ if(!f||R.busy) return; R.err=""; R.busy="Opening the picture…"; draw();
     try{ let bmp; try{ bmp=await createImageBitmap(f); }catch{ bmp=await createImageBitmap(await toJpegFull(f)); }
-      Object.assign(R,{file:f,name:String(f.name||"image").replace(/\.[a-z0-9]{2,5}$/i,"").replace(/[^\w؀-ۿ-]+/g,"_").slice(0,40)||"image",bmp,sw:bmp.width,sh:bmp.height,an:null,plan:null,M:{},qc:{},pos:{},px:{},notes:{},done:false});
+      Object.assign(R,{file:f,name:String(f.name||"image").replace(/\.[a-z0-9]{2,5}$/i,"").replace(/[^\w؀-ۿ-]+/g,"_").slice(0,40)||"image",bmp,sw:bmp.width,sh:bmp.height,an:null,plan:null,M:{},U:{},qc:{},pos:{},px:{},notes:{},done:false});
       if(R.thumb) URL.revokeObjectURL(R.thumb); R.thumb=URL.createObjectURL(f);
       const saved=runs()[cacheKey()]; if(saved?.an){ R.an=saved.an; }
       else if(sample){ R.busy="Reading the picture…"; draw(); R.an=await analyse(); runSave({...saved,an:R.an}); }
@@ -6207,12 +6257,13 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
     R.busy=""; draw(); }
   const replan=()=>{ if(!R.an) return; R.plan=finishPlan(makePlan(R.sw,R.sh,R.an,SIZES)); R.done=false; draw(); };
   const ready=it=>it.kind!=="ext"||!!R.M[it.fam]?.[it.m];
-  async function create(fam,redoFrom){ if(R.busy||!R.plan) return; R.err=""; R.stop=false;
+  async function create(fam,redoFrom){ if(R.busy||!R.plan) return; R.err=""; R.note=""; R.stop=false;
     const fams=fam?[fam]:Object.keys(R.plan.fams);
-    const needAI=fams.some(f=>R.plan.fams[f].aiSteps.some(Boolean));
+    const needAI=fams.some(f=>R.plan.fams[f].aiSteps.some(Boolean))||sharpTargets().length>0;
     if(needAI&&(!mcp||S.web)){ R.err="Extending the background needs Magnific, inside claude.ai."; draw(); return; }
     R.busy="Working…"; R.step="Starting…"; draw();
-    try{ await rlJob(async()=>{ if(needAI&&!S.connected) await connect(true); for(const f of fams) await family(f,fam?redoFrom:null); }); R.done=true; }
+    try{ await rlJob(async()=>{ if(needAI&&!S.connected) await connect(true); for(const f of fams) await family(f,fam?redoFrom:null);
+        if(R.sharp){ try{ await sharpen(); }catch(e){ if(e?.code==="stopped") throw e; log("✕","resize sharpen",{code:e?.code,message:e?.message}); const why=e?.message&&!/[{<]/.test(e.message)?String(e.message).replace(/\(request_id[^)]*\)/i,"").trim().slice(0,160):""; R.note=/keep their normal version/.test(why)?why:`Sharpening did not finish${why?` (${why})`:""}. Every size is ready in its normal version. Press "Sharpen the large sizes" to try again: what was done is reused.`; } } }); R.done=true; }
     catch(e){ log("✕","resize",{code:e?.code,message:e?.message,result:e?.result}); R.err=e?.code==="stopped"?"Stopped. What was finished is kept.":/not in the manifest|not_granted|not_connected/i.test(String(e?.code||"")+String(e?.message||""))?"Magnific is not connected for this tool yet. Reconnect Magnific from the top of the page, then try again.":(e?.message&&!/[{<]/.test(e.message)?String(e.message).slice(0,220):"The extension did not finish. Press Create again: what was finished is reused, free."); }
     R.busy=""; R.step=""; draw(); }
 
@@ -6254,14 +6305,14 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
     const o=mk(c.width,c.height), og=o.getContext("2d"); og.fillStyle="#050507"; og.fillRect(0,0,o.width,o.height); og.drawImage(c,0,0); return o; }
   const tall=it=>it.w/it.h, wallH=it=>tall(it)<.45?430:tall(it)<1?340:tall(it)<1.5?260:210;
   const qcOf=it=>it.kind==="ext"?R.qc[it.fam+it.m]:null;
-  const spent=()=>{ const r=runs()[R.file?cacheKey():""]||{}; return (r.tall?.spent||0)+(r.wide?.spent||0); };
-  const STEPS=["Read","Continue","Extend","Rebuild","Check"];
-  const stageOf=t=>/^Checking/.test(t)?4:/^Putting/.test(t)?3:/^Continuing/.test(t)?1:/^(Opening|Reading the picture|Starting)/.test(t)?0:/^Packing/.test(t)?-1:2;
-  function screenHTML(it,i){ const ok=ready(it), q=qcOf(it), f=ok?enlarge(it):1, st=!ok?"wait":q&&!q.ok?(q.level==="redo"?"bad":"warn"):"good";
+  const spent=()=>{ const r=runs()[R.file?cacheKey():""]||{}; return (r.tall?.spent||0)+(r.wide?.spent||0)+(r.upSpent||0); };
+  const STEPS=["Read","Continue","Extend","Rebuild","Check","Sharpen"];
+  const stageOf=t=>/^(Sharpening|Reading the sharpened)/.test(t)?5:/^Checking/.test(t)?4:/^Putting/.test(t)?3:/^Continuing/.test(t)?1:/^(Opening|Reading the picture|Starting)/.test(t)?0:/^Packing/.test(t)?-1:2;
+  function screenHTML(it,i){ const ok=ready(it), q=qcOf(it), f=ok?enlarge(it):1, shp=ok&&!!R.U[ukey(it)]&&grow(it)>NEED, st=!ok?"wait":q&&!q.ok?(q.level==="redo"?"bad":"warn"):"good";
     return `<button type="button" class="rz-scr" data-rzopen="${i}" style="--h:${wallH(it)};--r:${(it.w/it.h).toFixed(4)}" aria-label="${it.w} by ${it.h}, ${KIND[it.kind][0]}${ok?"":", not created yet"}${q&&!q.ok?(q.level==="redo"?", has a fault":", worth a look"):""}">
       <span class="rz-glass"><canvas data-rzc="${i}"></canvas></span>
       <span class="rz-cap"><i class="rz-dot ${st}" aria-hidden="true"></i><b data-noi18n>${it.w} × ${it.h}</b></span>
-      <span class="rz-sub"><span data-noi18n>${ratioName(it.w,it.h)}</span> · <span>${KIND[it.kind][0]}</span>${f>1.08?` · <span data-noi18n>×${f.toFixed(1)}</span>`:""}</span></button>`; }
+      <span class="rz-sub"><span data-noi18n>${ratioName(it.w,it.h)}</span> · <span>${KIND[it.kind][0]}</span>${shp?` · <span class="rz-shp">Sharpened</span>`:f>1.08?` · <span data-noi18n>×${f.toFixed(1)}</span>`:""}</span></button>`; }
   function draw(){ const pl=R.plan, busy=!!R.busy, sb=R.an?.subject;
     let h=`<div class="rz-top${R.file?"":" empty"}">`;
     if(!R.file) h+=`<label class="rz-hero${busy?" busy":""}" id="rzDrop"><span class="rz-heroin"><b>Drop the approved picture here</b><span>A clean visual with no text and no logo. The larger the picture, the sharper every size.</span><span class="btn primary">Choose a picture</span></span><input type="file" id="rzFile" accept="image/*" ${busy?"disabled":""} aria-label="Picture to resize"></label>`;
@@ -6270,22 +6321,24 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
         <div class="rz-srcrow"><span class="t12 muted" data-noi18n>${esc(R.name)} · ${R.sw} × ${R.sh}</span><label class="btn small rz-change"><span>Change the picture</span><input type="file" id="rzFile" accept="image/*" ${busy?"disabled":""}></label></div></div>`;
     h+=`<div class="rl-card rz-ctl"><div><span class="lbl">Sizes</span><div class="rz-chips">${SIZES.map((s,i)=>`<span class="rz-chip" data-noi18n>${s[0]}×${s[1]}<button type="button" data-rzdel="${i}" aria-label="Remove ${s[0]} by ${s[1]}" ${busy?"disabled":""}>×</button></span>`).join("")}</div>
         <div class="rz-add"><input class="rl-field" id="rzNew" inputmode="numeric" placeholder="1080x1350" aria-label="Add a size, width x height" ${busy?"disabled":""}><button type="button" class="btn small" data-rz-act="add" ${busy?"disabled":""}>Add size</button><button type="button" class="btn small ghost" data-rz-act="reset" ${busy?"disabled":""}>My 10 sizes</button></div></div>`;
-    if(pl){ const c=k=>pl.items.filter(i=>i.kind===k).length, todo=Object.entries(pl.fams).reduce((a,[f,F])=>a+F.masters.filter((_,k)=>!R.M[f]?.[k]).length,0), pay=Object.entries(pl.fams).reduce((a,[f,F])=>a+F.masters.filter((_,k)=>!R.M[f]?.[k]&&F.aiSteps[k]).length,0), all=pl.items.every(ready), used=spent(),
+    if(pl){ const c=k=>pl.items.filter(i=>i.kind===k).length, todo=Object.entries(pl.fams).reduce((a,[f,F])=>a+F.masters.filter((_,k)=>!R.M[f]?.[k]).length,0), pay=Object.entries(pl.fams).reduce((a,[f,F])=>a+F.masters.filter((_,k)=>!R.M[f]?.[k]&&F.aiSteps[k]).length,0), all=pl.items.every(ready), used=spent(), ST=sharpTargets(true), sN=ST.reduce((a,t)=>a+t.n,0), sOpen=R.sharp?ST.filter(t=>!R.U[t.key]).length:0, sCost=sharpCost(), go=todo||sOpen,
         selfSides=Object.values(pl.fams).flatMap(F=>[F.plain.A&&F.names[0],F.plain.B&&F.names[1]]).filter(Boolean);
       h+=`<ul class="rz-facts"><li><b data-noi18n>${c("same")+c("crop")}</b><span>straight from the original</span></li><li><b data-noi18n>${c("ext")}</b><span>with the background continued</span></li>${selfSides.length?`<li class="page"><b>0</b><span><span>credits for the</span> <span data-noi18n>${selfSides.join(" + ")}</span><span>: the page continues it itself</span></span></li>`:""}</ul>
-        <div class="rz-pay">${todo?`<div class="rz-cost"><b data-noi18n>${pay*EXT_CREDITS}</b><span>${pay?"credits to create this set":"credits: this set is free"}</span></div>`:`<div class="rz-cost done"><b data-noi18n>${pl.items.length}</b><span>sizes are ready</span></div>`}
-          <div class="rl-btns">${todo?`<button type="button" class="btn primary" data-rz-act="create" ${busy?"disabled":""}>Create all sizes</button>`:""}<button type="button" class="btn${todo?"":" primary"}" data-rz-act="zip" ${busy||!pl.items.some(ready)?"disabled":""}>${all?"Download all (ZIP)":"Download the ready ones (ZIP)"}</button>
+        ${ST.length?`<label class="rz-sharpen"><input type="checkbox" id="rzSharp" ${R.sharp?"checked":""} ${busy?"disabled":""}><span><b><span>Sharpen the sizes that are larger than the picture</span> <span data-noi18n>(${sN})</span></b><span class="t12 muted">Magnific Precision gives them real pixels, faithful to the picture, nothing invented. Switched off, they are stretched and softer.</span></span></label>`:""}
+        <div class="rz-pay">${go?`<div class="rz-cost"><b data-noi18n>${pay*EXT_CREDITS+sCost}</b><span>${sCost?"credits, roughly, sharpening included":pay?"credits to create this set":"credits: this set is free"}</span></div>`:`<div class="rz-cost done"><b data-noi18n>${pl.items.length}</b><span>sizes are ready</span></div>`}
+          <div class="rl-btns">${go?`<button type="button" class="btn primary" data-rz-act="create" ${busy?"disabled":""}>${todo?"Create all sizes":"Sharpen the large sizes"}</button>`:""}<button type="button" class="btn${go?"":" primary"}" data-rz-act="zip" ${busy||!pl.items.some(ready)?"disabled":""}>${all?"Download all (ZIP)":"Download the ready ones (ZIP)"}</button>
           <div class="a-seg" role="group" aria-label="File type"><button type="button" data-rzfmt="png" aria-pressed="${R.fmt==="png"}">PNG</button><button type="button" data-rzfmt="jpg" aria-pressed="${R.fmt==="jpg"}">JPG</button></div></div>
           ${used?`<p class="t12 muted"><span>Used on this picture so far:</span> <span data-noi18n>${used}</span> <span>credits</span></p>`:""}</div>`; }
     h+=`</div></div>`;
     if(R.err) h+=`<p class="rl-warn" role="alert">${esc(R.err)}</p>`;
+    if(R.note&&!busy) h+=`<p class="rz-note" role="status">${esc(R.note)}</p>`;
     if(busy){ const st=stageOf(R.step||R.busy); h+=`<div class="rl-card rz-busy" role="status"><span class="spin" aria-hidden="true"></span><div class="rz-busyin">${st>=0&&/Working/.test(R.busy)?`<ol class="rz-steps">${STEPS.map((s,i)=>`<li class="${i<st?"done":i===st?"on":""}">${s}</li>`).join("")}</ol>`:`<b>${esc(R.busy)}</b>`}<span class="t12 muted" id="rzStep" data-noi18n>${esc(R.step)}</span></div>${/Working/.test(R.busy)?`<button type="button" class="btn small" data-rz-act="stop">Stop</button>`:""}</div>`; }
     if(pl){ const anyNew=pl.items.some(i=>i.kind==="ext"), redo=Object.keys(pl.fams).map(redoHTML).join("");
       h+=`<section class="rz-wall" aria-label="All sizes"><header class="rz-wallh"><h3>The wall</h3><p>${pl.items.every(ready)?"Every size, at its true shape. Open one to place the picture or download it.":"This is how each size will be framed. Nothing is paid for until you press Create."}</p>
           ${anyNew?`<ul class="rz-legend"><li><i style="background:#8a8894"></i>Original</li>${Object.values(pl.fams).some(F=>F.plain.A||F.plain.B)?`<li><i style="background:${TINT.page}"></i>Continued by the page</li>`:""}${pl.ext?`<li><i style="background:${TINT.ai}"></i>Extended by AI</li>`:""}</ul>`:""}</header>
         <div class="rz-row" id="rzRow">${pl.items.map(screenHTML).join("")}</div></section>
         ${redo?`<details class="rl-card rz-ext"${Object.values(R.qc).some(q=>q&&q.level==="redo")?" open":""}><summary>AI extensions</summary><p class="t12 muted rz-exp">Each new background was looked at automatically. A note is a hint, not an error: if the picture looks right to you, use it. "Make it again" asks for a new try of that extension and the ones built on it, and costs credits.</p>${redo}</details>`:""}
-        <p class="t12 muted">The person and everything in the original stay exactly as they are: only the background around them is new. A number such as ×1.4 means that size is larger than the picture has pixels for.</p>`; }
+        <p class="t12 muted">The person and everything in the original stay exactly as they are: only the background around them is new. A number such as ×1.4 means that size is larger than the picture has pixels for. A size marked Sharpened was given real pixels by Magnific Precision: there the whole picture, the person included, is the same picture rendered finer, not the original pixels.</p>`; }
     body.innerHTML=h; if(typeof uxT==="function") uxT(body); paint(); if(FO.i!=null) (R.plan?.items[FO.i]?focusDraw():focusClose()); }
   function redoHTML(fam){ const F=R.plan.fams[fam]; return F.masters.map((L,k)=>{ const M=R.M[fam]?.[k], q=R.qc[fam+k]; if(!M||!M.ai) return ""; const n=R.plan.items.filter(i=>i.fam===fam&&i.m===k).length;
       return `<div class="rz-redo"><span class="t12 muted"><span>${fam==="tall"?"Tall":"Wide"} extension</span> <span data-noi18n>${k+1}</span> · <span data-noi18n>${n}</span> <span>sizes use it</span>${q?(q.ok?` · <span class="ok">Checked</span>`:` · <span class="${q.level==="redo"?"bad":"warn"}"><span>${q.level==="redo"?"Clear fault":"Worth a look"}</span>${q.issues.length?`: <span dir="auto" data-noi18n>${q.issues.map(esc).join(" · ")}</span>`:""}</span>`):""}</span>
@@ -6340,9 +6393,10 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
     box.addEventListener("pointermove",mv); box.addEventListener("pointerup",up); box.addEventListener("pointercancel",up); });
   body.addEventListener("keydown",e=>{ if(e.target.id!=="rzBox"||R.busy) return; const d={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key]; if(!d) return; e.preventDefault(); const s={...R.an.subject}, st=.02;
     if(e.shiftKey){ s.w=clamp(s.w+d[0]*st,.08,1-s.x); s.h=clamp(s.h+d[1]*st,.08,1-s.y); } else { s.x=clamp(s.x+d[0]*st,0,1-s.w); s.y=clamp(s.y+d[1]*st,0,1-s.h); } setBox(s); setTimeout(()=>$("rzBox")?.focus(),0); });
-  function setBox(s){ R.an={...R.an,subject:s,byHand:true}; R.M={}; R.qc={}; R.pos={}; runSave({...runs()[cacheKey()],an:R.an}); replan(); }
+  function setBox(s){ R.an={...R.an,subject:s,byHand:true}; R.M={}; R.U=R.U.src?{src:R.U.src}:{}; R.qc={}; R.pos={}; runSave({...runs()[cacheKey()],an:R.an}); replan(); }
 
-  body.addEventListener("change",e=>{ if(e.target.id==="rzFile"){ const f=e.target.files?.[0]; if(f) load(f); } });
+  body.addEventListener("change",e=>{ if(e.target.id==="rzFile"){ const f=e.target.files?.[0]; if(f) load(f); }
+    else if(e.target.id==="rzSharp"){ R.sharp=e.target.checked; try{ localStorage.setItem("bae_rz_sharp",R.sharp?"1":"0"); }catch{} if(!R.sharp) R.U={}; R.note=""; draw(); } });
   body.addEventListener("input",e=>{ const n=e.target.dataset?.rznote; if(n!=null) R.notes[n]=e.target.value; });
   body.addEventListener("keydown",e=>{ if(e.target.id==="rzNew"&&e.key==="Enter"){ e.preventDefault(); body.querySelector('[data-rz-act="add"]')?.click(); } });
   body.addEventListener("click",async e=>{ const t=e.target.closest("button"); if(!t) return; const d=t.dataset;
