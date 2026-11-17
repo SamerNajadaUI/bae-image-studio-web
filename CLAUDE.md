@@ -270,3 +270,22 @@ So `family()` no longer makes one call per master. `reach(cross)` = what one cal
 
 **Tested** with Playwright and a mocked Magnific + Claude only (plan, both extensions, tiles, compose, check, ZIP, phone width). **Never tested for real inside the studio:** the upload through BAE Gemini Eye, real tiles, the tone match on a real extension, the check with real Claude.
 Known limits: tiles appear in his Magnific history; a 2560×1440 source means the 1920-wide tall sizes are enlarged ×1.4 (the card says so, a 4K source fixes it); not yet reachable from a Photography result (upload only).
+
+
+## 14. BAE 3D Booth (new, 17 Nov 2026) — proof built, waiting for Samer's verdict
+
+**What Samer wants.** Today the team draws a floor plan, designs every side in 2D, turns each piece into 3D with an image model one at a time, and tells the builder "put it on the right": pieces land in the wrong place. He wants Blender to build the WHOLE booth from the plan, and to use a Blender scene as the reference for Seedance 2.5 with his assets. The steps must stay very simple. He studied Dan Kieft's "Claude + Blender" method (claude-and-blender.vercel.app, allowed in the environment's network): low-poly Blender scene → MP4 as `@video1` (camera, motion and layout only) + character sheet + a realistic still made from a Blender screenshot → Seedance 2.5, Draft first.
+
+**Facts.**
+- Samer has a Mac, the Claude app and **Blender 4.5.10 LTS**. The official Blender connector (Blender Lab, April 2026) is said to need Blender 5.1+ (one source, not confirmed): ask him to update before relying on it.
+- Blender's own Python runs in this cloud container: `uv venv --python 3.11` then `uv pip install "bpy>=4.5,<4.6"` gives Blender 4.5 LTS, same series as his, so the `.blend` opens on his Mac. Cycles on CPU: a 1920×1080 still takes about a minute, EEVEE is not available here.
+- Magnific has `models3d_generate` (image → GLB) for special pieces, and `video_generate` takes `references` of type `video`, `image`, `character`, `product` (the Seedance route).
+
+**The proof (`booth/`).** `christmas_booth.json` is ONE spec in centimetres, measured from the FRONT-LEFT corner (x right, y back): floors, walls (from / to, thickness, openings, artwork seen from outside), pieces. `build_booth.py spec out stills|video|all` builds it (walls with real openings, artwork cut out of his own PDF pages and mapped at real size, tables, stools, glass walls), saves the `.blend`, renders six views and an orbit clip. `sheet.py` draws the contractor's placement sheet from the same spec (every piece numbered with its distance from the left wall and from the front). The textures and his PDF are NOT in the repo (they were cut from "Christams_Floor_Plan.pdf", 10 pages: plan 1000×488 cm + each side and area with dimensions).
+- Wall convention: the outside is on the RIGHT of the direction from → to, the artwork's left edge is at `from`, thickness goes inward.
+- Found in his document: the Area 1 elevation adds up to 530 cm (160 + 250 + 120) but the booth is 488 deep (plan: 160 + 250 + 76). The artwork was fitted to 488. Tell the team.
+- Not built yet: rounded arch corners, ribbons / gift boxes / ornaments as real 3D pieces (they are flat prints on the walls now), the buzzer and star advent areas, the photobooth niche, clean artwork (the PDF artwork carries dimension labels).
+
+**Agreed plan.** 0 proof on one real booth (this) → 1 the builder (plan + designs → 3D, renders, placement sheet) → 2 the app in the studio, three steps: Plan, Designs, Result, plus a chat ("move the phone to the right corner") → 3 special pieces from a 2D design to a 3D model placed by numbers → 4 Seedance video from the Blender reference. Exact stills and the builder's sheet come from Blender (official artwork on the walls, the logo is never redrawn); Seedance is for people and motion, and it may distort marks: test for real before promising.
+**Open decision:** how the studio reaches Blender on his Mac: (a) the official connector with the studio opened in the Claude app, or (b) our own small Blender add-on + a cloud bridge (like BAE Gemini Eye) so it works from any device. Or (c), seen in the proof: build in the cloud with `bpy` and hand him the `.blend`, no Blender needed for the first result.
+
