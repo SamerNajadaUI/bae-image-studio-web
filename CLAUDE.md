@@ -15,7 +15,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 153 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 154 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openResize`, `openBrand`):
 
