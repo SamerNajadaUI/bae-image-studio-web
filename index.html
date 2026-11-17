@@ -1289,6 +1289,14 @@ details.rl-changes>summary::-webkit-details-marker{display:none}
 .lv-say{display:flex;gap:8px;align-self:stretch;margin-top:2px}
 .lv-say .rl-field{flex:1;min-width:0;min-height:40px;font-size:15px;border-radius:12px;background:var(--white)}
 @media (max-width:600px){ .lv-say{flex-direction:column} }
+.lv-chat{display:flex;flex-direction:column;gap:6px;align-self:stretch;max-height:320px;overflow-y:auto;padding:2px}
+.lv-m{max-width:92%;padding:8px 12px;border-radius:14px;font-size:14px;line-height:1.45;display:flex;flex-direction:column;gap:6px;overflow-wrap:anywhere}
+.lv-m p{margin:0}
+.lv-m.u{align-self:flex-end;background:var(--ink);color:var(--white);border-bottom-right-radius:4px}
+.lv-m.a{align-self:flex-start;background:var(--white);box-shadow:inset 0 0 0 1px var(--stone-light);border-bottom-left-radius:4px}
+.lv-prop{display:flex;flex-direction:column;gap:6px;padding:8px 10px;border-radius:10px;background:var(--orange-light);box-shadow:inset 0 0 0 1px var(--orange-soft)}
+.lv-prop.done{box-shadow:none;opacity:.75}
+.lv-hint{margin:0}
 
 body.mode-icon #btnAngles{display:none}
 
