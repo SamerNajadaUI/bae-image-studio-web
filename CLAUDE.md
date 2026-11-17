@@ -6,6 +6,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 - The owner is Samer, a designer at **Bank al Etihad (BAE), Jordan**.
 - He writes mostly in **Jordanian Arabic**. Reply in the language he used. Keep replies **short and simple**: what changed, what was tested, what is not tested. No long explanations, no code in the reply unless he asks.
+- **Quality first, always (his words, 17 Nov 2026): "credits do not matter to me, what matters is that the work comes out professional. This is a bank. Always give me the solution with the highest quality."** When two routes exist, build the better one and say what it costs; never pick the cheaper one to save credits. (Testing still must not waste credits for nothing: say what a real test spent.)
 - He judges by the result on screen. When he says something is wrong, he is usually right: study the reference again before defending the work.
 - He is not a developer. Never ask him to run commands. Never ask him to paste keys or passwords.
 - When he says "study first, do nothing until I say انطلق (go)", write the study and the plan in chat and wait.
@@ -14,9 +15,9 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 137 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 150 at the time of writing)
 
-Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openBrand`):
+Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openResize`, `openBrand`):
 
 | App | Section id | What it does |
 |---|---|---|
@@ -24,6 +25,7 @@ Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpsca
 | Reels | `#reels` | Idea → script → characters → locations → scenes → Seedance 2.5 video, with a "Director" chat and a learning "brain" |
 | Animation templates | `#anim` | After Effects template downloads |
 | BAE Upscale | `#upscale` | The studio's own free upscaler (runs in the browser) |
+| BAE Resize | `#resize` | One approved picture → every screen size; crop or AI background extension, original pixels put back (section 13) |
 | Brand Identity | `#brand` | Colours, logo, type, grid, assets, and **Templates and gradients** |
 
 ## 3. Repositories
@@ -41,7 +43,7 @@ After every change: commit and push here, then copy `app.js` and `index.html` (a
 ```
 index.html   ~1750 lines. All markup and ALL CSS (one <style> block; new CSS goes before the last </style>)
 app.js       ~5500 lines. One outer IIFE. All logic.
-refs/        photography references, studio references (st_minimal_01/02), outfit sheets (of_01..of_17) + _t.jpg thumbs
+refs/        photography references, studio references (st_minimal_01/02), outfit sheets (of_01..of_19) + _t.jpg thumbs
 grad/        the six OFFICIAL gradient elements: BAE_gradient_{circle_1,circle_2,lozenge_h_1,lozenge_h_2,lozenge_v_1,lozenge_v_2}.png + _preview.webp
 ai/          freeform.gz.txt: the Illustrator freeform-gradient template (see section 9)
 up/          BAE Upscale engine: tf.min.js, x2/ and x4/ model weights as base64 text parts (net.json, w0.txt, w1.txt)
@@ -52,7 +54,7 @@ anim/        animation template previews (v/*.mp4, p/*.jpg)
 
 | Around line | Block |
 |---|---|
-| 7 | Rich fields and the `@` picker: `AT`, `AT_SHOTS` (20 camera angles), `AT_OUTFITS` (17 outfit sheets), `atMake`, `atVal/atRead/atWrite`. Chips serialise as `@Name`, `[shot: Name]`, `[outfit: Name]` |
+| 7 | Rich fields and the `@` picker: `AT`, `AT_SHOTS` (20 camera angles), `AT_OUTFITS` (19 outfit sheets), `atMake`, `atVal/atRead/atWrite`. Chips serialise as `@Name`, `[shot: Name]`, `[outfit: Name]` |
 | 210 | References: `MAX_REFS=10`, `REF_USES` (colour + light / colour grading / lighting / style) |
 | 280–360 | **The brand locks**: `JO_CANDID`, `CLIENT_RULES`, `COMPOSITION_RULE`, `STUDIO_RULE`, `LOCATION_BG` |
 | 1314 | `ANGLES4` — the "Create image, different angles" button (4 candid angles) |
@@ -80,7 +82,7 @@ The page uses `await claude.use(name)`:
 
 - `sample` — Claude (text + images). Helper in the code: `rlAsk(prompt, opts)` returns parsed JSON.
 - `mcp` — connectors, called as the viewer:
-  - **Magnafic** (Magnific): generation, upload, wait, spaces, upscale, etc. (35 tools declared)
+  - **Magnafic** (Magnific): generation, upload, wait, spaces, upscale, expand, crop, etc. (39 tools declared; `images_expand`, `images_crop`, `creations_trash` and `images_resize` added for BAE Resize)
   - **BAE Gemini Eye**: `watch_video`, `gemini_status`, `upload_start`, `upload_chunk`, `host_file`
 - `db` — collections with rules (read: view, write: admin): `brain`, `research`, `advisors`, `mem`, `memmeta`, `archive`, `chars`, `charimg`, `brandfiles`, `brandblob`, `upscale`. Private per-person data lives under `data/users/<uid>/…` (Recent history, reels, `lvtaste`).
 - `user`, `downloads`, `assets`, `dictation`.
@@ -108,7 +110,7 @@ A mock proves the UI and the wiring only. Always tell Samer what was tested with
 - Never copy a real person's face. Do not download photos of public figures.
 - Do not embed copyrighted reference images (his camera-angle guide image was deliberately not used).
 - **Never redraw or recolour the BAE logo.** Only the symbol already shipped in the page may be placed; final work uses the official lockups.
-- Outfit sheets are unbranded (no logos). The one exception, added by Samer himself: `of_16` / `of_17`, the official BAE staff uniform (black polo with the white emblem on the chest and the lockup on the back), whose prompt says to keep the marks exactly as on the sheet.
+- Outfit sheets are unbranded (no logos). The exceptions, added by Samer himself: `of_18` / `of_19`, the Bassmet al Etihad staff polo (men / women; white Arabic logo small on the chest, large on the back), and `of_16` / `of_17`, the official BAE staff uniform (black polo with the white emblem on the chest and the lockup on the back), whose prompt says to keep the marks exactly as on the sheet.
 - For the upscaler: he wants it **his own, free, named "BAE Upscale"**, never a paid service. Do not route it through Magnific. Avoid non-commercial licences (CodeFormer was rejected for that reason).
 - A new public GitHub repo needs his explicit yes.
 
@@ -203,3 +205,66 @@ Tested with Playwright and a mocked Claude + Magnific only (desktop and phone wi
 
 Open choice left to us ("see what fits"): whether the current options (Photo / Icon, Studio / Location, aspect, references) stay visible beside the chat or fold into "advanced". The brand locks (candid, centre, soft background, studio) do not change; the chat works on top of them.
 
+
+## 13. BAE Resize (v138)
+
+Samer studied tadvio.com and asked for the same idea inside the studio: give one clean visual (no text, no logo) and get all his screen sizes, with a Download All ZIP. His ten sizes are the default preset (`DEF`): 1920×1080, 3840×2160, 1920×3240, 256×512, 1080×3840, 128×640, 1920×2160, 1080×1920, 128×512, 1920×3840.
+
+**Decision, from a real paid test on his picture (350 credits):**
+- Never regenerate (Seedream redraws the person). Extend the background only (outpainting) and keep the original.
+- Engine = Magnific `images_expand` with `mode:"magnific-expand"` (30 credits): it follows the fill instruction and did not repeat the subject. `bfl-outpainting` (130) rewrites the prompt itself and **tripled the man at 1:5**. Do not switch to it.
+- Extend toward the easy side (sky, plain wall) and say exactly what continues there ("cloudless sky…"), otherwise it invents clouds and furniture.
+- Magnific returns at most about 5 MP whatever is asked, and the page cannot fetch the CDN file, so the result is read back in 768 px tiles: `images_crop` (free, instant, square custom size) then `creations_read` `hq:"medium"` (returns up to about 800 px, so 768 is 1:1).
+
+**How it works (module "BAE Resize" at the end of `app.js`, state `R`, classes `.rz-`):**
+- `analyse()`: Claude returns the subject box and, per side, `ease` and a `fill` sentence.
+- `makePlan()` (pure arithmetic): each size is `same` (resize), `crop` (subject still fits) or `ext`. Sizes that need extending share **masters**: the source is cropped to the subject width ×1.3, extended once (up to 2.5× per step), then again for the extreme ratios; each size is a window cut from the smallest master that holds it. Two extensions cover all eight of his tall sizes.
+- `family()` uploads the base (`rlUploadMag`), calls `images_expand`, waits, reads the size with `creations_get`, `readBack()` fetches only the tiles the extension needs, `compose()` puts the previous layer (the original, then the master before) back on top with a tone match and a feathered edge. So the person is always the original pixels.
+- `check()`: Claude looks at each master and flags repeats, new objects, seams ("Review"); "Make it again" redoes one extension with an optional note.
+- Per size: slider to move the window, "Actual pixels" for the small LED sizes, "High quality" = the same ratio at the native size. ZIP has `exact/` and `HQ/`.
+- Finished extensions are remembered in localStorage (`bae_rz_runs`, by file name + size + dimensions) and reused free after a reload.
+
+**How Magnific really behaves (measured live on Samer's account, 16 Nov 2026 — the first four versions failed in his hands because the mock did not copy this):**
+- The size in `creations_get` metadata is NOT the file's size: details said 711×3556, the file is 704×3552 (the model works in steps of 16).
+- A big request is shrunk by Magnific's own rule: 1264×6320 came back 704×3584, the same with `resolution:"4k"`. Never assume the requested size.
+- `images_crop` refuses a crop LARGER than the file and the refusal states the true size ("A crop fits inside the picture: up to 704 x 3552 px"); non-square sizes are fine; a crop POSITION past the edge is silently moved back inside (so position probes lie, size probes do not).
+- `creations_wait` can come back `processing`; loop.
+- The page's security blocks `fetch("data:…")`; decode base64 with `b64Blob`.
+So `realSize()` asks for a 10000×10000 crop and reads the size from the refusal, with size probes as fallback. Everything sent to Magnific is sized in steps of 16. Every extension starts from a picture the page uploaded itself (the original, then each finished master), never from Magnific's raw result, so what the model redraws under the join equals what the page puts back. `compose()` measures the tone step exactly at each join (24 bins across) and removes it, then blends over the whole calm band up to the subject.
+The mock that copies all of this is in `dev/resize-mock-test.js` (Playwright; run it with MSG=1/0 and META=1/0, set IMG to a test picture). Run it before changing this module.
+
+**Quality pass (v144):**
+- A plain side (clear sky, flat wall) is continued by the page itself, no AI: `edgeModel()` reads a strip at the edge, decides if it is plain (numbers, and Claude's `plain` flag can veto) and `synth()` continues its tone, side-to-side drift and mirrored real grain. Free, full resolution, no invented clouds. On Samer's test picture the sky join is invisible at 100%.
+- When only one side needs the model, Magnific gets just the strip of the picture next to that side (about 1.25× the width), so the request stays near 3 MP and comes back at almost full resolution instead of 704 px wide.
+- The model's new area gets the photograph's grain (`grainLevel`, `addGrain`).
+- Tiles and probe crops are moved to Magnific's trash when a run ends (`creations_trash`, added to the manifest).
+- Samer approved a three-phase plan: 1 quality (done, except "rolling" full-resolution extension when both sides need AI), 2 interface (a wall of screens at true proportions, focus view with drag, editable subject box, staged progress, LED simulation, phone carousel), 3 workflow (several pictures at once, named size sets, history, a button from Photography, wide formats polish).
+
+**Interface (v145), phase 2 done:** the page is a dark "wall of screens" (`.rz-wall`, `screenHTML`): every size at its true shape; before paying, each screen already shows the original in place and the new parts tinted (teal = continued by the page, orange = AI) via `pending()`/`tint()`. A screen opens a focus view (`FO`, `focusDraw`): drag the picture to place it (arrow keys too), "Show what is new", "LED preview" for small sizes (one round dot per pixel), High quality, Download, previous / next, Esc. The source panel has the keep-frame (`#rzBox`): drag it or its corners, `setBox()` replans (and resets created sizes). Progress is a five-step stepper (`STEPS`, `stageOf`). The cost is one big number; credits used on this picture are shown after. On phones the wall is a swipe carousel. Samer confirmed the real run works ("زبط") before this was built. Phase 3 (several pictures, named size sets, history, button from Photography) is next.
+
+**Sharpen (v150), approved by Samer after a real before / after on his climber picture.** The real cause of soft big sizes is not the AI: a 2560 px picture gives a tall crop about 1312 px wide, and 1920-wide sizes stretch it x1.46, person included. Tested for real (17 Nov 2026, about 780 credits): one coherent extension at the exact size (1312x3104, both sides, rope continued because the fill text said so), then `images_upscale` `mode:"ultra-photo"` 2x (Magnific Precision "photo": faithful, nothing invented), cut and reduced to 1920x3840. Result at 100%: no seams, sharper face, rock and AI background, same person. `grain:0` is the smooth one (the "balanced" preset puts visible grain in a clear sky). Cost: 90 credits for 1.1 MP, 270 for 4 MP, about 3 minutes.
+In the page: `sharpTargets()` = one target per picture that has a stretched size (`grow(it)>NEED`): the original (`"src"`, for same / crop sizes) or a master (`fam+index`). `sharpen()` runs after the families: uploads the page's own picture as PNG, starts every upscale, waits, reads each back whole (`readBack`), keeps it at the scale the sizes need (`R.U[key]={canvas,zx,zy}`), checks it is the same picture in the same colour (`apart()`, small offset corrected with `addRGB`). `region()` returns the sharpened picture for a stretched size and the untouched one for every other size (`region0`). Saved per picture in `runs()[key].up` (+ `upSpent`), tied to the master's extension ids. Any failure leaves every size in its normal version and shows a calm note (`R.note`); the switch "Sharpen the sizes that are larger than the picture" (localStorage `bae_rz_sharp`) turns it off. Pictures whose 2x would pass 16 MP are skipped.
+Also in v150: `analyse()` asks that a line crossing an edge (rope, pole, horizon) continues straight to the new edge; `fit500()` keeps the expand prompt under the tool's 500-character limit (measured: longer prompts are refused).
+Honest status: the method and every call were run for real through the connector; the page's own run of it is mock-tested only. Samer's first run is the real test.
+
+**v149: v147 and v148 were ROLLED BACK. The extension code is v146 again, plus the call pace (`paced()` / `mag()`).** Samer's verdict on the pieces, with two real results (a climber against a sky, 2048x4096 and 128x512): "the one before was better, this one has many visible cuts, not smooth at all". What his results show: a hard horizontal line at every join, the sky in bands of different tone (each piece is a separate generation with its own tone), and no overall sense (the rope ends in mid-air, because a strip does not see the whole picture). More pixels, worse picture.
+Lessons, keep them:
+- One generation that sees the whole picture is coherent; several pieces are not, however well they are blended. Sharpness must not be bought with seams.
+- v147 was shipped after a mock test only, and the mock paints a smooth gradient, so it cannot show seams or tone bands. **Never ship a change to how the picture is built without a real result looked at at 100%.** The mock proves wiring only.
+- The measurements below are still true and useful (size rule of `magnific-expand`, the other modes, the read being a JPEG of 800 px), but the "pieces" design built on them is not in the code any more. `images_resize` stays in the manifest, unused.
+- A better route to try, for real first, before touching the tool: one coherent extension as in v146, then an upscale of the new background only, original pixels put back as always.
+
+**(Rolled back) Full resolution in pieces (v147).** Samer: quality over credits, always. Measured on his account (17 Nov 2026, 520 credits of real tests, `magnific-expand`):
+- The result is exactly the size asked for only while **each new side is at most about 1536 px** and the **whole frame at most about 4.15 MP**. Exact: 1024x2304, 1024x2560, 1024x3008 (new side 1504), 1024x2048 (both sides), 2048x1536, 2048x1952 (4.0 MP). Shrunk: 1328x2928 -> 1136x2528, 1024x3136 -> 784x2416, 1024x4096 -> 528x2128 (new side lands near 1536 each time), 2048x2304 -> 1920x2160 (area cap). The old "about 5 MP" note was wrong.
+- Other expand modes, same request: `seedream-4-5` (50, returns 2720x6144) **moves and redraws the person**: unusable. `imagen-nano-banana-2-flash` (150, returns 2752x6200) keeps the person in place and is sharp, but rewrites the foreground; not needed because `magnific-expand` is already 1:1 with the source. `resolution:"4k"` does nothing for `magnific-expand`.
+- A piece that continues an earlier piece (context = the picture built so far) stays calm and consistent: tested once for real.
+So `family()` no longer makes one call per master. `reach(cross)` = what one call can hold (`ADD`=1504 new px, `AREA`=4.0e6), `pieces(F,k)` = the pieces of one master per side. Each AI side of each piece is its own call (the two sides run at once), given the strip next to that side at the picture's own pixels (steps of 16; the tall family's width is now a multiple of 16). `F.aiSteps[k]` is now the NUMBER of calls of master k (cost = sum x 30). Cache: `reuse.ch["k.j.A|B"]={src,id,dims}`, signature `v7` (older saved runs are redone). If Magnific ever shrinks a piece the page still places it correctly (`ka`) and logs "resize shrunk".
+- Tiles: `creations_read` returns a JPEG of at most 800 px (quality about 80, 4:2:0), which left 8 px blocks. Now each 400 px tile is enlarged x2 with `images_resize` (free), read at 800 and reduced in the page: the blocks are gone (measured). `images_resize` was added to the manifest (39 Magnific tools); if it is refused the page falls back to 768 px tiles (`R.noFine`).
+- **Call limit (v148).** Samer's first real run of v147 (iPhone, 210 credits spent) stopped with "Too many MCP tool calls this minute. Retry after 20 seconds": claude.ai limits connector calls per minute and the fine tiles had tripled them. Now every Magnific call of the module goes through `paced()` / `mag()`: calls are spaced (`PACE.gap`, learned and kept in localStorage `bae_rz_pace`), a refusal is waited out and the same call repeated (up to 10 times; the call never ran, so nothing is paid twice). And the result is enlarged x2 ONCE per piece (`images_resize`, verified with `realSize`), then read in 800 px tiles (`readBack(..., z=2)`): 2 calls per tile instead of 3. A both-sides picture is about 240 calls, 4 to 5 minutes. The real limit per minute is not known; the pace finds it.
+- Still mock-tested only inside the page: the whole new flow end to end. The size rule and the look of a second piece are real.
+- Known content limit: when the picture cuts a person at the bottom, a long extension downward makes the model imagine legs and shoes. The note field ("keep the blurred foreground, no legs") steers it.
+
+**Calmer check (v146).** On Samer's second picture (man with a headset at a laptop, blurred mug in the foreground) the automatic check wrote long alarming English notes, cut mid-word, and flagged the mug and table that are in the original; and Claude's keep-frame covered the whole picture (three extensions, 90 credits). Now `check()` sends the original next to the extended picture, is told that anything present in the original is never a defect, and returns `verdict` ok / look / redo with at most two short issues (`clip()` cuts at a word). The UI shows "Worth a look" (amber) or "Clear fault" (red), opens the "AI extensions" card only on a clear fault, and explains in one line what a note is and what "Make it again" costs. The `subject` instruction in `analyse()` now asks for a tight box around the person and the one thing they use, and to look again if it is wider than 0.75 or taller than 0.9. Mock-tested only; the real Claude's verdicts are not yet seen.
+
+**Tested** with Playwright and a mocked Magnific + Claude only (plan, both extensions, tiles, compose, check, ZIP, phone width). **Never tested for real inside the studio:** the upload through BAE Gemini Eye, real tiles, the tone match on a real extension, the check with real Claude.
+Known limits: tiles appear in his Magnific history; a 2560×1440 source means the 1920-wide tall sizes are enlarged ×1.4 (the card says so, a 4K source fixes it); not yet reachable from a Photography result (upload only).
