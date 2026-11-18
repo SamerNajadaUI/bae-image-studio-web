@@ -6569,7 +6569,7 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
   const askCode=c=>/approval_required|consent_required|upstream_error/.test(String(c||""));
 
   async function refresh(){
-    try{ B.st=await bcall("booth_status"); B.err=""; B.errCode="";
+    try{ B.st=await bcall("booth_status"); B.err=""; B.errCode=""; window.__boWork?.ready();
       const j=await bcall("booth_jobs",{limit:8}); B.jobs=j.jobs||[];
       if(B.job){ const k=await bcall("booth_job",{job_id:B.job.id}); B.job=k; if(k.status==="done") await previews(k); }
     }catch(e){ B.errCode=e?.code||"error"; B.err=e?.message||String(e?.code||e); }
@@ -6665,7 +6665,353 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
   $("openBooth")?.addEventListener("click",open);
   $("closeBooth")?.addEventListener("click",()=>{ P.hidden=true; B.open=false; clearTimeout(B.timer); $("openBooth")?.focus(); });
   document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&B.open&&!P.hidden) refresh(); });
-  window.__bo={B,refresh};
+  window.__bo={B,refresh,bcall,fetchFile,saveB,draw};
+})();
+
+/* ======================================================================================================
+   BAE 3D Booth (phase 2): booth projects. Talk first, then Plan, Designs, Build.
+   1 Talk     a booth designer (Claude) discusses the idea: reads the floor plan / designs / photo of the space if there are any,
+              asks, proposes 2-3 layout ideas with a sketch. NOTHING is built until Samer presses "Make the plan".
+   2 Plan     Claude writes the booth spec (cm, front-left corner, the same schema as booth/bridge/addon/bae_booth/engine/build_booth.py);
+              the page draws it from above with every piece numbered; changes by talking ("move the TV to the right").
+   3 Designs  one card per printed surface: upload the design, find it in the PDF (Claude marks the box, the page crops it) or keep the colour.
+   4 Build    the job goes to the render Mac (phase 1 bridge): all views, the .blend, the contractor's placement sheet drawn here.
+   Projects: data/users/<uid>/booths/p/<id> (+ localStorage copy); files: the assets store (editors) or this session only.
+   ====================================================================================================== */
+(()=>{
+  const P=$("booth"), W=$("boWork"); if(!P||!W) return;
+  const BO=()=>window.__bo||{};
+  const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
+  const rid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+  const LKEY="bae_booth_projects", CHB=524288, PDFJS="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+  const VIEWS=["01_front_left","02_front","03_back_right","04_left_side","05_inside","06_top"];
+  const T={list:[],cur:null,busy:"",err:"",ready:false,pages:{},mem:new Map(),job:null,imgs:{},timer:0,loaded:false};
+  const STEPS=[["talk","Talk"],["plan","Plan"],["designs","Designs"],["build","Build"]];
+
+  /* ---------- the schema Claude writes (kept in step with build_booth.py) ---------- */
+  const SPEC_DOC=`BOOTH SPEC (JSON). Units: centimetres. Origin: the FRONT-LEFT corner of the site, x to the right, y towards the back, z up.
+{
+ "name": "...", "file": "short_file_name", "units":"cm", "width": <site width x>, "depth": <site depth y>, "height": <default wall height>,
+ "floors":[{"name","x","y","w","d","colour":"#hex"}],
+ "walls":[{"name","from":[x,y],"to":[x,y],"thick":<cm>,"height"?:<cm>,"colour"?:"#hex","art"?:"tex/<slot>.png","art_inside"?:"tex/<slot>.png",
+           "openings"?:[{"name","at":<cm from 'from' along the wall>,"width","height","radius"?:<rounded top corners>,"post"?:{"width","height"}}]}],
+ "pieces":[
+   {"type":"box","name","x","y","w","d","h","z"?:0,"colour":"#hex","emit"?:0,"alpha"?:1,"rough"?:0.5},       (x,y = the box's front-left corner)
+   {"type":"cylinder","name","x","y","r","h","z"?:0,"colour"},                                                (x,y = centre)
+   {"type":"table","name","x","y","r","h","colour"},                                                          (round top on a brass stem)
+   {"type":"ring","name","x","y","ring":<radius of the circle of seats>,"r","h","count","start"?:<deg>,"colour"},  (stools around a centre)
+   {"type":"art","name","from":[x,y],"to":[x,y],"z","h","art":"tex/<slot>.png","lift"?:0.6,"emit"?:0}       (a flat print or panel; its LEFT edge at 'from')
+ ],
+ "cameras"?:[{"file":"07_name","name","eye":[x,y,z],"look":[x,y,z],"lens":24}],
+ "notes":["every conflict or assumption, one line each"]
+}
+WALL RULE: a wall runs from 'from' to 'to'; its OUTSIDE (where its "art" is seen) is on the RIGHT of that direction, its thickness goes to the LEFT (inward).
+So a booth's front wall runs left to right ([0,0]→[W,0]) and is seen from the front; the back wall runs [W,D]→[0,D]; the left wall [0,D]→[0,0]; the right wall [W,0]→[W,D].
+"art_inside" is a print on the other face. Art images are stretched over the whole wall (length × height), openings stay open.
+Doors: an opening "at" cm from the wall's 'from' end. Glass walls: thin boxes with "alpha":0.25 and colour "#DCEBF0".
+Sizes are real: a bar table h 110 r 30, stool h 45 r 15, chair 44×44×45, sofa 180×80×80, counter 120×60×105, TV 65" = 144×4×81 hung at z 95-120.
+Colours: Bank al Etihad palette only: #FA6428 orange, #C13A23 dark orange, #FB9A75 medium, #FDCBB4 soft, #FFFAF4 light, #19181E ink, #ECE8DF stone, #CCC3B4 dark stone. Floors light stone or warm grey.
+Never draw or invent a logo or words: any logo or text appears only inside a design image the user gives.`;
+  const BRAND=`Bank al Etihad (BAE), Jordan. Brand: "Deep Clarity", warm and precise; orange family colours; the logo is never redrawn (only official files). Booths are for real events: malls, outdoor plazas, exhibitions.`;
+
+  /* ---------- storage ---------- */
+  const col=async()=>{ try{ await rlStoreInit(); return RLS.db&&RLS.uid?RLS.db.collection(`data/users/${RLS.uid}/booths/p`):null; }catch{ return null; } };
+  const lsGet=()=>{ try{ return JSON.parse(localStorage.getItem(LKEY)||"[]"); }catch{ return []; } };
+  const lsPut=list=>{ try{ localStorage.setItem(LKEY,JSON.stringify(list.slice(0,30))); }catch{} };
+  function slim(p){ const q=JSON.parse(JSON.stringify(p)); q.chat=(q.chat||[]).slice(-40); let s=JSON.stringify(q);
+    while(s.length>230000&&q.chat.length>4){ q.chat.splice(0,4); s=JSON.stringify(q); } return q; }
+  async function save(p){ p.updated=Date.now(); const q=slim(p);
+    const list=lsGet().filter(x=>x.id!==p.id); list.unshift(q); lsPut(list);
+    const c=await col(); if(c){ try{ await c.doc(p.id).set(q); p.synced=true; }catch(e){ p.synced=false; log("✕","booth save",{code:e?.code,message:e?.message}); } } }
+  async function loadList(){ let cloud=[]; const c=await col();
+    if(c){ try{ const sn=await c.get(); cloud=sn.docs.map(d=>JSON.parse(JSON.stringify(d.data()))).filter(x=>x?.id); }catch{} }
+    const m=new Map(); for(const x of [...lsGet(),...cloud]){ const o=m.get(x.id); if(!o||(x.updated||0)>(o.updated||0)) m.set(x.id,x); }
+    T.list=[...m.values()].sort((a,b)=>(b.updated||0)-(a.updated||0)); T.loaded=true; }
+  async function remove(p){ T.list=T.list.filter(x=>x.id!==p.id); lsPut(lsGet().filter(x=>x.id!==p.id)); const c=await col(); if(c) c.doc(p.id).delete().catch(()=>{}); }
+
+  /* ---------- files: kept in the assets store when this viewer may, otherwise for this session ---------- */
+  async function keep(file){
+    try{ const A=await window.claude?.use?.("assets"); if(A){ const r=await A.upload(file); return {id:r.id,url:r.url,name:file.name,type:file.type,size:file.size}; } }catch(e){ log("✕","booth asset",{code:e?.code,message:e?.message}); }
+    const k="m_"+rid(); T.mem.set(k,file); return {mem:k,name:file.name,type:file.type,size:file.size}; }
+  async function blobOf(f){ if(f.mem){ const b=T.mem.get(f.mem); if(!b) throw new Error(`${f.name} was only kept for the session that added it. Add it again.`); return b; }
+    const r=await fetch(f.url||("/_blob/"+f.id)); if(!r.ok) throw new Error("couldn't read "+f.name); return r.blob(); }
+
+  /* ---------- PDF pages (pdf.js on the main thread) ---------- */
+  let pdfjsP=null;
+  const script=src=>new Promise((ok,no)=>{ const s=document.createElement("script"); s.src=src; s.onload=ok; s.onerror=()=>no(new Error("the PDF reader didn't load")); document.head.appendChild(s); });
+  const pdfjs=()=>pdfjsP||(pdfjsP=script(PDFJS+"pdf.worker.min.js").then(()=>script(PDFJS+"pdf.min.js")).then(()=>{ window.pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS+"pdf.worker.min.js"; return window.pdfjsLib; }).catch(e=>{ pdfjsP=null; throw e; }));
+  async function pagesOf(f){ /* -> [{canvas (about 2400 px), small Blob for Claude}] */
+    const key=f.id||f.mem; if(T.pages[key]) return T.pages[key];
+    const blob=await blobOf(f); const out=[];
+    if(/pdf/i.test(f.type)||/\.pdf$/i.test(f.name)){
+      const lib=await pdfjs(); const doc=await lib.getDocument({data:new Uint8Array(await blob.arrayBuffer())}).promise;
+      for(let i=1;i<=Math.min(doc.numPages,16);i++){ const pg=await doc.getPage(i); const v0=pg.getViewport({scale:1}); const sc=Math.min(4,2400/Math.max(v0.width,v0.height));
+        const v=pg.getViewport({scale:sc}); const c=document.createElement("canvas"); c.width=Math.round(v.width); c.height=Math.round(v.height);
+        const g=c.getContext("2d"); g.fillStyle="#fff"; g.fillRect(0,0,c.width,c.height); await pg.render({canvasContext:g,viewport:v}).promise; out.push({canvas:c}); }
+    } else { const bmp=await createImageBitmap(blob); const sc=Math.min(1,2400/Math.max(bmp.width,bmp.height)); const c=document.createElement("canvas"); c.width=Math.round(bmp.width*sc); c.height=Math.round(bmp.height*sc); c.getContext("2d").drawImage(bmp,0,0,c.width,c.height); out.push({canvas:c}); }
+    for(const o of out){ const s=Math.min(1,1568/Math.max(o.canvas.width,o.canvas.height)); const c=document.createElement("canvas"); c.width=Math.round(o.canvas.width*s); c.height=Math.round(o.canvas.height*s); c.getContext("2d").drawImage(o.canvas,0,0,c.width,c.height); o.small=await new Promise(r=>c.toBlob(r,"image/jpeg",.88)); o.thumb=c.toDataURL("image/jpeg",.6); }
+    return T.pages[key]=out; }
+  async function claudeImages(p){ /* the pictures Claude looks at, numbered, with a list saying what each one is */
+    const max=Math.max(1,Math.min(16,(sampleImages?.maxCount||sampleImages?.max||10)));
+    const imgs=[], list=[];
+    for(const f of p.files||[]){ let pages; try{ pages=await pagesOf(f); }catch(e){ list.push(`${f.name}: could not be read (${e.message})`); continue; }
+      pages.forEach((o,i)=>{ if(imgs.length<max){ imgs.push(o.small); list.push(`image ${imgs.length} = ${f.name}${pages.length>1?` page ${i+1}`:""} (${f.role||"file"})`); } }); }
+    return {imgs,list}; }
+
+  /* ---------- geometry, drawing from above ---------- */
+  const num=v=>Number.isFinite(+v)?+v:0;
+  function wallParts(w,spec){ const [x0,y0]=w.from, [x1,y1]=w.to, L=Math.hypot(x1-x0,y1-y0)||1, dx=(x1-x0)/L, dy=(y1-y0)/L, T=num(w.thick)||10;
+    const cuts=[...(w.openings||[])].sort((a,b)=>a.at-b.at), segs=[]; let cur=0;
+    for(const o of cuts){ if(o.at>cur) segs.push([cur,o.at]); cur=o.at+o.width; } if(cur<L) segs.push([cur,L]);
+    const pt=(s,t)=>[x0+dx*s-dy*t, y0+dy*s+dx*t];
+    return {L,segs,cuts,pt,T}; }
+  function pieceList(spec){ /* every placed thing with its centre and size, for the numbers and the sheet */
+    const out=[];
+    for(const p of spec.pieces||[]){ const t=p.type;
+      if(t==="box") out.push({name:p.name,cx:num(p.x)+num(p.w)/2,cy:num(p.y)+num(p.d)/2,size:`${p.w} × ${p.d} × ${p.h} cm`,p});
+      else if(t==="cylinder"||t==="table") out.push({name:p.name,cx:num(p.x),cy:num(p.y),size:`Ø ${2*num(p.r)} cm, h ${p.h}`,p});
+      else if(t==="ring") out.push({name:`${p.name} × ${p.count}`,cx:num(p.x),cy:num(p.y),size:`ring Ø ${2*num(p.ring)} cm`,p});
+      else if(t==="art"){ const [a,b]=[p.from||[0,0],p.to||[0,0]]; out.push({name:p.name,cx:(a[0]+b[0])/2,cy:(a[1]+b[1])/2,size:`${Math.round(Math.hypot(b[0]-a[0],b[1]-a[1]))} × ${p.h} cm`,p}); } }
+    for(const w of spec.walls||[]) for(const o of w.openings||[]){ const g=wallParts(w,spec); const c=g.pt(o.at+o.width/2,0); out.push({name:`${o.name||"Opening"} (${w.name})`,cx:c[0],cy:c[1],size:`opening ${o.width} × ${o.height} cm`,door:1}); }
+    /* small or overhead things (cords, lamps, posts, beams) stay in the list but get no number on the drawing, and two numbers never sit on one spot */
+    const minor=x=>{ const q=x.p; if(!q) return false; const big=Math.max(num(q.w),num(q.d),2*num(q.r)); return num(q.z)>=150||big<=10||(q.type==="box"&&Math.min(num(q.w),num(q.d))<=8); };
+    const shown=[]; return out.map((x,i)=>{ const y={...x,n:i+1}; y.mark=!minor(x)&&!shown.some(s=>Math.hypot(s.cx-x.cx,s.cy-x.cy)<25); if(y.mark) shown.push(y); return y; }); }
+  function topSVG(spec,o={}){
+    const Wd=num(spec.width)||600, D=num(spec.depth)||400, pad=Math.max(Wd,D)*.06, Y=y=>D-y, list=o.numbers===false?[]:pieceList(spec);
+    const fs=Math.max(Wd,D)/55; let s=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${-pad} ${-pad} ${Wd+2*pad} ${D+2*pad}" class="bo-top" role="img" aria-label="${esc(spec.name||"Booth")} from above">`;
+    s+=`<rect x="0" y="0" width="${Wd}" height="${D}" fill="#F4F1EB" stroke="#CCC3B4" stroke-dasharray="${fs/2} ${fs/2}" stroke-width="${fs/8}"/>`;
+    for(const f of spec.floors||[]) s+=`<rect x="${num(f.x)}" y="${Y(num(f.y)+num(f.d))}" width="${num(f.w)}" height="${num(f.d)}" fill="${esc(f.colour||"#E9E4DA")}" opacity=".7"/>`;
+    for(const z of o.zones||[]) s+=`<rect x="${num(z.x)}" y="${Y(num(z.y)+num(z.d))}" width="${num(z.w)}" height="${num(z.d)}" rx="${fs/2}" fill="#FA6428" fill-opacity=".14" stroke="#C13A23" stroke-width="${fs/10}"/><text x="${num(z.x)+num(z.w)/2}" y="${Y(num(z.y)+num(z.d)/2)}" font-size="${fs*1.1}" text-anchor="middle" dominant-baseline="middle" fill="#19181E">${esc(z.name)}</text>`;
+    for(const p of spec.pieces||[]){ const c=esc(p.colour||"#FB9A75"), op=p.alpha&&p.alpha<1?.35:.95;
+      if(p.type==="box") s+=`<rect x="${num(p.x)}" y="${Y(num(p.y)+num(p.d))}" width="${num(p.w)}" height="${num(p.d)}" fill="${c}" fill-opacity="${op}" stroke="#19181E" stroke-opacity=".25" stroke-width="${fs/14}"/>`;
+      else if(p.type==="cylinder"||p.type==="table") s+=`<circle cx="${num(p.x)}" cy="${Y(num(p.y))}" r="${num(p.r)}" fill="${c}" fill-opacity="${op}" stroke="#19181E" stroke-opacity=".25" stroke-width="${fs/14}"/>`;
+      else if(p.type==="ring") for(let k=0;k<num(p.count);k++){ const a=2*Math.PI*k/num(p.count)+num(p.start)*Math.PI/180; s+=`<circle cx="${num(p.x)+num(p.ring)*Math.cos(a)}" cy="${Y(num(p.y)+num(p.ring)*Math.sin(a))}" r="${num(p.r)}" fill="${c}"/>`; }
+      else if(p.type==="art"){ const [a,b]=[p.from||[0,0],p.to||[0,0]]; s+=`<line x1="${a[0]}" y1="${Y(a[1])}" x2="${b[0]}" y2="${Y(b[1])}" stroke="#C13A23" stroke-width="${fs/2.5}" stroke-linecap="round"/>`; } }
+    for(const w of spec.walls||[]){ const g=wallParts(w,spec); const col=w.art?"#C13A23":esc(w.colour||"#FA6428");
+      for(const [a,b] of g.segs){ const q=[g.pt(a,0),g.pt(b,0),g.pt(b,g.T),g.pt(a,g.T)]; s+=`<polygon points="${q.map(([x,y])=>`${x},${Y(y)}`).join(" ")}" fill="${col}"/>`; }
+      for(const c of g.cuts){ const a=g.pt(c.at,g.T/2), b=g.pt(c.at+c.width,g.T/2); s+=`<line x1="${a[0]}" y1="${Y(a[1])}" x2="${b[0]}" y2="${Y(b[1])}" stroke="#19181E" stroke-opacity=".45" stroke-width="${fs/10}" stroke-dasharray="${fs/3} ${fs/3}"/>`; } }
+    for(const x of list.filter(q=>q.mark)){ const r=fs*.95; s+=`<circle cx="${x.cx}" cy="${Y(x.cy)}" r="${r}" fill="#19181E"/><text x="${x.cx}" y="${Y(x.cy)}" font-size="${fs*1.05}" text-anchor="middle" dominant-baseline="central" fill="#fff">${x.n}</text>`; }
+    s+=`<text x="${Wd/2}" y="${-pad*.35}" font-size="${fs*1.2}" text-anchor="middle" fill="#55535c">BACK · ${Wd} cm</text><text x="${Wd/2}" y="${D+pad*.75}" font-size="${fs*1.2}" text-anchor="middle" fill="#55535c">FRONT</text><text x="${-pad*.45}" y="${D/2}" font-size="${fs*1.2}" text-anchor="middle" fill="#55535c" transform="rotate(-90 ${-pad*.45} ${D/2})">${D} cm</text>`;
+    return s+"</svg>"; }
+  function slotsOf(spec){ const out=[], seen=new Set();
+    const add=(path,label,w,h)=>{ if(!path||seen.has(path)) return; seen.add(path); out.push({path,label,w:Math.round(w),h:Math.round(h)}); };
+    for(const w of spec.walls||[]){ const L=Math.hypot(w.to[0]-w.from[0],w.to[1]-w.from[1]), H=num(w.height)||num(spec.height)||250; add(w.art,`${w.name} (outside)`,L,H); add(w.art_inside,`${w.name} (inside)`,L,H); }
+    for(const p of spec.pieces||[]) if(p.type==="art"){ const [a,b]=[p.from||[0,0],p.to||[0,0]]; add(p.art,p.name,Math.hypot(b[0]-a[0],b[1]-a[1]),num(p.h)); }
+    return out; }
+  function validSpec(s){ if(!s||typeof s!=="object") return "no spec";
+    if(!(num(s.width)>0&&num(s.depth)>0)) return "width and depth are missing";
+    for(const w of s.walls||[]) if(!Array.isArray(w.from)||!Array.isArray(w.to)) return `wall ${w.name||""} has no from / to`;
+    s.units="cm"; s.height=num(s.height)||250; s.floors=s.floors||[]; s.walls=s.walls||[]; s.pieces=s.pieces||[]; return ""; }
+
+  /* ---------- talking to the booth designer ---------- */
+  const history=p=>(p.chat||[]).slice(-24).map(m=>`${m.role==="me"?"DESIGNER (user)":"YOU"}: ${m.text}${m.ideas?.length?`\n  [you proposed ideas: ${m.ideas.map(i=>i.title).join(" / ")}]`:""}`).join("\n");
+  async function talk(p,text){
+    const {imgs,list}=await claudeImages(p);
+    const prompt=`You are the senior booth and event-space designer of the in-house creative studio of ${BRAND}
+You are talking with a designer from the team. This is the DISCUSSION before anything is built: understand, ask, propose, agree. You never build here.
+Speak in the user's language and dialect (Jordanian Arabic when they write Arabic), short and warm, like a creative director in a meeting.
+
+WHAT THE USER STARTED WITH: ${p.mode==="plan"?"a floor plan (and maybe the designs of the walls)":"only an empty space, no plan and no design yet"}.
+FILES ATTACHED (pictures in this order): ${list.length?list.join("; "):"none"}.
+WHAT WE AGREED SO FAR: ${p.summary||"(nothing yet)"}
+THE TALK SO FAR:
+${history(p)||"(this is the start)"}
+THE USER NOW SAYS: ${text}
+
+HOW TO ANSWER
+- If there is a plan: say in one or two lines what you read (overall size, areas, doors, main pieces) and list any measurement that does not add up. Ask only what the plan does not tell you.
+- If there is only a space: find out, over the talk, the size (width × depth, height if limited), where it is (mall, outdoor, exhibition hall), the occasion, the activities and pieces they want, who visits, and anything that must be there. Ask at most TWO questions per message, the most important first.
+- When you know enough, propose 2 or 3 DIFFERENT layout ideas (or improvements of their plan): each with a title, a one-line concept, why it works for the visitors and the bank, and its zones as rectangles in cm from the site's FRONT-LEFT corner (x right, y back) inside the site's width and depth, so the page can sketch it. Do not propose ideas again if the user is already developing one: refine it instead.
+- Be honest about problems (a TV that does not fit, a door too narrow, a queue with no room).
+- "ready": true ONLY when the user has clearly chosen or approved a direction and the size is known; otherwise false. Never decide for them.
+- "summary": in English, everything agreed so far that the plan must follow (size, entrances, zones, pieces with sizes, materials, colours, the chosen idea). Rewrite it whole each time, max 1200 characters.
+Return JSON: {"say": "...", "ideas": [{"title","concept","why","zones":[{"name","x","y","w","d"}]}] or [], "ready": false, "summary": "...", "title": "a short name for this booth in the user's language (2-5 words, e.g. «بوث الكريسماس»), or null if unknown yet", "site": {"width": cm, "depth": cm, "height": cm} or null}`;
+    return rlAsk(prompt,{images:imgs,modelTier:"complex"}); }
+  async function makePlan(p,extra){
+    const {imgs,list}=await claudeImages(p);
+    const prompt=`You are the booth builder of the in-house creative studio of ${BRAND}
+Write the exact booth SPEC that a Blender script builds, from what was agreed with the designer. Measure carefully: every piece goes exactly where the plan says; the contractor builds from these numbers.
+${SPEC_DOC}
+
+FILES (pictures in this order): ${list.length?list.join("; "):"none"}. Read the plan's dimensions from the drawings when there is a plan; read each area's elevation for heights and pieces.
+WHAT WAS AGREED: ${p.summary||"(see the talk)"}
+CHOSEN IDEA: ${p.idea?JSON.stringify(p.idea):"(see the talk)"}
+THE TALK:
+${history(p)}
+${extra?`EXTRA INSTRUCTION: ${extra}`:""}
+
+RULES
+- Every wall that carries a printed design gets "art":"tex/<short_slot_name>.png" (one image per wall face). Free-standing printed panels, signs, backlit graphics are "art" pieces with their own slot. Plain walls just get a colour.
+- Put every agreed piece (furniture, screens, counters, lights, plants as simple boxes or cylinders) at its real size and place.
+- Add 1 or 2 "cameras" that show the most important corner from inside at eye level (z about 160).
+- "notes": every assumption you made and every conflict in the plan, one short line each, in the user's language.
+Return JSON: {"spec": {...}, "say": "one or two lines to the designer about what you built and what to check"}`;
+    return rlAsk(prompt,{images:imgs,modelTier:"complex"}); }
+  async function editPlan(p,text){
+    const prompt=`You keep the booth SPEC of the in-house creative studio of ${BRAND} up to date. The designer asks for a change.
+${SPEC_DOC}
+CURRENT SPEC: ${JSON.stringify(p.spec)}
+THE DESIGNER SAYS: ${text}
+Change ONLY what was asked (and what it moves with it), keep everything else exactly, keep the same slot names. If the request is unclear or impossible, do not change the spec and ask.
+Return JSON: {"spec": {...full spec...} or null when nothing changed, "say": "short answer in the designer's language"}`;
+    return rlAsk(prompt,{modelTier:"complex"}); }
+  async function findInPdf(p,slot){
+    const {imgs,list}=await claudeImages(p);
+    if(!imgs.length) throw new Error("there is no plan or design file in this booth");
+    const r=await rlAsk(`Find, in the attached pictures, the 2D design (front view / elevation artwork) that should be printed on this surface of a booth:
+SURFACE: ${slot.label} — ${slot.w} cm wide × ${slot.h} cm high. ${p.summary?`Context: ${p.summary.slice(0,600)}`:""}
+PICTURES: ${list.join("; ")}
+Give the box around the ARTWORK ONLY (inside its dimension lines, labels and arrows; no page title), as fractions 0..1 of that picture (x,y from the top-left). If you cannot find it, say so.
+Return JSON: {"image": <number of the picture, 1-based> or null, "box": {"x","y","w","h"} or null, "say": "one short line in the designer's language"}`,{images:imgs,modelTier:"complex"});
+    if(!r?.image||!r?.box) throw new Error(r?.say||"not found in the files");
+    let k=0; for(const f of p.files||[]){ const pages=await pagesOf(f); for(const o of pages){ k++; if(k===+r.image){ const c=o.canvas, b=r.box;
+      const x=Math.max(0,b.x*c.width), y=Math.max(0,b.y*c.height), w=Math.min(c.width-x,b.w*c.width), h=Math.min(c.height-y,b.h*c.height);
+      const out=document.createElement("canvas"); out.width=Math.round(w); out.height=Math.round(h); out.getContext("2d").drawImage(c,x,y,w,h,0,0,out.width,out.height);
+      const blob=await new Promise(rr=>out.toBlob(rr,"image/png")); return {blob,say:r.say}; } } }
+    throw new Error("that picture is not there any more"); }
+
+  /* ---------- sending the build to the Mac ---------- */
+  async function upload(blob,name){ const bcall=BO().bcall; let id=null;
+    for(let off=0;off<blob.size;off+=CHB){ const part=blob.slice(off,off+CHB);
+      const data=await new Promise((ok,no)=>{ const fr=new FileReader(); fr.onload=()=>ok(String(fr.result).split(",")[1]||""); fr.onerror=no; fr.readAsDataURL(part); });
+      const a={offset:off,data}; if(id) a.upload_id=id; else Object.assign(a,{name,mime:blob.type||"image/png",bytes:blob.size});
+      const r=await bcall("booth_upload",a); id=r.upload_id; }
+    return id; }
+  async function build(p){ const bcall=BO().bcall; if(!bcall) throw new Error("the 3D Booth connector isn't ready");
+    T.busy="Sending the designs…"; draw(); const files={};
+    for(const s of slotsOf(p.spec)){ const d=p.slots?.[s.path]; if(!d?.file) continue; T.busy=`Sending ${s.label}…`; draw(); files[s.path]=await upload(await blobOf(d.file),s.path.split("/").pop()); }
+    const views=[...VIEWS,...(p.spec.cameras||[]).map(c=>c.file).filter(Boolean)];
+    T.busy="Queuing the build…"; draw();
+    const r=await bcall("booth_submit",{title:p.name||"Booth",kind:"build",spec:p.spec,files,options:{views,width:1920,height:1080,samples:128,blend:true}});
+    p.jobs=[r.job_id,...(p.jobs||[])].slice(0,20); p.step="build"; await save(p); T.job={id:r.job_id,status:"queued",pct:0,msg:"Waiting for the render Mac",outputs:[]}; }
+  async function poll(){ clearTimeout(T.timer); const p=T.cur; if(!p||P.hidden||!p.jobs?.length||p.step!=="build") return;
+    try{ const k=await BO().bcall("booth_job",{job_id:p.jobs[0]}); T.job=k;
+      if(k.status==="done") for(const o of k.outputs||[]) if(/_preview\.jpg$/.test(o.path)&&!T.imgs[o.file_id]){ try{ T.imgs[o.file_id]=URL.createObjectURL(await BO().fetchFile(o)); }catch{} } }
+    catch(e){ T.err=e?.message||String(e?.code||e); }
+    draw(); if(T.job&&(T.job.status==="queued"||T.job.status==="running")) T.timer=setTimeout(poll,4000); }
+
+  /* ---------- the contractor's placement sheet (drawn here, from the spec) ---------- */
+  async function sheetPNG(p){ const spec=p.spec, list=pieceList(spec), Wd=1800, top=topSVG(spec);
+    const img=await new Promise((ok,no)=>{ const im=new Image(); im.onload=()=>ok(im); im.onerror=no; im.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(top); });
+    const mapW=1150, mapH=Math.round(mapW*img.height/img.width), rowH=30, H=Math.max(mapH+160,140+list.length*rowH+(spec.notes?.length||0)*26+60);
+    const c=document.createElement("canvas"); c.width=Wd; c.height=H; const g=c.getContext("2d");
+    g.fillStyle="#FFFAF4"; g.fillRect(0,0,Wd,H); g.fillStyle="#19181E"; g.font="34px sans-serif"; g.fillText(`${spec.name||p.name||"Booth"} — placement sheet`,40,64);
+    g.font="18px sans-serif"; g.fillStyle="#55535c"; g.fillText(`${spec.width} × ${spec.depth} cm · positions are the CENTRE of each piece, in cm from the LEFT edge and from the FRONT edge`,40,98);
+    g.drawImage(img,30,130,mapW,mapH);
+    let y=150; const x0=mapW+60; g.font="17px sans-serif";
+    for(const it of list){ g.fillStyle="#19181E"; g.beginPath(); g.arc(x0+12,y-6,12,0,7); g.fill(); g.fillStyle="#fff"; g.textAlign="center"; g.fillText(String(it.n),x0+12,y); g.textAlign="left";
+      g.fillStyle="#19181E"; g.fillText(String(it.name).slice(0,38),x0+34,y); g.fillStyle="#7a7782"; g.fillText(`${Math.round(it.cx)} from left · ${Math.round(it.cy)} from front · ${it.size}`,x0+34,y+16); y+=rowH+8; }
+    if(spec.notes?.length){ y+=10; g.fillStyle="#C13A23"; g.fillText("Notes",x0,y); y+=24; g.fillStyle="#19181E"; for(const n of spec.notes){ g.fillText(String(n).slice(0,70),x0,y); y+=24; } }
+    return new Promise(r=>c.toBlob(r,"image/png")); }
+
+  /* ---------- drawing the page ---------- */
+  const stepIdx=s=>STEPS.findIndex(x=>x[0]===s);
+  function chatHTML(p){ return (p.chat||[]).map((m,i)=>`<div class="bow-m ${m.role==="me"?"me":"ai"}"><div class="bow-b" dir="auto">${esc(m.text).replace(/\n/g,"<br>")}${m.files?.length?`<div class="bow-f">📎 ${m.files.map(esc).join(", ")}</div>`:""}</div>
+      ${m.ideas?.length?`<div class="bow-ideas">${m.ideas.map((d,j)=>`<div class="bow-idea${p.idea?.title===d.title?" on":""}"><div class="bow-sk">${topSVG({width:p.site?.width||600,depth:p.site?.depth||400,floors:[],walls:[],pieces:[]},{zones:d.zones,numbers:false})}</div><b dir="auto">${esc(d.title)}</b><p dir="auto">${esc(d.concept)}</p>${d.why?`<p class="muted bo-small" dir="auto">${esc(d.why)}</p>`:""}<button class="btn small" type="button" data-w="pick" data-i="${i}" data-j="${j}">${p.idea?.title===d.title?"Chosen":"Develop this idea"}</button></div>`).join("")}</div>`:""}</div>`).join(""); }
+  function stepper(p){ const k=stepIdx(p.step); return `<ol class="bow-steps">${STEPS.map(([s,l],i)=>`<li class="${i<k?"done":i===k?"on":""}"><button type="button" data-w="go" data-s="${s}" ${i>k&&!(i===1&&p.spec)&&!(i>1&&p.spec)?"disabled":""}>${i+1} · ${l}</button></li>`).join("")}</ol>`; }
+  function talkHTML(p){ const empty=!(p.chat||[]).length;
+    return `<section class="rl-card bo-card"><div class="bow-chat" id="bowChat">${empty?`<p class="muted" dir="auto">${p.mode==="plan"?"Attach the floor plan (PDF or pictures) and the wall designs if you have them, and tell the designer about the booth. Nothing is built until you agree on the idea.":"Tell the designer about the space: its size, where it is, the occasion and what should happen in it. A photo of the empty space helps. Nothing is built until you agree on the idea."}</p>`:chatHTML(p)}${T.busy?`<div class="bow-m ai"><div class="bow-b"><span class="rl-typing">${esc(T.busy)}</span></div></div>`:""}</div>
+      ${p.files?.length?`<div class="bow-files">${p.files.map((f,i)=>`<span class="bow-file">${esc(f.name)}<button type="button" aria-label="Remove ${esc(f.name)}" data-w="unfile" data-i="${i}">×</button></span>`).join("")}</div>`:""}
+      <form class="bow-in" data-w="send"><label class="btn small bow-att">Attach<input type="file" id="bowFile" accept="application/pdf,image/*" multiple hidden></label><textarea id="bowText" rows="2" dir="auto" placeholder="${p.mode==="plan"?"Tell the designer about this booth…":"The space, the occasion, what should happen in it…"}"></textarea><button class="btn primary" type="submit" ${T.busy?"disabled":""}>Send</button></form>
+      ${p.ready?`<div class="bow-ready"><p dir="auto"><b>Ready for the plan.</b> ${esc(p.summary||"").slice(0,300)}</p><button class="btn primary" type="button" data-w="plan" ${T.busy?"disabled":""}>Make the plan</button></div>`:""}</section>`; }
+  function planHTML(p){ const s=p.spec, list=pieceList(s);
+    return `<section class="rl-card bo-card"><div class="bow-planhead"><b>${esc(s.name||p.name)}</b><span class="muted">${s.width} × ${s.depth} cm · height ${s.height} cm</span></div>
+      <div class="bow-map">${topSVG(s)}</div>
+      ${s.notes?.length?`<div class="bow-notes"><b>To check</b><ul>${s.notes.map(n=>`<li dir="auto">${esc(n)}</li>`).join("")}</ul></div>`:""}
+      <details class="bow-list"><summary>Every piece and its place (${list.length})</summary><ol>${list.map(x=>`<li><b dir="auto">${esc(x.name)}</b> <span class="muted">${Math.round(x.cx)} cm from left · ${Math.round(x.cy)} cm from front · ${esc(x.size)}</span></li>`).join("")}</ol></details>
+      <div class="bow-chat small" id="bowChat">${(p.planChat||[]).map(m=>`<div class="bow-m ${m.role==="me"?"me":"ai"}"><div class="bow-b" dir="auto">${esc(m.text)}</div></div>`).join("")}${T.busy?`<div class="bow-m ai"><div class="bow-b"><span class="rl-typing">${esc(T.busy)}</span></div></div>`:""}</div>
+      <form class="bow-in" data-w="edit"><textarea id="bowText" rows="2" dir="auto" placeholder="Change something: “move the TV to the right corner”, “the door is 400 wide”…"></textarea><button class="btn primary" type="submit" ${T.busy?"disabled":""}>Change</button></form>
+      <div class="btns"><button class="btn" type="button" data-w="go" data-s="talk">Back to the talk</button><button class="btn" type="button" data-w="replan" ${T.busy?"disabled":""}>Make the plan again</button><button class="btn primary" type="button" data-w="go" data-s="designs">The plan is right → Designs</button></div></section>`; }
+  function designsHTML(p){ const slots=slotsOf(p.spec), hasFiles=(p.files||[]).length>0;
+    return `<section class="rl-card bo-card"><p class="muted">One design per printed surface, at its real size. Logos and words only come from your files; nothing is redrawn.</p>
+      ${slots.length?`<div class="bow-slots">${slots.map(s=>{ const d=p.slots?.[s.path]; const src=d?.file?(d.file.url||(d.file.mem&&T.mem.get(d.file.mem)?URL.createObjectURL(T.mem.get(d.file.mem)):"")):"";
+        return `<div class="bow-slot"><div class="bow-prev" style="aspect-ratio:${Math.max(.2,Math.min(6,s.w/(s.h||1)))}">${src?`<img src="${esc(src)}" alt="">`:`<span>${d?.colour?"Plain colour":"No design yet"}</span>`}</div>
+          <b dir="auto">${esc(s.label)}</b><span class="muted bo-small">${s.w} × ${s.h} cm${d?.say?` · ${esc(d.say)}`:""}</span>
+          <div class="btns"><label class="btn small">Upload<input type="file" accept="image/*" hidden data-w="slotfile" data-p="${esc(s.path)}"></label>${hasFiles?`<button class="btn small" type="button" data-w="find" data-p="${esc(s.path)}" ${T.busy?"disabled":""}>Find it in my files</button>`:""}<button class="btn small" type="button" data-w="plain" data-p="${esc(s.path)}">Plain colour</button></div></div>`; }).join("")}</div>`
+      :`<p class="muted">This plan has no printed surfaces: the walls keep their colours.</p>`}
+      <div class="btns"><button class="btn" type="button" data-w="go" data-s="plan">Back to the plan</button><button class="btn primary" type="button" data-w="go" data-s="build">Designs are ready → Build</button></div></section>`; }
+  function buildHTML(p){ const k=T.job, st=BO().B?.st, macs=(st?.devices||[]).filter(d=>d.status==="approved"), mac=macs.find(d=>d.online)||macs[0], live=k&&(k.status==="queued"||k.status==="running");
+    const outs=k?.outputs||[], stills=outs.filter(o=>/\.png$/.test(o.path)), blend=outs.find(o=>/\.blend$/.test(o.path));
+    return `<section class="rl-card bo-card"><p class="muted">${mac?`Render Mac: <b>${esc(mac.name)}</b> · ${mac.online?"online":"offline: the build waits and starts when Blender is open on it"}`:"No render Mac approved yet (see Render Mac below)."}</p>
+      <div class="btns"><button class="btn primary" type="button" data-w="build" ${T.busy||live?"disabled":""}>${T.busy?esc(T.busy):p.jobs?.length?"Build again":"Build the booth"}</button><button class="btn" type="button" data-w="sheet">Placement sheet (PNG)</button><button class="btn" type="button" data-w="go" data-s="plan">Change the plan</button></div>
+      ${k?`<div class="bo-job"><div class="bo-mac-t"><b>${esc(k.title||p.name)}</b><span class="bo-pill ${k.status==="done"?"on":k.status==="failed"?"bad":live?"wait":"off"}">${esc(k.status)}</span></div>
+        ${live?`<div class="bo-bar"><i style="width:${Math.max(3,k.pct||0)}%"></i></div><p class="muted">${esc(k.msg||"")}</p><div class="btns"><button class="btn small" type="button" data-w="cancel">Cancel</button></div>`:""}
+        ${k.status==="failed"?`<p class="bo-err">${esc((k.error||"").slice(0,500))}</p>`:""}
+        ${k.status==="done"?`<div class="bo-shots">${stills.map(s=>{ const pv=outs.find(o=>o.path===s.path.replace(/\.png$/,"_preview.jpg")); return `<figure>${pv&&T.imgs[pv.file_id]?`<img src="${T.imgs[pv.file_id]}" alt="${esc(s.label)}">`:`<div class="bo-ph">Loading…</div>`}<figcaption>${esc(s.label)}</figcaption><button class="btn small" type="button" data-w="dl" data-f="${esc(s.file_id)}">Download PNG</button></figure>`; }).join("")}</div>
+          <div class="btns">${blend?`<button class="btn small" type="button" data-w="dl" data-f="${esc(blend.file_id)}">Download the Blender file</button>`:""}<button class="btn small" type="button" data-w="dlall">Download everything (.zip)</button><span class="muted bo-small">${k.result?.device?esc(`Rendered on ${k.result.device.split(" (")[0]} in ${k.result.seconds} s`):""}</span></div>`:""}</div>`:""}
+    </section>`; }
+  function draw(){
+    if(!sample&&!T.cur){ W.innerHTML=""; return; }
+    if(!T.cur){ W.innerHTML=`<section class="rl-card bo-card bow-home"><div class="bo-mac-t"><b>Booths</b></div>
+        <p class="muted">Start a new booth. You talk the idea through with the booth designer first; nothing is built until you agree.</p>
+        <div class="bow-start"><button class="bow-choice" type="button" data-w="new" data-m="plan"><b>I have a floor plan</b><span>Upload the plan and the designs</span></button><button class="bow-choice" type="button" data-w="new" data-m="space"><b>I only have a space</b><span>Size, place and occasion: the designer proposes the booth</span></button></div>
+        ${T.list.length?`<div class="bow-proj">${T.list.map(x=>`<button class="bo-row" type="button" data-w="open" data-id="${esc(x.id)}"><span dir="auto">${esc(x.name||"Booth")}</span><span class="muted">${esc(STEPS[stepIdx(x.step)]?.[1]||"")} · ${new Date(x.updated||x.created).toLocaleDateString()}</span></button>`).join("")}</div>`:""}</section>`; return; }
+    const p=T.cur;
+    W.innerHTML=`<section class="bow-head"><button class="g-back" type="button" data-w="home"><i aria-hidden="true">←</i>Booths</button><input class="bow-name" id="bowName" value="${esc(p.name||"")}" aria-label="Booth name" dir="auto"><button class="btn small" type="button" data-w="del">Delete</button></section>
+      ${stepper(p)}${p.step==="talk"?talkHTML(p):p.step==="plan"&&p.spec?planHTML(p):p.step==="designs"&&p.spec?designsHTML(p):p.step==="build"&&p.spec?buildHTML(p):talkHTML(p)}
+      ${T.err?`<p class="bo-err" dir="auto">${esc(T.err)}</p>`:""}`;
+    const ch=$("bowChat"); if(ch) ch.scrollTop=ch.scrollHeight; }
+
+  /* ---------- actions ---------- */
+  const say=(p,role,text,extra)=>{ (p.chat=p.chat||[]).push({role,text,t:Date.now(),...extra}); };
+  async function run(label,fn){ if(T.busy) return; T.busy=label; T.err=""; draw();
+    try{ await fn(); }catch(e){ T.err=e?.code==="not_granted"?"Claude isn't available on this page right now.":(e?.message||String(e?.code||e)); log("✕","booth work",{code:e?.code,message:e?.message}); }
+    T.busy=""; draw(); }
+  async function send(text,files){ const p=T.cur; if(!text&&!files?.length) return;
+    await run(files?.length?"Reading your files…":"Thinking…",async()=>{
+      const names=[]; for(const f of files||[]){ const k=await keep(f); k.role=/pdf/i.test(f.type)?"plan or designs (PDF)":"picture"; (p.files=p.files||[]).push(k); names.push(f.name); }
+      say(p,"me",text||(names.length?"(files)":""),names.length?{files:names}:{}); draw(); T.busy="Thinking…"; draw();
+      const r=await talk(p,text||`I attached: ${names.join(", ")}`);
+      say(p,"ai",String(r?.say||"…"),r?.ideas?.length?{ideas:r.ideas}:{});
+      if(r?.summary) p.summary=String(r.summary).slice(0,1500);
+      if(r?.site&&num(r.site.width)>0) p.site={width:num(r.site.width),depth:num(r.site.depth)||num(r.site.width),height:num(r.site.height)||250};
+      p.ready=!!r?.ready;
+      if((!p.name||/^New booth/.test(p.name))&&r?.title) p.name=String(r.title).slice(0,60);
+      await save(p); }); }
+  async function doPlan(extra){ const p=T.cur; await run("Measuring and writing the plan…",async()=>{
+      const r=await makePlan(p,extra); const bad=validSpec(r?.spec); if(bad) throw new Error("The plan didn't come out right ("+bad+"). Press Make the plan again.");
+      p.spec=r.spec; if(!p.name||/^New booth/.test(p.name)) p.name=r.spec.name||p.name; p.planChat=[{role:"ai",text:String(r.say||"")}]; p.step="plan"; await save(p); }); }
+  async function doEdit(text){ const p=T.cur; if(!text) return; (p.planChat=p.planChat||[]).push({role:"me",text}); await run("Changing the plan…",async()=>{
+      const r=await editPlan(p,text); if(r?.spec&&!validSpec(r.spec)) p.spec=r.spec; p.planChat.push({role:"ai",text:String(r?.say||"Done.")}); await save(p); }); }
+  async function newBooth(mode){ const p={id:"b"+rid(),name:"New booth",mode,step:"talk",chat:[],files:[],slots:{},created:Date.now()};
+    T.cur=p; T.list.unshift(p); await save(p); draw(); $("bowText")?.focus(); }
+
+  W.addEventListener("submit",e=>{ const f=e.target.closest("form[data-w]"); if(!f) return; e.preventDefault(); const tx=$("bowText"), v=(tx?.value||"").trim();
+    if(f.dataset.w==="send"){ const files=[...($("bowFile")?.files||[])]; if(tx) tx.value=""; send(v,files); }
+    else if(f.dataset.w==="edit"){ if(tx) tx.value=""; doEdit(v); } });
+  W.addEventListener("keydown",e=>{ if(e.target.id==="bowText"&&e.key==="Enter"&&!e.shiftKey&&!e.isComposing){ e.preventDefault(); e.target.closest("form")?.requestSubmit(); } });
+  W.addEventListener("change",async e=>{ const t=e.target;
+    if(t.id==="bowFile"&&t.files?.length){ const names=[...t.files].map(f=>f.name); const tx=$("bowText"); if(tx&&!tx.value.trim()) tx.placeholder=`${names.join(", ")} — add a message, or press Send`; }
+    if(t.id==="bowName"&&T.cur){ T.cur.name=t.value.trim()||"Booth"; save(T.cur); }
+    if(t.dataset.w==="slotfile"&&t.files?.[0]&&T.cur){ const p=T.cur, path=t.dataset.p; await run("Keeping the design…",async()=>{ (p.slots=p.slots||{})[path]={file:await keep(t.files[0]),from:"upload"}; await save(p); }); } });
+  W.addEventListener("click",async e=>{ const b=e.target.closest("[data-w]"); if(!b||b.tagName==="FORM"||b.tagName==="INPUT") return; const a=b.dataset.w, p=T.cur;
+    if(a==="new") newBooth(b.dataset.m);
+    else if(a==="open"){ T.cur=T.list.find(x=>x.id===b.dataset.id)||null; T.job=null; draw(); if(T.cur?.step==="build") poll(); }
+    else if(a==="home"){ T.cur=null; clearTimeout(T.timer); draw(); }
+    else if(a==="del"&&p){ if(b.dataset.sure){ await remove(p); T.cur=null; draw(); } else { b.dataset.sure="1"; b.textContent="Delete this booth? Press again"; setTimeout(()=>{ if(b.isConnected){ delete b.dataset.sure; b.textContent="Delete"; } },4000); } }
+    else if(a==="go"&&p){ p.step=b.dataset.s; await save(p); draw(); if(p.step==="build") poll(); }
+    else if(a==="unfile"&&p){ p.files.splice(+b.dataset.i,1); await save(p); draw(); }
+    else if(a==="pick"&&p){ const d=p.chat[+b.dataset.i]?.ideas?.[+b.dataset.j]; if(d){ p.idea=d; send(`Let's go with “${d.title}”. ${d.concept}`); } }
+    else if(a==="plan") doPlan();
+    else if(a==="replan") doPlan("Write the plan again from the start, checking every measurement.");
+    else if(a==="plain"&&p){ (p.slots=p.slots||{})[b.dataset.p]={colour:true}; await save(p); draw(); }
+    else if(a==="find"&&p){ const s=slotsOf(p.spec).find(x=>x.path===b.dataset.p); await run(`Looking for ${s.label} in your files…`,async()=>{ const r=await findInPdf(p,s);
+        const f=new File([r.blob],s.path.split("/").pop(),{type:"image/png"}); (p.slots=p.slots||{})[s.path]={file:await keep(f),from:"pdf",say:r.say}; await save(p); }); }
+    else if(a==="build"&&p) run("Sending…",async()=>{ await build(p); setTimeout(poll,1500); });
+    else if(a==="cancel"&&p&&p.jobs?.[0]){ try{ await BO().bcall("booth_cancel",{job_id:p.jobs[0]}); }catch{} poll(); }
+    else if(a==="dl"&&T.job){ const o=(T.job.outputs||[]).find(x=>x.file_id===b.dataset.f); if(!o) return; const was=b.textContent; b.disabled=true; b.textContent="Downloading…";
+      try{ let blob=await BO().fetchFile(o), name=o.path; if(/\.blend$/.test(name)){ const z=new JSZip(); z.file(name,blob); blob=await z.generateAsync({type:"blob"}); name=name.replace(/\.blend$/,"_blend.zip"); } await BO().saveB(blob,name); b.textContent="Saved"; }
+      catch(err){ b.textContent="Couldn't download"; } setTimeout(()=>{ b.disabled=false; b.textContent=was; },2500); }
+    else if(a==="dlall"&&T.job&&p){ const was=b.textContent; b.disabled=true; b.textContent="Preparing…";
+      try{ if(!window.JSZip) throw new Error("zip"); const z=new JSZip(); for(const o of (T.job.outputs||[]).filter(x=>!/_preview\.jpg$/.test(x.path))){ b.textContent=`Preparing ${o.path}…`; z.file(o.path,await BO().fetchFile(o)); }
+        z.file("placement_sheet.png",await sheetPNG(p)); z.file("booth_spec.json",JSON.stringify(p.spec,null,1));
+        await BO().saveB(await z.generateAsync({type:"blob"}),`${(p.name||"booth").replace(/[^\w؀-ۿ-]+/g,"_")}.zip`); b.textContent="Saved"; }
+      catch(err){ b.textContent="Couldn't download"; } setTimeout(()=>{ b.disabled=false; b.textContent=was; },2500); }
+    else if(a==="sheet"&&p){ try{ await BO().saveB(await sheetPNG(p),`${(p.name||"booth").replace(/[^\w؀-ۿ-]+/g,"_")}_placement_sheet.png`); }catch(err){ T.err="Couldn't draw the sheet."; draw(); } }
+  });
+  window.__boWork={ ready(){ if(!T.loaded){ T.loaded=true; loadList().then(draw); } else draw(); }, T, topSVG, pieceList, slotsOf, sheetPNG };
+  $("closeBooth")?.addEventListener("click",()=>clearTimeout(T.timer));
+  $("openBooth")?.addEventListener("click",()=>window.__boWork.ready());
 })();
 
 boot();
