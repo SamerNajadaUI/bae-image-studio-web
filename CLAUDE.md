@@ -15,7 +15,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 153 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 155 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openResize`, `openBrand`):
 
@@ -301,3 +301,19 @@ Known limits: tiles appear in his Magnific history; a 2560×1440 source means th
 **Agreed plan.** 0 proof on one real booth (this) → 1 the builder (plan + designs → 3D, renders, placement sheet) → 2 the app in the studio, three steps: Plan, Designs, Result, plus a chat ("move the phone to the right corner") → 3 special pieces from a 2D design to a 3D model placed by numbers → 4 Seedance video from the Blender reference. Exact stills and the builder's sheet come from Blender (official artwork on the walls, the logo is never redrawn); Seedance is for people and motion, and it may distort marks: test for real before promising.
 **Open decision:** how the studio reaches Blender on his Mac: (a) the official connector with the studio opened in the Claude app, or (b) our own small Blender add-on + a cloud bridge (like BAE Gemini Eye) so it works from any device. Or (c), seen in the proof: build in the cloud with `bpy` and hand him the `.blend`, no Blender needed for the first result.
 
+
+## 15. Reels storage (v154, 17 Nov 2026) — why Samer lost a day of work, and the fix
+
+**What happened.** The artifact database refuses any document over **262,144 bytes (UTF-8)**. A reel was one document (`data/users/<uid>/reels/reel_<id>`), and 90% of it was the Director chat. His reel «فواتير أبو يزن» reached 259 KB on 15 Nov; from then on every account save from his laptop was refused, and the studio only said "Saved in this browser" in small grey text. He worked two more days (Omar became Odai, 8 shots became 14), all of it only in the laptop browser's localStorage. On 17 Nov he opened the reel on another device, got the 15 Nov version, and it saved over the account with a newer time. With the old code, opening the reel on the laptop again would have loaded that older-content, newer-time account copy and overwritten the only good copy.
+
+**The rules now (all in `app.js`, search "where a reel lives"):**
+- A reel is two documents: `reel_<id>` (everything except the chat, `chat:[]`, `chatDoc:1`) and `reelchat_<id>` (the chat). `rlFitChat` trims the account's chat copy to `RL_MAX` (235,000 b) by dropping the details of older replies first, then the oldest messages; this browser always keeps the whole chat. `rlFitMain` throws `too_big` instead of saving half a reel.
+- `RL_SYNC` (localStorage `bae_reels_v3_sync`) remembers, per reel, the account time this device last agreed with. `rlTwo(id,l,c)` decides: same time → nothing; account not newer than our last sync → this device leads; account newer and we have unsynced work, or no sync record at all → **"ask"**.
+- "ask" opens `rlChoose`: both versions side by side with facts (time, scene titles, cast, chat count, last message). He picks one; **the other is always kept as its own reel** ("· account version" / "· this device's version"). Nothing is overwritten before he chooses, and "Decide later" changes nothing.
+- `rlPush` reads the account's time before writing; if another device saved in between it throws `conflict` and the bar `#rlSyncBar` offers "Keep my version / Open the other version / Download a backup". A failed save shows the same loud bar with "Try again". The small line under the title says "NOT in your account" in the warning colour.
+- Library: a card with two versions says so and hides Delete; **Backup** downloads the reel as a JSON file (both versions when they differ); "Restore a backup file" imports one as a new reel.
+- Never again: a save that fails must be loud, and a load must never replace local work the account has not seen.
+
+**Test:** `node dev/reels-storage-test.js` (three browser contexts as devices, a mocked account that refuses documents over the real limit). Every check passes. **Not tested for real**: only Samer's laptop holds the real case.
+
+**Still open:** the account's chat copy is trimmed when the chat alone passes 235 KB (the device keeps all of it). If he wants the full chat on every device, split the chat over several `reelchat_<id>_<n>` documents.

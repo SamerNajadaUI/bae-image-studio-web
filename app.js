@@ -2145,19 +2145,89 @@ const rlDocId=id=>"reel_"+String(id).replace(/[^A-Za-z0-9_-]/g,"");
 function rlClean(p){ const o=JSON.parse(JSON.stringify(p,(k,v)=>(k.startsWith("_")||k==="thumbs"||k==="thumb")?undefined:v)); o.chat=(o.chat||[]).slice(-80); o.kind="reel"; return o; }
 function rlCover(p){ const f=(p.scenes||[]).find(s=>s.frame?.id); if(f) return f.frame.id; const e=[...(p.characters||[]),...(p.locations||[])].find(x=>x.id&&!x.lib); if(e) return e.id; const l=(p.characters||[]).find(x=>x.lib); return l?"lib:ch_"+String(l.lib).toLowerCase():null; }
 const rlMeta=p=>({id:p.id,title:p.title||"Untitled reel",stage:p.stage||"idea",updatedAt:p.updatedAt||0,createdAt:p.createdAt||0,cover:rlCover(p),n:{cast:(p.characters||[]).length,loc:(p.locations||[]).length,shots:(p.scenes||[]).length,done:(p.scenes||[]).filter(s=>s.status==="done").length}});
+/* ---------- where a reel lives (v154) ----------
+   One account document holds at most 262,144 bytes (measured 17 Nov 2026). A long Director chat alone passes that, and from then on every
+   save to the account was refused while the page only said "Saved in this browser": Samer worked three days on a reel that existed on one
+   laptop only, and another device showed him the version of three days before.
+   So: the chat is its own document (reelchat_<id>) and both documents are trimmed to fit; what reached the account is remembered per reel
+   on this device (RL_SYNC); when this device and the account hold different versions, nobody is overwritten: he chooses, and the other
+   version stays as a copy; and a save that did not reach the account says so in a bar he cannot miss. */
+const RL_SYNC="bae_reels_v3_sync", RL_MAX=235000;
+const rlBytes=o=>new Blob([JSON.stringify(o)]).size;
+const rlSyncGet=id=>lsGet(RL_SYNC,{})[id]||null;
+const rlSyncSet=(id,v)=>{ const m=lsGet(RL_SYNC,{}); if(v) m[id]=v; else delete m[id]; lsSet(RL_SYNC,m); };
+const rlChatId=id=>"reelchat_"+String(id).replace(/[^A-Za-z0-9_-]/g,"");
+const rlClock=t=>{ if(!t) return ""; const d=new Date(t), n=new Date(), same=d.toDateString()===n.toDateString(); return (same?"today ":d.toLocaleDateString("en-GB",{day:"numeric",month:"short"})+" ")+d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}); };
+/* the chat as the account can hold it: the words always stay; the working data of older replies goes first, then the oldest messages */
+function rlFitChat(chat){ let c=(chat||[]).map(m=>({...m})); const big=()=>rlBytes(c)>RL_MAX;
+  for(let i=0;i<c.length-12&&big();i++){ delete c[i].prompt; delete c[i].mem; delete c[i].advisors; }
+  for(let i=0;i<c.length&&big();i++) if(String(c[i].text||"").length>6000) c[i].text=String(c[i].text).slice(0,6000)+" …";
+  while(c.length>8&&big()) c.shift();
+  return c; }
+function rlFitMain(body){ const m={...body,chat:[],chatDoc:1}; if(rlBytes(m)<=RL_MAX) return m;
+  m.scenes=(m.scenes||[]).map(x=>{ const y={...x}; delete y.history; return y; }); if(rlBytes(m)<=RL_MAX) return m;
+  m.events=(m.events||[]).slice(-20); m.ideasPrev=[]; if(rlBytes(m)<=RL_MAX) return m;
+  if(rlBytes(m)>258000) throw {code:"too_big",message:"This reel is larger than one account document can hold, even without its chat."}; return m; }
+async function rlCloudGet(id){ const s=await rlCol().doc(rlDocId(id)).get(); if(!s.exists) return null; const p=JSON.parse(JSON.stringify(s.data()));
+  if(p.chatDoc){ try{ const c=await rlCol().doc(rlChatId(id)).get(); p.chat=c.exists?(c.data()?.chat||[]):[]; }catch{ p.chat=[]; } delete p.chatDoc; }
+  return p; }
+/* send one version to the account. force = he chose this version over the account's, which is already kept as a copy */
+async function rlPush(body,force){ const id=body.id, sy=rlSyncGet(id);
+  if(!force){ const r=await rlCol().doc(rlDocId(id)).get(), at=r.exists?(r.data()?.updatedAt||0):0;
+    if(at&&at!==body.updatedAt&&(sy?at>sy.at:at>(body.updatedAt||0))) throw {code:"conflict",at}; }
+  const main=rlFitMain(body);
+  await rlCol().doc(rlChatId(id)).set({kind:"reelchat",id,updatedAt:body.updatedAt,chat:rlFitChat(body.chat)});
+  await rlCol().doc(rlDocId(id)).set(main);
+  rlSyncSet(id,{at:body.updatedAt}); }
+/* keep a version as a project of its own, so choosing one version never loses the other */
+async function rlStash(p,label){ const c=rlClean(p); c.id=rlNew().id; c.title=((p.title||"Untitled reel").slice(0,48)+" · "+label).slice(0,80); c.space=null;
+  const okLocal=lsSet(RL_P+c.id,c); if(okLocal){ const idx=lsGet(RL_IDX,[]); idx.unshift(rlMeta(c)); lsSet(RL_IDX,idx.slice(0,80)); } let okCloud=false;
+  if(RLS.mode==="account"){ try{ await rlPush(c,true); okCloud=true; }catch(e){ log("✕","reel copy",{code:e?.code,message:e?.message}); } }
+  if(!okLocal&&!okCloud) throw {code:"no_room",message:"The other version could not be kept as a copy (this browser's storage is full and the account refused it). Nothing was changed."};
+  return c.id; }
 async function rlList(){
   await rlStoreInit();
   let list=[];
   if(RLS.mode==="account"){ try{ const snap=await rlCol().where("kind","==","reel").get(); list=snap.docs.map(d=>d.data()).filter(Boolean).map(rlMeta); }catch(e){ log("✕","reels list",{code:e?.code}); } }
-  const m=new Map(); for(const x of [...lsGet(RL_IDX,[]),...list]){ const o=m.get(x.id); if(!o||(x.updatedAt||0)>=(o.updatedAt||0)) m.set(x.id,x); }
-  return [...m.values()].filter(x=>!lsGet("bae_reels_v3_del",[]).includes(x.id)).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  const loc=lsGet(RL_IDX,[]), lAt=new Map(loc.map(x=>[x.id,x.updatedAt||0])), cAt=new Map(list.map(x=>[x.id,x.updatedAt||0]));
+  const m=new Map(); for(const x of [...loc,...list]){ const o=m.get(x.id); if(!o||(x.updatedAt||0)>=(o.updatedAt||0)) m.set(x.id,x); }
+  return [...m.values()].filter(x=>!lsGet("bae_reels_v3_del",[]).includes(x.id)).map(x=>({...x,lAt:lAt.get(x.id)||0,cAt:cAt.get(x.id)||0,two:rlTwo(x.id,lAt.get(x.id)||0,cAt.get(x.id)||0)})).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
 }
+/* does this device hold a version that the account does not? "ask" = both moved or nobody knows: he must choose. "local" = only here. */
+function rlTwo(id,l,c){ if(RLS.mode!=="account"||!l) return ""; if(!c) return lsGet(RL_P+id,null)?"local":""; if(l===c) return ""; const sy=rlSyncGet(id);
+  if(sy) return c<=sy.at?(l>c?"local":""):(l<=sy.at?"":"ask");   /* the account still holds what this device sent: this device leads. It moved on elsewhere: fine if nothing new here, else ask */
+  return l>c?"local":(lsGet(RL_P+id,null)?"ask":""); }
 async function rlLoadProject(id){
-  await rlStoreInit(); let p=null;
-  if(RLS.mode==="account"){ try{ const s=await rlCol().doc(rlDocId(id)).get(); if(s.exists) p=JSON.parse(JSON.stringify(s.data())); }catch{} }
-  const lp=lsGet(RL_P+id,null); if(lp&&(!p||(lp.updatedAt||0)>(p.updatedAt||0))) p=lp;
+  await rlStoreInit(); let c=null;
+  if(RLS.mode==="account"){ try{ c=await rlCloudGet(id); }catch(e){ log("✕","reel load",{code:e?.code,message:e?.message}); } }
+  const l=lsGet(RL_P+id,null); let p=c||l;
+  if(c&&l){ const how=rlTwo(id,l.updatedAt||0,c.updatedAt||0);
+    if(how==="ask"){ p=await rlChoose(l,c); if(!p) return null; }
+    else p=(how==="local"||(l.updatedAt||0)===(c.updatedAt||0))?l:c;
+    if(p===c) rlSyncSet(id,{at:c.updatedAt||0}); }
+  else if(c) rlSyncSet(id,{at:c.updatedAt||0});
   if(p) rlUpgrade(p); return p;
 }
+/* two different versions of one reel: show both, let him pick, keep the other as a copy */
+function rlChoose(l,c){ return new Promise(done=>{
+  const facts=p=>{ const sc=p.scenes||[], cast=(p.characters||[]).map(x=>x.name).filter(Boolean).slice(0,4).join(", "), last=[...(p.chat||[])].reverse().find(m=>m.role==="u"&&m.text);
+    return `<ul><li><b>${esc(rlClock(p.updatedAt))}</b><span>last saved</span></li><li><b>${sc.length}</b><span>${sc.length===1?"scene":"scenes"}${sc[0]?.title?`: <span dir="auto">${esc(String(sc[0].title).slice(0,70))}</span>`:""}</span></li><li><b>${(p.characters||[]).length}</b><span>cast${cast?`: <span dir="auto">${esc(cast)}</span>`:""}</span></li><li><b>${(p.locations||[]).length}</b><span>places and props</span></li><li><b>${(p.chat||[]).length}</b><span>chat messages${last?`, last: <span dir="auto">“${esc(String(last.text).slice(0,60))}”</span>`:""}</span></li></ul>`; };
+  const d=document.createElement("div"); d.className="rl-vs"; d.setAttribute("role","dialog"); d.setAttribute("aria-modal","true"); d.setAttribute("aria-label","Two versions of this reel");
+  d.innerHTML=`<div class="rl-vs-box"><h2>Two versions of this reel</h2><p>This device and your account hold different versions of <b dir="auto">${esc(l.title||c.title||"this reel")}</b>. Choose the one to continue with. The other one is not deleted: it stays in your Reels as a copy.</p>
+    <div class="rl-vs-two"><section><h3>On this device</h3>${facts(l)}<button type="button" class="btn primary" data-pick="l">Continue with this device's version</button></section>
+    <section><h3>In your account</h3>${facts(c)}<button type="button" class="btn" data-pick="c">Continue with the account's version</button></section></div>
+    <button type="button" class="a-btn rl-vs-x" data-pick="">Decide later</button></div>`;
+  $("reels").appendChild(d); d.querySelector("[data-pick]").focus();
+  d.addEventListener("click",async e=>{ const b=e.target.closest("[data-pick]"); if(!b||d.dataset.busy) return; const k=b.dataset.pick; if(!k){ d.remove(); return done(null); }
+    d.dataset.busy="1"; b.textContent="Keeping the other version as a copy…";
+    const mine=k==="l"?l:c, other=k==="l"?c:l;
+    try{ await rlStash(other,k==="l"?"account version":"this device's version"); }
+    catch(err){ log("✕","reel stash",{message:err?.message}); delete d.dataset.busy; b.textContent="Try again"; let w=d.querySelector(".rl-warn"); if(!w){ w=document.createElement("p"); w.className="rl-warn"; d.querySelector(".rl-vs-box").appendChild(w); } w.textContent=(err?.message||"The other version could not be kept as a copy. Nothing was changed.")+" Use Backup on the card first."; return; }
+    /* the chosen version is a new, deliberate save: it gets today's time, so no other device mistakes an older copy for the newer one */
+    mine.updatedAt=Date.now();
+    if(k==="l") rlSyncSet(l.id,{at:c.updatedAt||0,chose:1}); else { lsSet(RL_P+c.id,rlClean(c)); rlSyncSet(c.id,{at:c.updatedAt||0,chose:1}); }
+    d.remove(); done(mine); });
+}); }
 function rlUpgrade(p){
   p.settings={...RL_DEF_SET,...(p.settings||{})}; p.ideas=p.ideas||[]; p.ideasPrev=p.ideasPrev||[]; p.characters=p.characters||[]; p.locations=p.locations||[]; p.scenes=p.scenes||[]; p.chat=p.chat||[];
   if(p.picked==null&&p.pickedIdea!=null&&p.ideas[p.pickedIdea]) p.picked=p.ideas[p.pickedIdea]; delete p.pickedIdea;
@@ -2174,17 +2244,43 @@ async function rlFlush(){
   if(!RL) return; const body=rlClean(RL);
   const okLocal=lsSet(RL_P+body.id,body);
   const idx=lsGet(RL_IDX,[]).filter(x=>x.id!==body.id); idx.unshift(rlMeta(body)); lsSet(RL_IDX,idx.slice(0,80));
-  if(RLS.mode!=="account"){ rlSavedState(okLocal?"local":"fail"); return; }
-  rlChain=rlChain.then(()=>rlCol().doc(rlDocId(body.id)).set(body)).then(()=>rlSavedState("saved"),e=>{ log("✕","reel save",{code:e?.code,message:e?.message}); rlSavedState(okLocal?"local":"fail"); });
+  if(RLS.mode!=="account"){ rlSavedState(okLocal?"local":"fail",okLocal?"":"This browser's storage is full."); return; }
+  if(RLS.clash===body.id){ rlSavedState("clash"); return; }
+  const force=!!rlSyncGet(body.id)?.chose;
+  rlChain=rlChain.then(()=>rlPush(body,force)).then(()=>rlSavedState("saved"),e=>{ log("✕","reel save",{code:e?.code,message:e?.message});
+    if(e?.code==="conflict"){ RLS.clash=body.id; RLS.clashAt=e.at; return rlSavedState("clash"); }
+    rlSavedState(okLocal?"local":"fail",e?.code==="too_big"?e.message:String(e?.message||e?.code||"").replace(/\(request_id[^)]*\)/i,"").slice(0,140)); });
   return rlChain;
 }
-function rlSavedState(s){ const el=$("rlSaved"); if(!el) return; el.dataset.s=s; el.textContent={saving:"Saving…",saved:"Saved to your account",local:"Saved in this browser",fail:"Couldn't save — storage is full"}[s]||""; }
+/* the small line beside the title, and a bar nobody can miss when the work is NOT in the account */
+function rlSavedState(s,why){ const el=$("rlSaved"); if(el){ el.dataset.s=s; el.textContent={saving:"Saving…",saved:"Saved to your account",local:"NOT in your account",clash:"NOT in your account",fail:"Couldn't save"}[s]||""; }
+  const bar=$("rlSyncBar"); if(!bar) return; if(s==="saving") return; if(s==="saved"){ bar.hidden=true; return; }
+  if(s==="local"&&RLS.mode!=="account"){ bar.hidden=true; if(el) el.textContent="Saved in this browser"; return; }
+  bar.hidden=false; bar.dataset.s=s;
+  bar.innerHTML=s==="clash"?`<span><b>This reel was changed on another device</b> (${esc(rlClock(RLS.clashAt))}). Your work here is safe in this browser, but it is not in your account yet.</span><span class="rl-sync-act"><button type="button" class="a-btn" data-rlsync="mine">Keep my version</button><button type="button" class="a-btn" data-rlsync="theirs">Open the other version</button><button type="button" class="a-btn" data-rlsync="bak">Download a backup</button></span>`
+    :s==="fail"?`<span><b>This reel could not be saved.</b> ${esc(why||"")} Download a backup now, before you close this page.</span><span class="rl-sync-act"><button type="button" class="a-btn" data-rlsync="bak">Download a backup</button><button type="button" class="a-btn" data-rlsync="retry">Try again</button></span>`
+    :`<span><b>Not saved to your account.</b> This reel is saved in this browser only, so your other devices do not have it. ${esc(why||"")}</span><span class="rl-sync-act"><button type="button" class="a-btn" data-rlsync="retry">Try again</button><button type="button" class="a-btn" data-rlsync="bak">Download a backup</button></span>`; }
+async function rlSyncAct(k){ if(!RL) return; const id=RL.id;
+  if(k==="bak") return rlBackup(RL);
+  if(k==="retry"){ rlSavedState("saving"); return rlFlush(); }
+  let other=null; try{ other=await rlCloudGet(id); }catch{}
+  if(k==="mine"){ if(other) await rlStash(other,"other device's version"); RLS.clash=null; RL.updatedAt=Date.now(); rlSyncSet(id,{at:other?.updatedAt||0,chose:1}); rlSavedState("saving"); return rlFlush(); }
+  if(k==="theirs"&&other){ await rlStash(RL,"this device's version"); RLS.clash=null; lsSet(RL_P+id,rlClean(other)); rlSyncSet(id,{at:other.updatedAt||0}); rlUpgrade(other); RL=other; rlSavedState("saved"); rlRender(); } }
+/* a reel as one file: the safety net that does not depend on any storage */
+async function rlBackup(p){ const body=rlClean(p), name=`BAE-reel-${String(body.title||"reel").replace(/[^\p{L}\p{N}]+/gu,"-").replace(/^-|-$/g,"").slice(0,40)||"reel"}-${(d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}-${String(d.getHours()).padStart(2,"0")}${String(d.getMinutes()).padStart(2,"0")}`)(new Date(body.updatedAt||Date.now()))}.json`;
+  const blob=new Blob([JSON.stringify({bae_reel_backup:1,savedAt:Date.now(),project:body})],{type:"application/json"});
+  try{ if(downloads&&!S.web){ await downloads.save({filename:name,data:blob}); return; } }catch(e){ if(e?.code==="declined") return; }
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click(); }
+async function rlRestore(file){ let o=null; try{ o=JSON.parse(await file.text()); }catch{} const p=o?.project; if(!o?.bae_reel_backup||!p||p.kind!=="reel") throw {message:"This file is not a BAE reel backup."};
+  const c=JSON.parse(JSON.stringify(p)); c.id=rlNew().id; c.title=((p.title||"Untitled reel").slice(0,60)+" · restored").slice(0,80); c.space=null; c.updatedAt=Date.now();
+  lsSet(RL_P+c.id,c); const idx=lsGet(RL_IDX,[]); idx.unshift(rlMeta(c)); lsSet(RL_IDX,idx.slice(0,80));
+  if(RLS.mode==="account"){ try{ await rlPush(c,true); }catch(e){ log("✕","reel restore",{code:e?.code,message:e?.message}); } } return c.id; }
 async function rlDelete(id){
   lsSet("bae_reels_v3_del",[...lsGet("bae_reels_v3_del",[]),id].slice(-200));
-  try{ localStorage.removeItem(RL_P+id); }catch{} lsSet(RL_IDX,lsGet(RL_IDX,[]).filter(x=>x.id!==id));
-  if(RLS.mode==="account"){ try{ await rlCol().doc(rlDocId(id)).delete(); }catch{} }
+  try{ localStorage.removeItem(RL_P+id); }catch{} lsSet(RL_IDX,lsGet(RL_IDX,[]).filter(x=>x.id!==id)); rlSyncSet(id,null);
+  if(RLS.mode==="account"){ try{ await rlCol().doc(rlDocId(id)).delete(); }catch{} try{ await rlCol().doc(rlChatId(id)).delete(); }catch{} }
 }
-async function rlDuplicate(id){ const p=await rlLoadProject(id); if(!p) return; const c=JSON.parse(JSON.stringify(p)); c.id=rlNew().id; c.title=(p.title||"Untitled reel")+" copy"; c.space=null; c.createdAt=c.updatedAt=Date.now(); const keep=RL; RL=c; await rlFlush(); RL=keep; }
+async function rlDuplicate(id){ const p=await rlLoadProject(id); if(!p) return; const c=JSON.parse(JSON.stringify(p)); c.id=rlNew().id; c.title=(p.title||"Untitled reel")+" copy"; c.space=null; c.createdAt=c.updatedAt=Date.now(); const keep=RL; RL=c; await rlFlush(); await rlChain; RL=keep; }
 
 /* ---------- thumbnails: cached in this browser by Magnific creation id, fetched again when missing ---------- */
 const rlTmem={}, rlFull={}, rlTQ=new Set(), rlTTried=new Set(); let rlTBusy=0;
@@ -3105,16 +3201,16 @@ function rlShowLib(){
   rlList().then(list=>{
     const box=$("rlProjects");
     const card=p=>{ const im=rlTGet(p.cover); if(!im&&p.cover) rlNeed(p.cover); const st=RL_STAGES.find(([k])=>k===p.stage)?.[1]||"Idea";
-      return `<article class="rl-pc"><button type="button" class="rl-pc-open" data-open="${esc(p.id)}"><span class="rl-pc-cover">${im?`<img src="${im}" alt="">`:`<i aria-hidden="true">${esc((p.title||"R").trim().slice(0,1).toUpperCase())}</i>`}</span><span class="rl-pc-meta"><b dir="auto">${esc(p.title)}</b><span>${esc(st)} · ${p.n?.cast||0} cast · ${p.n?.shots||0} shots${p.n?.done?` · ${p.n.done} filmed`:""}</span><span class="t12 muted">Edited ${rlAgo(p.updatedAt)}</span></span></button>
-        <div class="rl-pc-act"><button type="button" class="a-btn" data-dup="${esc(p.id)}">Duplicate</button><button type="button" class="a-btn" data-del="${esc(p.id)}">Delete</button></div></article>`; };
+      return `<article class="rl-pc"><button type="button" class="rl-pc-open" data-open="${esc(p.id)}"><span class="rl-pc-cover">${im?`<img src="${im}" alt="">`:`<i aria-hidden="true">${esc((p.title||"R").trim().slice(0,1).toUpperCase())}</i>`}</span><span class="rl-pc-meta"><b dir="auto">${esc(p.title)}</b><span>${esc(st)} · ${p.n?.cast||0} cast · ${p.n?.shots||0} shots${p.n?.done?` · ${p.n.done} filmed`:""}</span><span class="t12 muted">Edited ${rlAgo(p.updatedAt)}</span>${p.two==="ask"?`<span class="rl-pc-two">Two versions: this device ${esc(rlClock(p.lAt))}, account ${esc(rlClock(p.cAt))}. Open it to choose.</span>`:p.two==="local"?`<span class="rl-pc-two">The newest version is on this device only. Open it to send it to your account.</span>`:""}</span></button>
+        <div class="rl-pc-act">${p.two==="ask"?"":`<button type="button" class="a-btn" data-dup="${esc(p.id)}">Duplicate</button>`}<button type="button" class="a-btn" data-bak="${esc(p.id)}">Backup</button>${p.two?"":`<button type="button" class="a-btn" data-del="${esc(p.id)}">Delete</button>`}</div></article>`; };
     box.innerHTML=`<button type="button" class="rl-pc rl-pc-new" id="rlNewCard"><span class="plus" aria-hidden="true">+</span><b>New reel</b><span class="t12 muted">Start from an idea, a brief or a storyboard</span></button><button type="button" class="rl-pc rl-pc-new ux-pgcard" data-uxpg><span class="plus" aria-hidden="true">✎</span><b>Prompt Generator</b><span class="t12 muted">A ready prompt for a character, a place or a prop</span></button>`+list.map(card).join("");
   });
 }
 async function rlOpen(id){
-  const p=id?await rlLoadProject(id):null;
-  RL=p||rlNew(); if(!p) rlSave();
+  const p=id?await rlLoadProject(id):null; if(id&&!p) return rlShowLib();
+  RLS.clash=null; RL=p||rlNew(); if(!p) rlSave();
   $("rlLib").hidden=true; $("rlProjView").hidden=false; $("reels").dataset.mode="proj"; $("reels").dataset.view="chat";
-  clLoad().then(()=>{ if(RL){ rlLinkLibrary(); rlBoard(); } }); rlLinkLibrary(); rlSyncSettings(); rlSavedState(p?(RLS.mode==="account"?"saved":"local"):"saving"); rlRender();
+  clLoad().then(()=>{ if(RL){ rlLinkLibrary(); rlBoard(); } }); rlLinkLibrary(); rlSyncSettings(); rlSavedState("saving"); rlRender(); if(p) rlFlush();
   setTimeout(rlResume,400);
   $("reels").scrollTop=0; setTimeout(()=>$("rlInput").focus({preventScroll:true}),60);
 }
@@ -4805,9 +4901,13 @@ function uxInit(){
     if(e.target.closest("#rlNewCard")) return rlOpen(null);
     const o=e.target.closest("[data-open]"); if(o) return rlOpen(o.dataset.open);
     const d=e.target.closest("[data-dup]"); if(d){ d.disabled=true; await rlDuplicate(d.dataset.dup); return rlShowLib(); }
+    const k=e.target.closest("[data-bak]"); if(k){ const l=lsGet(RL_P+k.dataset.bak,null); let c=null; if(RLS.mode==="account"){ try{ c=await rlCloudGet(k.dataset.bak); }catch{} } const p=l&&c?((l.updatedAt||0)>=(c.updatedAt||0)?l:c):(l||c); if(l&&c&&(l.updatedAt||0)!==(c.updatedAt||0)){ await rlBackup(l); await rlBackup(c); } else if(p) await rlBackup(p); return; }
     const x=e.target.closest("[data-del]"); if(x){ if(x.dataset.sure){ await rlDelete(x.dataset.del); return rlShowLib(); } x.dataset.sure="1"; x.textContent="Delete for good?"; x.classList.add("danger"); setTimeout(()=>{ if(x.isConnected){ delete x.dataset.sure; x.textContent="Delete"; x.classList.remove("danger"); } },3500); }
   });
   $("rlOpenBrain").onclick=()=>rlShowBrain();
+  $("rlSyncBar")?.addEventListener("click",async e=>{ const b=e.target.closest("[data-rlsync]"); if(!b||b.disabled) return; b.disabled=true; try{ await rlSyncAct(b.dataset.rlsync); }catch(err){ log("✕","reel sync",{message:err?.message}); const w=$("rlSyncBar"); if(w&&err?.message) w.insertAdjacentHTML("beforeend",`<span class="t12">${esc(err.message)}</span>`); } finally{ if(b.isConnected) b.disabled=false; } });
+  $("rlRestoreBtn")?.addEventListener("click",()=>$("rlRestoreFile").click());
+  $("rlRestoreFile")?.addEventListener("change",async e=>{ const f=e.target.files?.[0]; e.target.value=""; if(!f) return; const st=$("rlStore"); try{ await rlRestore(f); rlShowLib(); }catch(err){ if(st) st.textContent=err?.message||"That file could not be restored."; } });
   $("rlBrainBack").onclick=()=>{ $("rlBrain").hidden=true; rlShowLib(); };
   $("rlBrainBody").addEventListener("submit",e=>{ const f=e.target.closest("#brcForm"); if(!f) return; e.preventDefault(); if(BRC.busy){ BRC.abort?.abort(); return; } brcSend(f.q.value); });
   $("rlBrainBody").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&e.target.closest?.("#brcForm textarea")){ e.preventDefault(); if(!BRC.busy) brcSend(e.target.value); } });

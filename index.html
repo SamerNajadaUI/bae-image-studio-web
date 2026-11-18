@@ -387,7 +387,19 @@ details.acc[open]>summary::after{content:"–"}
 .rl-top input.rl-titlein:hover{background:rgba(255,255,255,.6)}
 .rl-top input.rl-titlein:focus{background:var(--white);box-shadow:0 0 0 2px var(--orange-dark)}
 .rl-saved{color:var(--ink-light);padding-left:1px}
-.rl-saved[data-s="fail"]{color:var(--warn)}
+.rl-saved[data-s="fail"],.rl-saved[data-s="local"],.rl-saved[data-s="clash"]{color:var(--warn)}
+.rl-sync{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;margin:10px 4% 0;padding:12px 16px;border-radius:14px;background:#fdecea;color:#7a1d12;font-size:14px;line-height:1.45}
+.rl-sync[hidden]{display:none}.rl-sync b{font-weight:400;color:#C13A23}.rl-sync-act{display:flex;gap:8px;flex-wrap:wrap}.rl-sync .a-btn{font-size:12.5px;padding:7px 13px;background:#fff}
+.rl-pc-two{display:block;margin-top:6px;padding:6px 10px;border-radius:10px;background:#fdecea;color:#7a1d12;font-size:12px;line-height:1.35}
+.rl-restore{font-size:12px;padding:5px 11px;margin-inline-start:8px}
+.rl-vs{position:fixed;inset:0;z-index:90;background:rgba(25,24,30,.55);display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto}
+.rl-vs-box{background:var(--orange-light,#FFFAF4);border-radius:24px;max-width:860px;width:100%;padding:28px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;max-height:100%;overflow:auto}
+.rl-vs-box h2{margin:0;font-weight:400;font-size:28px;letter-spacing:-.01em}.rl-vs-box>p{margin:0;color:var(--ink-med);font-size:15px;line-height:1.5;max-width:64ch}
+.rl-vs-two{display:grid;grid-template-columns:1fr 1fr;gap:14px}.rl-vs-two section{background:#fff;border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.rl-vs-two h3{margin:0;font-weight:400;font-size:18px}.rl-vs-two ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;flex:1}
+.rl-vs-two li{display:flex;gap:10px;align-items:baseline;font-size:13.5px;color:var(--ink-med);line-height:1.4;min-width:0}.rl-vs-two li b{font-weight:400;color:var(--ink);min-width:26px;white-space:nowrap}.rl-vs-two li>span{min-width:0;overflow-wrap:anywhere}
+.rl-vs-x{align-self:flex-start}
+@media (max-width:700px){ .rl-vs-two{grid-template-columns:1fr} .rl-vs-box{padding:20px} }
 .rl-stages{display:flex;gap:4px;margin:0 4% 14px;padding:5px;background:rgba(255,255,255,.75);border-radius:16px;box-shadow:var(--shadow);overflow-x:auto;scrollbar-width:none}
 .rl-stages::-webkit-scrollbar{display:none}
 .rl-stages button{all:unset;cursor:pointer;flex:1 0 auto;display:flex;align-items:center;justify-content:center;gap:8px;padding:9px 14px;border-radius:12px;font-size:14px;color:var(--ink-med);white-space:nowrap;transition:background .2s,color .2s}
@@ -1699,7 +1711,7 @@ details.bo-card summary{cursor:pointer}
       <div><h1>Reels</h1><p>From idea to film with Claude and Seedance 2.5, collected in a Magnific Space.</p></div>
       <button class="br-open" type="button" id="rlOpenBrain"><span class="rl-avatar" aria-hidden="true">✦</span><span><b>Director's brain</b><span class="t12 muted">What the Director knows and learns every day</span></span></button>
     </header>
-    <p class="t12 muted rl-store" id="rlStore"></p>
+    <p class="t12 muted rl-store"><span id="rlStore"></span> <button type="button" class="a-btn rl-restore" id="rlRestoreBtn">Restore a backup file</button><input type="file" id="rlRestoreFile" accept="application/json,.json" hidden></p>
     <div class="rl-projects" id="rlProjects"></div>
   </div>
   <div class="rl-lib rl-brain" id="rlBrain" hidden>
@@ -1708,6 +1720,7 @@ details.bo-card summary{cursor:pointer}
     <div id="rlBrainBody" class="br-body"></div>
   </div>
   <div class="rl-proj" id="rlProjView" hidden>
+    <div class="rl-sync" id="rlSyncBar" role="alert" hidden></div>
     <div class="rl-top">
       <button class="g-back" type="button" id="rlBack"><i aria-hidden="true">←</i>Reels</button>
       <div class="rl-title"><input id="rlTitle" class="rl-titlein" type="text" aria-label="Reel title" dir="auto" maxlength="80"><span class="t12 rl-saved" id="rlSaved" aria-live="polite"></span></div>
