@@ -3,7 +3,7 @@
 It pairs this Mac once (the bridge gives a 6-digit code that someone approves in BAE Studio), then asks for jobs,
 downloads the designs, runs the job in a background Blender, forwards progress, and sends the results back.
 """
-import json, os, shutil, socket, subprocess, sys, threading, time, traceback, urllib.error, urllib.request
+import json, os, queue, shutil, socket, subprocess, sys, threading, time, traceback, urllib.error, urllib.request
 
 PIECE = 512 * 1024
 
@@ -134,8 +134,13 @@ class Client:
         log = []
 
         def progress(pct, msg, extra=""):
-            st, r = self.call("POST", "/d/progress/" + jid, {"pct": pct, "msg": msg, "log": extra})
             self.set(pct=pct, text=msg)
+            try:
+                st, r = self.call("POST", "/d/progress/" + jid, {"pct": pct, "msg": msg, "log": extra}, timeout=20)
+            except Exception:
+                return False  # a dropped report is not a reason to stop rendering
+            if st in (403, 409):  # the job was cancelled or given to another Mac
+                return True
             return isinstance(r, dict) and r.get("cancel")
 
         try:
@@ -155,14 +160,26 @@ class Client:
 
             # 2. Blender, in the background
             self._proc = subprocess.Popen(self.engine_cmd + [d], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-            last, pct, msg, cancelled = 0, 2, "Starting Blender", False
-            for line in self._proc.stdout:
-                log.append(line)
-                if line.startswith("@@PROGRESS"):
-                    parts = line.split(" ", 2)
-                    pct, msg = float(parts[1]), parts[2].strip() if len(parts) > 2 else msg
-                if time.time() - last > 3:
-                    if progress(min(pct, 97), msg, ""):
+            lines = queue.Queue()
+            threading.Thread(target=lambda s=self._proc.stdout: [lines.put(x) for x in s] and None, daemon=True).start()
+            # report every few seconds while Blender works, even when it prints nothing for minutes
+            # (the first Metal render on a Mac prepares the graphics card silently), so the bridge never thinks this Mac is gone
+            last, said, pct, msg, cancelled, t0 = 0, time.time(), 2, "Starting Blender", False, time.time()
+            while True:
+                try:
+                    line = lines.get(timeout=1)
+                    log.append(line)
+                    said = time.time()
+                    if line.startswith("@@PROGRESS"):
+                        parts = line.split(" ", 2)
+                        pct, msg = float(parts[1]), parts[2].strip() if len(parts) > 2 else msg
+                except queue.Empty:
+                    if self._proc.poll() is not None and lines.empty():
+                        break
+                if time.time() - last > 4:
+                    quiet = time.time() - said
+                    shown = msg + (f" (Blender is preparing, {int(quiet)} s; the first render on this Mac takes a few minutes)" if quiet > 20 else "")
+                    if progress(min(pct, 97), shown, ""):
                         cancelled = True
                         self.kill_job()
                         break
