@@ -75,7 +75,10 @@ def main():
 
 try:
     main()
-except Exception:
+except Exception as e:
     traceback.print_exc()
-    sys.stdout.flush()
+    # one clear line first, so the studio shows the real reason and not the warnings before it
+    tb = traceback.extract_tb(e.__traceback__)
+    where = f"{os.path.basename(tb[-1].filename)} line {tb[-1].lineno}" if tb else ""
+    print(f"@@ERROR {type(e).__name__}: {e} ({where})", flush=True)
     sys.exit(3)

@@ -218,28 +218,20 @@ def build(spec, here):
     box("Ground", -3000, -3000, -3, W + 3000, D + 3000, -1, mat_flat("Ground", "#E9E6E0", 0.9), C["Floor"])
     for f in spec.get("floors", [{"name": "Floor", "x": 0, "y": 0, "w": W, "d": D, "colour": "#D9D4CA"}]):
         box(f["name"], f["x"], f["y"], -1, f["x"] + f["w"], f["y"] + f["d"], 0.5, mat_flat("Floor " + f["colour"], f["colour"], 0.5), C["Floor"])
-    for w in spec["walls"]:
-        wall(w, spec, C["Walls"], here)
-    for p in spec["pieces"]:
-        col = mat_flat("Piece " + p.get("colour", "#F15A22"), p.get("colour", "#F15A22"), p.get("rough", 0.5), p.get("emit", 0), p.get("alpha", 1), p.get("metal", 0))
-        x, y, z = p["x"], p["y"], p.get("z", 0)
-        t = p["type"]
-        if t == "box":
-            box(p["name"], x, y, z, x + p["w"], y + p["d"], z + p["h"], col, C["Pieces"])
-        elif t == "cylinder":
-            cyl(p["name"], x, y, z, z + p["h"], p["r"], col, C["Pieces"])
-        elif t == "table":  # a round top on a stem
-            cyl(p["name"] + " top", x, y, p["h"] - 4, p["h"], p["r"], col, C["Pieces"])
-            cyl(p["name"] + " stem", x, y, 2, p["h"] - 4, p.get("stem", 4), mat_flat("Brass", "#B8935A", 0.3, metal=1), C["Pieces"])
-            cyl(p["name"] + " foot", x, y, 0, 2, p["r"] * 0.6, mat_flat("Brass", "#B8935A", 0.3, metal=1), C["Pieces"])
-        elif t == "ring":  # stools around a centre
-            for k in range(p["count"]):
-                a = 2 * math.pi * k / p["count"] + math.radians(p.get("start", 0))
-                cyl(f'{p["name"]} {k + 1}', x + p["ring"] * math.cos(a), y + p["ring"] * math.sin(a), 0, p["h"], p["r"], col, C["Pieces"])
-        elif t == "art":  # a flat artwork standing on the floor or on a wall
-            m = mat_image("Art " + p["name"], os.path.join(here, p["art"]), p.get("emit", 0))
-            if m:
-                art_plane(p["name"], p["from"], p["to"], z, z + p["h"], m, C["Pieces"], p.get("lift", 0.6))
+    skipped = []
+    for w in spec.get("walls", []):
+        try:
+            wall(w, spec, C["Walls"], here)
+        except Exception as e:  # one broken wall must not stop the whole booth
+            skipped.append(f'{w.get("name", "wall")} ({type(e).__name__}: {e})')
+    for p in spec.get("pieces", []):
+        try:
+            piece(p, here, C)
+        except Exception as e:
+            skipped.append(f'{p.get("name", "piece")} ({type(e).__name__}: {e})')
+    for s_ in skipped:
+        print("skipped:", s_, flush=True)
+    sc["bae_skipped"] = json.dumps(skipped)
     # light: soft sky + one sun
     world = bpy.data.worlds.new("Studio")
     world.use_nodes = True
@@ -252,6 +244,34 @@ def build(spec, here):
     so.rotation_euler = (math.radians(50), 0, math.radians(-35))
     sc.collection.objects.link(so)
     return sc
+
+
+def piece(p, here, C):
+    """One loose piece of the booth (box, cylinder, table, ring of stools, printed panel)."""
+    col = mat_flat("Piece " + p.get("colour", "#F15A22"), p.get("colour", "#F15A22"), p.get("rough", 0.5), p.get("emit", 0), p.get("alpha", 1), p.get("metal", 0))
+    t = p.get("type", "box")
+    if t == "art" and "x" not in p and p.get("from"):
+        p = dict(p, x=p["from"][0], y=p["from"][1])
+    x, y, z = p["x"], p["y"], p.get("z", 0)
+    if t == "box":
+        box(p["name"], x, y, z, x + p["w"], y + p["d"], z + p["h"], col, C["Pieces"])
+    elif t == "cylinder":
+        cyl(p["name"], x, y, z, z + p["h"], p["r"], col, C["Pieces"])
+    elif t == "table":  # a round top on a stem
+        cyl(p["name"] + " top", x, y, p["h"] - 4, p["h"], p["r"], col, C["Pieces"])
+        cyl(p["name"] + " stem", x, y, 2, p["h"] - 4, p.get("stem", 4), mat_flat("Brass", "#B8935A", 0.3, metal=1), C["Pieces"])
+        cyl(p["name"] + " foot", x, y, 0, 2, p["r"] * 0.6, mat_flat("Brass", "#B8935A", 0.3, metal=1), C["Pieces"])
+    elif t == "ring":  # stools around a centre
+        for k in range(p["count"]):
+            a = 2 * math.pi * k / p["count"] + math.radians(p.get("start", 0))
+            cyl(f'{p["name"]} {k + 1}', x + p["ring"] * math.cos(a), y + p["ring"] * math.sin(a), 0, p["h"], p["r"], col, C["Pieces"])
+    elif t == "art":  # a flat artwork standing on the floor or on a wall
+        m = mat_image("Art " + p["name"], os.path.join(here, p["art"]), p.get("emit", 0)) if p.get("art") else None
+        if not m:  # no design given: a plain panel in its colour, so the space still reads right
+            m = mat_flat("Panel " + p.get("plain", p.get("colour", "#FA6428")), p.get("plain", p.get("colour", "#FA6428")), 0.6, p.get("emit", 0))
+        art_plane(p["name"], p["from"], p["to"], z, z + p["h"], m, C["Pieces"], p.get("lift", 0.6))
+    else:
+        raise ValueError("unknown piece type " + str(t))
 
 
 def camera(sc, name, eye, look, lens=28, ortho=None):

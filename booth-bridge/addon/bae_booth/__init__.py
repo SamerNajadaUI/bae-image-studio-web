@@ -7,7 +7,7 @@ Jobs run in a separate background Blender, so the file you have open is never to
 bl_info = {
     "name": "BAE 3D Booth",
     "author": "BAE Studio",
-    "version": (1, 0, 1),
+    "version": (1, 0, 2),
     "blender": (4, 2, 0),
     "location": "3D View > Sidebar (N) > BAE Booth",
     "description": "Render machine for BAE Studio's 3D Booth: takes booth jobs from the studio and sends the results back",

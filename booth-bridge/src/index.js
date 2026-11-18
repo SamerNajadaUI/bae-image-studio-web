@@ -17,7 +17,7 @@ import ENGINE_BUILD from "../addon/bae_booth/engine/build_booth.py";
    which shows the connector address once, until the connector is used for the first time.
    Optional: set ACCESS_TOKEN on the worker to choose the token yourself.
 */
-const VERSION = "1.0.1";
+const VERSION = "1.0.2";
 const PROTOCOLS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const CH = 512 * 1024; // file piece size, for uploads and downloads
 const ONLINE_S = 45; // a Mac that called in the last 45 s is online

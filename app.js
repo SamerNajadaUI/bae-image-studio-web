@@ -6798,10 +6798,53 @@ Never draw or invent a logo or words: any logo or text appears only inside a des
     for(const w of spec.walls||[]){ const L=Math.hypot(w.to[0]-w.from[0],w.to[1]-w.from[1]), H=num(w.height)||num(spec.height)||250; add(w.art,`${w.name} (outside)`,L,H); add(w.art_inside,`${w.name} (inside)`,L,H); }
     for(const p of spec.pieces||[]) if(p.type==="art"){ const [a,b]=[p.from||[0,0],p.to||[0,0]]; add(p.art,p.name,Math.hypot(b[0]-a[0],b[1]-a[1]),num(p.h)); }
     return out; }
+  /* The render Mac's engine reads the spec literally: a piece without a number it needs stops the whole build.
+     fixSpec repairs what Claude wrote (numbers as text, art panels without a position, unknown types) and leaves out,
+     with a note, anything that cannot be built. forBuild then removes the designs that were not given. */
+  const isPt=(a,n=2)=>Array.isArray(a)&&a.length>=n&&a.slice(0,n).every(v=>v!==null&&v!==""&&Number.isFinite(+v));
+  const pt=(a,n=2)=>a.slice(0,n).map(v=>+v);
+  const hex=(c,d)=>/^#[0-9a-f]{6}$/i.test(String(c||""))?c:d;
+  function fixSpec(s){ const left=[]; const pos=v=>num(v)>0;
+    s.units="cm"; s.width=num(s.width); s.depth=num(s.depth); s.height=num(s.height)||250;
+    s.floors=(Array.isArray(s.floors)?s.floors:[]).filter(f=>f&&pos(f.w)&&pos(f.d)).map((f,i)=>({...f,name:String(f.name||`Floor ${i+1}`),x:num(f.x),y:num(f.y),w:num(f.w),d:num(f.d),colour:hex(f.colour,"#D9D4CA")}));
+    s.walls=(Array.isArray(s.walls)?s.walls:[]).filter(w=>{ const ok=w&&isPt(w.from)&&isPt(w.to)&&Math.hypot(w.to[0]-w.from[0],w.to[1]-w.from[1])>1; if(!ok&&w) left.push(w.name||"a wall"); return ok; }).map((w,i)=>{
+      const o={...w,name:String(w.name||`Wall ${i+1}`),from:pt(w.from),to:pt(w.to),thick:num(w.thick)||10};
+      if(w.height!=null) o.height=num(w.height)||s.height; else delete o.height;
+      if(w.colour) o.colour=hex(w.colour,"#FA6428"); else delete o.colour;
+      o.openings=(Array.isArray(w.openings)?w.openings:[]).filter(q=>q&&pos(q.width)&&pos(q.height)).map(q=>{ const r={...q,at:num(q.at),width:num(q.width),height:num(q.height)};
+        if(q.radius!=null) r.radius=num(q.radius); if(q.post&&!(pos(q.post.width)&&pos(q.post.height))) delete r.post; return r; });
+      for(const k of ["art","art_inside"]) if(typeof o[k]!=="string"||!o[k]) delete o[k];
+      return o; });
+    const need={box:["w","d","h"],cylinder:["r","h"],table:["r","h"],ring:["count","ring","r","h"]};
+    s.pieces=(Array.isArray(s.pieces)?s.pieces:[]).map((p,i)=>{ if(!p||typeof p!=="object") return null;
+      const q={...p,name:String(p.name||`Piece ${i+1}`)}; let t=String(q.type||"").toLowerCase();
+      if(t==="art"||t==="panel"||t==="print"||t==="sign"){ t="art";
+        if(!(isPt(q.from)&&isPt(q.to))&&isPt([q.x,q.y])&&pos(q.w)){ q.from=[+q.x,+q.y]; q.to=[+q.x+ +q.w,+q.y]; }
+        if(!(isPt(q.from)&&isPt(q.to))||!pos(q.h)){ left.push(q.name); return null; }
+        q.from=pt(q.from); q.to=pt(q.to); q.x=q.from[0]; q.y=q.from[1]; q.h=num(q.h); }
+      else { if(!need[t]) t=pos(q.w)&&pos(q.d)&&pos(q.h)?"box":pos(q.r)&&pos(q.h)?"cylinder":"";
+        if(!t||!isPt([q.x,q.y])||!need[t].every(k=>pos(q[k]))){ left.push(q.name); return null; }
+        q.x=+q.x; q.y=+q.y; for(const k of need[t]) q[k]=num(q[k]); if(t==="ring") q.count=Math.max(1,Math.min(40,Math.round(q.count))); }
+      q.type=t; q.z=num(q.z); q.colour=hex(q.colour,"#F15A22");
+      for(const k of ["emit","alpha","rough","metal","lift","start","stem"]) if(q[k]!=null) q[k]=num(q[k]);
+      if(q.alpha!=null&&!(q.alpha>0&&q.alpha<=1)) delete q.alpha;
+      return q; }).filter(Boolean);
+    s.cameras=(Array.isArray(s.cameras)?s.cameras:[]).filter(c=>c&&c.file&&isPt(c.eye,3)&&isPt(c.look,3)).map(c=>({...c,file:String(c.file).replace(/[^\w-]/g,"_"),name:String(c.name||c.file),eye:pt(c.eye,3),look:pt(c.look,3),lens:num(c.lens)||28}));
+    s.notes=Array.isArray(s.notes)?s.notes.map(String):[];
+    if(left.length) s.notes.push("Left out because a size or position was missing: "+[...new Set(left)].join(", ")+". Ask me to add them again.");
+    return s; }
   function validSpec(s){ if(!s||typeof s!=="object") return "no spec";
     if(!(num(s.width)>0&&num(s.depth)>0)) return "width and depth are missing";
-    for(const w of s.walls||[]) if(!Array.isArray(w.from)||!Array.isArray(w.to)) return `wall ${w.name||""} has no from / to`;
-    s.units="cm"; s.height=num(s.height)||250; s.floors=s.floors||[]; s.walls=s.walls||[]; s.pieces=s.pieces||[]; return ""; }
+    fixSpec(s); if(!s.walls.length&&!s.pieces.length) return "nothing to build"; return ""; }
+  /* what the Mac gets: only the designs that were really given; a printed panel kept as "plain colour" becomes a plain panel */
+  function forBuild(p,files){ const s=fixSpec(JSON.parse(JSON.stringify(p.spec)));
+    for(const w of s.walls){ for(const k of ["art","art_inside"]) if(w[k]&&!files[w[k]]) delete w[k]; w.colour=w.colour||"#FA6428"; }
+    s.pieces=s.pieces.map(q=>{ if(q.type!=="art"||files[q.art]) return q;
+      const [a,b]=[q.from,q.to], dx=b[0]-a[0], dy=b[1]-a[1], T=2;
+      if(Math.abs(dy)<0.5) return {type:"box",name:q.name,x:Math.min(a[0],b[0]),y:a[1]-(dx>0?T:0),z:q.z,w:Math.abs(dx),d:T,h:q.h,colour:q.colour,rough:0.6};
+      if(Math.abs(dx)<0.5) return {type:"box",name:q.name,x:a[0]-(dy<0?T:0),y:Math.min(a[1],b[1]),z:q.z,w:T,d:Math.abs(dy),h:q.h,colour:q.colour,rough:0.6};
+      return {...q,art:"",plain:q.colour}; }).filter(q=>q.type!=="art"||q.art||q.plain);
+    return s; }
 
   /* ---------- talking to the booth designer ---------- */
   const history=p=>(p.chat||[]).slice(-24).map(m=>`${m.role==="me"?"DESIGNER (user)":"YOU"}: ${m.text}${m.ideas?.length?`\n  [you proposed ideas: ${m.ideas.map(i=>i.title).join(" / ")}]`:""}`).join("\n");
@@ -6880,9 +6923,9 @@ Return JSON: {"image": <number of the picture, 1-based> or null, "box": {"x","y"
   async function build(p){ const bcall=BO().bcall; if(!bcall) throw new Error("the 3D Booth connector isn't ready");
     T.busy="Sending the designs…"; draw(); const files={};
     for(const s of slotsOf(p.spec)){ const d=p.slots?.[s.path]; if(!d?.file) continue; T.busy=`Sending ${s.label}…`; draw(); files[s.path]=await upload(await blobOf(d.file),s.path.split("/").pop()); }
-    const views=[...VIEWS,...(p.spec.cameras||[]).map(c=>c.file).filter(Boolean)];
+    const spec=forBuild(p,files), views=[...VIEWS,...spec.cameras.map(c=>c.file)];
     T.busy="Queuing the build…"; draw();
-    const r=await bcall("booth_submit",{title:p.name||"Booth",kind:"build",spec:p.spec,files,options:{views,width:1920,height:1080,samples:128,blend:true}});
+    const r=await bcall("booth_submit",{title:p.name||"Booth",kind:"build",spec,files,options:{views,width:1920,height:1080,samples:128,blend:true}});
     p.jobs=[r.job_id,...(p.jobs||[])].slice(0,20); p.step="build"; await save(p); T.job={id:r.job_id,status:"queued",pct:0,msg:"Waiting for the render Mac",outputs:[]}; }
   async function poll(){ clearTimeout(T.timer); const p=T.cur; if(!p||P.hidden||!p.jobs?.length||p.step!=="build") return;
     try{ const k=await BO().bcall("booth_job",{job_id:p.jobs[0]}); T.job=k;

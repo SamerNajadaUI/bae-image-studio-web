@@ -191,7 +191,9 @@ class Client:
                 self.set(status="ready", text="Cancelled", job=None)
                 return
             if code != 0:
-                raise RuntimeError("Blender stopped with an error:\n" + "".join(log[-25:]))
+                first = [x[8:].strip() for x in log if x.startswith("@@ERROR")]
+                rest = [x for x in log if not x.startswith(("missing artwork", "@@"))]
+                raise RuntimeError("Blender stopped with an error: " + (first[-1] if first else "") + "\n" + "".join(rest[-25:]))
 
             # 3. the results
             res = json.load(open(os.path.join(d, "out", "result.json")))
