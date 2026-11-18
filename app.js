@@ -6465,6 +6465,8 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
     try{ const r=await mcp.callTool(BSRV,tool,input||{},{cache:false}); const v=r?.payload&&typeof r.payload==="object"?r.payload:(()=>{ try{ return JSON.parse((r?.content||[]).map(c=>c.text||"").join("")); }catch{ return {}; } })(); return v; }
     catch(e){ log("✕","booth "+tool,{code:e?.code,message:e?.message}); throw e; } };
   const setupCode=c=>/server_not_connected|not_in_manifest|selection_required|needs_reauth|not_granted|capability_disabled|server_not_found/.test(String(c||""));
+  /* claude.ai asks the viewer to allow a connector only while a call started by a click waits: these mean "not allowed yet", fixed by a click */
+  const askCode=c=>/approval_required|consent_required|upstream_error/.test(String(c||""));
 
   async function refresh(){
     try{ B.st=await bcall("booth_status"); B.err=""; B.errCode="";
@@ -6473,9 +6475,9 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
     }catch(e){ B.errCode=e?.code||"error"; B.err=e?.message||String(e?.code||e); }
     draw(); schedule();
   }
-  function schedule(){ clearTimeout(B.timer); if(!B.open||P.hidden) return;
+  function schedule(){ clearTimeout(B.timer); if(!B.open||P.hidden||B.ask) return;
     const live=(B.st?.devices||[]).some(d=>d.status==="pending")||B.jobs.some(j=>j.status==="queued"||j.status==="running");
-    if(setupCode(B.errCode)) return; B.timer=setTimeout(refresh,live?4000:20000); }
+    if(setupCode(B.errCode)||askCode(B.errCode)) return; B.timer=setTimeout(refresh,live?4000:20000); }
 
   async function fetchFile(o){ let off=0, parts=[];
     while(off!=null){ const p=await bcall("booth_download",{file_id:o.file_id,offset:off}); parts.push(b64Blob(p.data,o.mime)); off=p.next; }
@@ -6529,6 +6531,10 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
   function draw(){
     if(!mcp){ body.innerHTML=`<section class="rl-card bo-card"><b>Open BAE Studio in claude.ai</b><p class="muted">The 3D Booth works through a claude.ai connector.</p></section>`; return; }
     if(setupCode(B.errCode)){ body.innerHTML=setupHTML(); return; }
+    if(B.ask||askCode(B.errCode)){ body.innerHTML=`<section class="rl-card bo-card"><b>Connect the 3D Booth</b>
+      <p class="muted">${B.ask?"BAE Studio uses the BAE 3D Booth connector to reach the render Mac. Press Connect; claude.ai asks you once to allow it.":"claude.ai didn't get your answer just now. Press Connect and choose Allow."}</p>
+      <div class="btns"><button class="btn primary" type="button" data-bo="connect">Connect</button></div>
+      <p class="muted bo-small">Not added the connector yet? Connect tells you the steps.</p></section>`; return; }
     if(!B.st){ body.innerHTML=`<section class="rl-card bo-card"><p class="muted">${B.err?esc(B.err):"Connecting to the render Mac…"}</p>${B.err?`<div class="btns"><button class="btn small" type="button" data-bo="check">Try again</button></div>`:""}</section>`; return; }
     const ready=(B.st.devices||[]).some(d=>d.status==="approved");
     const others=B.jobs.filter(j=>!B.job||j.id!==B.job.id);
@@ -6543,7 +6549,7 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
   }
 
   body.addEventListener("click",async e=>{ const b=e.target.closest("[data-bo]"); if(!b) return; const a=b.dataset.bo;
-    if(a==="check"){ B.err=""; B.errCode=""; B.st=null; draw(); refresh(); }
+    if(a==="check"||a==="connect"){ B.ask=false; B.err=""; B.errCode=""; B.st=null; draw(); refresh(); }
     else if(a==="test") test();
     else if(a==="approve"||a==="remove") devAct(b.dataset.id,a,b);
     else if(a==="cancel") cancel(b.dataset.id);
@@ -6551,7 +6557,10 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
     else if(a==="dl"){ const o=(B.job?.outputs||[]).find(x=>x.file_id===b.dataset.f); if(o) download(o,b); }
     else if(a==="copy"){ try{ await navigator.clipboard.writeText(B.st?.connector_url||""); b.textContent="Copied"; }catch{ const r=document.createRange(); r.selectNodeContents(body.querySelector(".bo-addr")); getSelection().removeAllRanges(); getSelection().addRange(r); b.textContent="Selected: press Copy"; } setTimeout(()=>b.textContent="Copy the address",2000); }
   });
-  const open=()=>{ P.hidden=false; P.scrollTop=0; B.open=true; draw(); refresh(); };
+  const open=async()=>{ P.hidden=false; P.scrollTop=0; B.open=true;
+    /* call the connector on its own only once this viewer has allowed it; otherwise wait for the Connect click */
+    const st=B.st?"granted":await window.claude?.use?.("permissions").then(p=>p?.state("mcp:"+BSRV)).catch(()=>"unavailable");
+    B.ask=st!=="granted"&&!B.st; draw(); if(!B.ask) refresh(); };
   $("openBooth")?.addEventListener("click",open);
   $("closeBooth")?.addEventListener("click",()=>{ P.hidden=true; B.open=false; clearTimeout(B.timer); $("openBooth")?.focus(); });
   document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&B.open&&!P.hidden) refresh(); });
