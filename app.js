@@ -6602,7 +6602,7 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
   async function cancel(id){ try{ await bcall("booth_cancel",{job_id:id}); }catch{} refresh(); }
 
   function setupHTML(){
-    const why=B.errCode==="needs_reauth"?"The BAE 3D Booth connector needs to be reconnected (claude.ai → Settings → Connectors).":B.errCode==="not_in_manifest"?"The BAE 3D Booth connector is turned off for this page. Turn it on from this page's permissions menu, then press Check again.":"The BAE 3D Booth connector is not added to your claude.ai yet.";
+    const why=askCode(B.errCode)?"claude.ai couldn't open the BAE 3D Booth connector: it is not added to your claude.ai yet (the window said “No matching connector found”), or the window was closed before Allow.":B.errCode==="needs_reauth"?"The BAE 3D Booth connector needs to be reconnected (claude.ai → Settings → Connectors).":B.errCode==="not_in_manifest"?"The BAE 3D Booth connector is turned off for this page. Turn it on from this page's permissions menu, then press Check again.":"The BAE 3D Booth connector is not added to your claude.ai yet.";
     return `<section class="rl-card bo-card"><b>Set up (once)</b><p class="muted">${esc(why)}</p>
       <ol class="bo-steps"><li><b>The bridge</b> (done once, by the studio owner): deploy it from the <i>booth/bridge</i> folder (Deploy to Cloudflare). Its home page shows the connector address and the Blender add-on.</li>
       <li><b>The connector</b> (every person in the team): claude.ai → Settings → Connectors → Add custom connector. Name <b>BAE 3D Booth</b>, address from the bridge page, or ask the studio owner for it.</li>
@@ -6631,6 +6631,7 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
   function draw(){
     if(!mcp){ body.innerHTML=`<section class="rl-card bo-card"><b>Open BAE Studio in claude.ai</b><p class="muted">The 3D Booth works through a claude.ai connector.</p></section>`; return; }
     if(setupCode(B.errCode)){ body.innerHTML=setupHTML(); return; }
+    if(askCode(B.errCode)&&B.tried){ body.innerHTML=setupHTML(); return; }
     if(B.ask||askCode(B.errCode)){ body.innerHTML=`<section class="rl-card bo-card"><b>Connect the 3D Booth</b>
       <p class="muted">${B.ask?"BAE Studio uses the BAE 3D Booth connector to reach the render Mac. Press Connect; claude.ai asks you once to allow it.":"claude.ai didn't get your answer just now. Press Connect and choose Allow."}</p>
       <div class="btns"><button class="btn primary" type="button" data-bo="connect">Connect</button></div>
@@ -6649,7 +6650,7 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
   }
 
   body.addEventListener("click",async e=>{ const b=e.target.closest("[data-bo]"); if(!b) return; const a=b.dataset.bo;
-    if(a==="check"||a==="connect"){ B.ask=false; B.err=""; B.errCode=""; B.st=null; draw(); refresh(); }
+    if(a==="check"||a==="connect"){ B.tried=true; B.ask=false; B.err=""; B.errCode=""; B.st=null; draw(); refresh(); }
     else if(a==="test") test();
     else if(a==="approve"||a==="remove") devAct(b.dataset.id,a,b);
     else if(a==="cancel") cancel(b.dataset.id);
