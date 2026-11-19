@@ -15,7 +15,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 165 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 167 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openResize`, `openBrand`):
 
@@ -342,3 +342,6 @@ Known limits: tiles appear in his Magnific history; a 2560×1440 source means th
 
 **Tested.** One REAL generation on his Magnific (60 credits, creation `Lw86oNjswO`): two of his uploads, one named "composition only", one "colour grading only", a new person and place in the text. The result took the seated pose and framing from the first, the cream and brown palette from the second, and copied neither face. `node dev/talking-test.js`: 41 checks over five scripted journeys (a 52-year-old who only taps, Samer's own layout + three pictures story, pictures with no words, a remake, too many pictures + a failed answer + phone width), mocked Claude and Magnific; every picture reaches the upload call byte for byte.
 **Not tested for real:** Claude's actual answers to this prompt, the whole flow inside claude.ai, three pictures at once on Seedream, and no real person of any age has used it. The "five ages" are scripted journeys, not people.
+
+**v166.** A character named in the card is matched by ANY of its aliases as a whole word (`nameAt`, `charAliases`): Salma's sheet was dropped because her library name is "Salma / سلمى" and only the full string was matched; "oun" also matched inside "young" in the classic brief. A character written with @ that is not in the library stops `shoot()` before anything is spent.
+**v167: New chat / Recent.** Every talk is saved 0.9 s after it changes (`tkSave`): the words, the summary card, small JPEG copies of the pictures and results, and each picture's Magnific id once it was uploaded. Local list `bae_talk_chats` (20 chats) plus, when the account is there, one document `talk_<id>` in `data/users/<uid>` trimmed under 235 KB (same 256 KB limit as reels). `Recent` lists them (account and device merged, newest first), says where they are saved, opens or deletes one. Original files are NOT kept: a restored picture without a Magnific id shows "Add it again to use it" and is left out of `uses()`. A chat touched in the last 30 minutes is restored on load, so a new studio version does not wipe the talk he is in. Account saving is tested only with the device path (the test has no database).
