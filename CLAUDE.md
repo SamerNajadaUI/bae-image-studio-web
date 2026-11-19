@@ -15,7 +15,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 157 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 165 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openResize`, `openBrand`):
 
@@ -326,3 +326,19 @@ Known limits: tiles appear in his Magnific history; a 2560×1440 source means th
 **Test:** `node dev/reels-storage-test.js` (three browser contexts as devices, a mocked account that refuses documents over the real limit). Every check passes. **Not tested for real**: only Samer's laptop holds the real case.
 
 **Still open:** the account's chat copy is trimmed when the chat alone passes 235 KB (the device keeps all of it). If he wants the full chat on every device, split the chat over several `reelchat_<id>_<n>` documents.
+
+## 16. Talking (v165, 19 Nov 2026) — Photography is one conversation
+
+**What Samer asked.** Hide everything on Photography and keep one thing: a chat ("Talking") that is Claude itself, not a form. He talks, drops pictures (his layout, a scene he likes, a camera angle, a colour grade), each picture is used for ONE thing and reaches Magnific at its ORIGINAL size; before the picture is made he gets a summary (scene, person, clothes, place, references, colours, style, size, how many). It must be easy enough to teach people in their forties and fifties. The rule "never show the product / a phone / a phone screen" is removed.
+
+**How it is built (the "Art Director" module in `app.js`, search "Talking").**
+- `body.talk` (Photography mode) hides `#optCard`, `#refCard`, `#advWrap`, the written brief (`.pc-classic`) and the result card `#s3`. `All tools` (`data-pc="more"`, class `talk-more`) shows them again; `talk-res` shows `#s3` once a result exists; `talk-tour` while the tutorial runs. Icons mode is untouched.
+- `PC.refs` = the designer's pictures `{file (original), blob (1600 px JPEG for Claude only), url, role, what, id}`. `ROLES`: composition, angle, grade, light, place, style, outfit, remake, layout, look. Claude sets the role from the talk (`"pictures":[{n,role,what}]`), the designer can change it in the select under each picture. `setRole()` owns the side effects: `remake` builds `PC.src` (the old remake mode, Keep / Change per line), `layout` sets `PC.layout` and is never sent to Magnific.
+- `turn()` takes up to 4 pictures a message, 8 in all; a failed answer removes the pictures it had added. Turns with pictures use `modelTier:"complex"`.
+- `create()`: no pictures in use → the studio's own pipeline (`createAll`), repeated `PC.n` times. Pictures in use or a remake → `shoot()`: uploads every picture with `rlUploadMag(R.file)` (the original file, once; the id is remembered), then Claude writes ONE Seedream prompt that names each tag with the one thing taken from it and what is NOT copied (`ROLE_USE`), then `rlImage` × `PC.n`. Order of references: remake source, the designer's pictures, character sheets, outfit sheet.
+- Ready: Claude returns `recap` (rows in the designer's language); the studio adds size and count. The brief is written at that moment (`apply()`), so "send it to the brief" is the same step. The six fields live in a closed "Change a detail by hand".
+- New strings are in `UX_AR` (Arabic UI when the studio language is Arabic).
+- The product rule was also removed from the Layout advisor's two prompts.
+
+**Tested.** One REAL generation on his Magnific (60 credits, creation `Lw86oNjswO`): two of his uploads, one named "composition only", one "colour grading only", a new person and place in the text. The result took the seated pose and framing from the first, the cream and brown palette from the second, and copied neither face. `node dev/talking-test.js`: 41 checks over five scripted journeys (a 52-year-old who only taps, Samer's own layout + three pictures story, pictures with no words, a remake, too many pictures + a failed answer + phone width), mocked Claude and Magnific; every picture reaches the upload call byte for byte.
+**Not tested for real:** Claude's actual answers to this prompt, the whole flow inside claude.ai, three pictures at once on Seedream, and no real person of any age has used it. The "five ages" are scripted journeys, not people.
