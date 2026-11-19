@@ -685,8 +685,8 @@ function renderRefs(){
     box.appendChild(b); });
   if(S.refTab==="ch"){
     if(!CL.loaded&&!CL._loading){ CL._loading=true; clLoad().then(()=>{ CL._loading=false; renderRefs(); clMigrateLocal(); }); }
-    const head=document.createElement("div"); head.className="cl-head"; head.innerHTML=clTabsHTML()+(CL.busy?`<p class="t12" role="status">${esc(CL.busy)}</p>`:"")+(CL.err?`<p class="t12 bad" role="alert">${esc(CL.err)}</p>`:"");
-    head.querySelectorAll("[data-clcat]").forEach(t=>t.onclick=()=>{ CL.cat=t.dataset.clcat; renderRefs(); }); box.prepend(head);
+    const head=document.createElement("div"); head.className="cl-head"; head.innerHTML=clTabsHTML()+(CL.canEdit&&CL.list.length?`<div class="cl-mag"><button type="button" class="btn small" data-clmag ${CL.busy?"disabled":""}>Send all to Magnific</button><span class="t12 muted">${clMagCount()} of ${CL.list.length} are on your Magnific</span></div>`:"")+(CL.busy?`<p class="t12" role="status">${esc(CL.busy)}</p>`:"")+(CL.err?`<p class="t12 bad" role="alert">${esc(CL.err)}</p>`:"");
+    head.querySelectorAll("[data-clcat]").forEach(t=>t.onclick=()=>{ CL.cat=t.dataset.clcat; renderRefs(); }); const mg=head.querySelector("[data-clmag]"); if(mg) mg.onclick=()=>clMagAll(); box.prepend(head);
     if(CL.canEdit){ const w=document.createElement("label"); w.className="ch-card ch-add"; w.innerHTML=`<span class="plus" aria-hidden="true">+</span><b>Add character</b><span class="t12 muted">A clear photo or a character sheet. It joins the team library; name it, then write the name in any brief.</span><input type="file" accept="image/jpeg,image/png,image/webp" multiple class="sr">`; w.querySelector("input").onchange=e=>{ clUpload(e.target.files); e.target.value=""; }; box.appendChild(w); }
     else if(!CL.list.length&&CL.loaded){ const e=document.createElement("p"); e.className="muted cl-empty"; e.textContent="No characters in the library yet. The studio owner adds them."; box.appendChild(e); } }
   const nb=S.picked.filter(id=>refById(id)?.set==="bae").length;
@@ -1595,6 +1595,23 @@ async function clStoreImage(id,blob){
   try{ const u=JSON.parse(localStorage.getItem("bae_user_magids")||"{}"); delete u[clRefId(id)]; localStorage.setItem("bae_user_magids",JSON.stringify(u)); }catch{}
   rlUploadMag(blob,"character-"+id).then(up=>{ if(!up?.id) return; try{ const u=JSON.parse(localStorage.getItem("bae_user_magids")||"{}"); u[clRefId(id)]=up.id; localStorage.setItem("bae_user_magids",JSON.stringify(u)); }catch{} const c=CL.list.find(x=>x.id===id); if(c){ c._mag=true; if(S.refTab==="ch") renderRefs(); } }).catch(e=>log("·","original not sent to Magnific yet",{code:e?.code,message:e?.message}));
   return {full,fields:{thumb,asset,mime:blob.type||"image/jpeg",px:dims,orig:!!asset}}; }
+/* Magnific copies of the library: every character sheet goes to the owner's Magnific once, at full size, named after the character,
+   and the list (character -> Magnific identifier) is kept in the account, so the sheets can be used in work done outside the studio */
+function clMagMap(){ try{ return JSON.parse(localStorage.getItem("bae_user_magids")||"{}"); }catch{ return {}; } }
+function clMagCount(){ const U=clMagMap(); return CL.list.filter(c=>U[clRefId(c.id)]).length; }
+async function clMagAll(){ if(CL.busy) return; const L=CL.list.slice(); let n=0, bad=0; CL.err="";
+  try{ if(!mcp||S.web) throw {message:"Magnific isn't reachable in this view. Open the studio in claude.ai."};
+    CL.busy="Connecting to Magnific…"; renderRefs(); if(!S.connected) await connect(true);
+    for(const c of L){ n++; if(clMagMap()[clRefId(c.id)]) continue; CL.busy=`Sending ${n} of ${L.length} to Magnific…`; renderRefs();
+      try{ const blob=await clBlob(c.id); const nm=String(c.name||"Character").split("/")[0].trim()||"Character"; const up=await rlUploadMag(blob,"character-"+nm); if(!up?.id) throw {message:"no identifier"};
+        const U=clMagMap(); U[clRefId(c.id)]=up.id; localStorage.setItem("bae_user_magids",JSON.stringify(U)); c._mag=true; }
+      catch(e){ bad++; log("✕","character not sent to Magnific",{name:c.name,code:e?.code,message:e?.message}); } }
+    const U=clMagMap(), map={}; for(const c of L){ const m=U[clRefId(c.id)]; if(m) map[c.id]={name:c.name||"",cat:c.cat||"",mag:m}; }
+    CL.busy="Saving the list…"; renderRefs(); await rlStoreInit(); if(!RLS.db||!RLS.uid) throw {message:"The list couldn't be saved in your account."};
+    await RLS.db.collection("data/users/"+RLS.uid).doc("magchars").set({map,n:Object.keys(map).length,t:Date.now()});
+    if(bad) CL.err=`${bad} could not be sent. Press the button again.`; }
+  catch(e){ CL.err="Couldn't send the characters to Magnific: "+String(e?.message||e?.code||e).slice(0,160); }
+  CL.busy=""; renderRefs(); }
 async function clReplace(id,blob){ const c=CL.list.find(x=>x.id===id); if(!c||!CL.canEdit) return; const old=c.asset;
   CL.busy="Replacing the image…"; renderRefs();
   try{ const {fields}=await clStoreImage(id,blob); fields.at=Date.now(); Object.assign(c,fields); await RLS.db.collection("chars").doc(id).update(fields); refCache=null;
@@ -4527,6 +4544,7 @@ async function rlBible(){
 
 /* ================= New look + features (v84) ================= */
 /*UXDICT*/const UX_AR={
+"Send all to Magnific":"ابعث الكل على Magnific","Connecting to Magnific…":"عم بتصل بـ Magnific…","Saving the list…":"عم بحفظ القائمة…",
 "Talking":"احكي معي","Tell me the photo you need. Add pictures if you have them.":"احكيلي شو الصورة اللي بدك ياها. وضيف صور إذا عندك.","New chat":"محادثة جديدة","Claude model":"موديل Claude","Auto (the studio picks)":"تلقائي (الاستوديو بيختار)","Checking…":"عم بفحص…","This view does not say which model answers.":"هاي الواجهة ما بتحكي أي موديل بيجاوب.","Recent":"السابقة","No chats yet. Your chats will be listed here.":"ما في محادثات لسا. محادثاتك بتطلع هون.","Your chats are saved in your account.":"محادثاتك محفوظة بحسابك.","Your chats are saved on this device only.":"محادثاتك محفوظة على هاض الجهاز بس.","This chat could not be saved.":"ما قدرت أحفظ هاي المحادثة.","Add it again to use it":"ضيفها مرة ثانية لتستخدمها","Delete":"احذف","Delete this chat":"احذف هاي المحادثة","Pictures":"صور","Enter sends":"Enter للإرسال","Send":"ابعث","All tools":"كل الأدوات","Hide the tools":"خبّي الأدوات","Write here, or press the microphone and talk.":"اكتب هون، أو اكبس المايكروفون واحكي.","Your message":"رسالتك",
 "Say what you need, in your own words. You can add pictures too: your design, a photo you like, colours you like.":"احكي شو بدك بكلامك. وبتقدر تضيف صور: تصميمك، صورة عجبتك، ألوان عجبتك.","Or try one:":"أو جرّب وحدة:","Your photo":"صورتك","Change a detail by hand":"غيّر تفصيلة بإيدك","image":"صورة","images":"صور","Your pictures. Under each one: what I take from it.":"صورك. وتحت كل وحدة: شو باخذ منها.",
 "The scene":"المشهد (بشخصياتنا)","Size":"الحجم","How many":"العدد","Camera angle":"زاوية التصوير","Colours":"الألوان","Light":"الإضاءة","Location":"المكان","Style":"الستايل","Clothes":"اللبس","Same photo, small changes":"نفس الصورة مع تغيير بسيط","My design":"تصميمي","Only to look at":"بس للنقاش","Create image":"اعمل الصورة","Create 4 angles":"٤ زوايا","3 ideas":"٣ أفكار","The written brief":"البريف المكتوب","What the studio will use. You can still write it yourself.":"اللي رح يستخدمه الاستوديو. وبتقدر تكتبه بإيدك.","Who":"مين","Outfit":"اللبس","Action":"شو بيعمل","Place":"وين","Camera":"الكاميرا",
