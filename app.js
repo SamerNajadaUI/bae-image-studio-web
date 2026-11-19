@@ -6699,7 +6699,8 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
   const rid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
   const LKEY="bae_booth_projects", CHB=524288, PDFJS="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
   const VIEWS=["01_front_left","02_front","03_back_right","04_left_side","05_inside","06_top"];
-  const T={list:[],cur:null,busy:"",err:"",ready:false,pages:{},mem:new Map(),job:null,imgs:{},timer:0,loaded:false};
+  const T={list:[],cur:null,busy:"",err:"",ready:false,pages:{},mem:new Map(),job:null,imgs:{},timer:0,loaded:false,
+    lv:{pid:null,dev:null,rev:null,img:"",msg:"",busy:"",err:"",sent:{},timer:0,news:[],seen:0}};
   const STEPS=[["talk","Talk"],["plan","Plan"],["designs","Designs"],["build","Build"]];
 
   /* ---------- the schema Claude writes (kept in step with build_booth.py) ---------- */
@@ -6997,6 +6998,66 @@ Return JSON: {"image": <number of the picture, 1-based> or null, "box": {"x","y"
         ${k.status==="done"?`<div class="bo-shots">${stills.map(s=>{ const pv=outs.find(o=>o.path===s.path.replace(/\.png$/,"_preview.jpg")); return `<figure>${pv&&T.imgs[pv.file_id]?`<img src="${T.imgs[pv.file_id]}" alt="${esc(s.label)}">`:`<div class="bo-ph">Loading…</div>`}<figcaption>${esc(s.label)}</figcaption><button class="btn small" type="button" data-w="dl" data-f="${esc(s.file_id)}">Download PNG</button></figure>`; }).join("")}</div>
           <div class="btns">${blend?`<button class="btn small" type="button" data-w="dl" data-f="${esc(blend.file_id)}">Download the Blender file</button>`:""}<button class="btn small" type="button" data-w="dlall">Download everything (.zip)</button><span class="muted bo-small">${k.result?.device?esc(`Rendered on ${k.result.device.split(" (")[0]} in ${k.result.seconds} s`):""}</span></div>`:""}</div>`:""}
     </section>`; }
+  /* ---------- Live: the booth is built in the Blender that is open on the Mac (add-on 1.1, engine/live.py) ----------
+     Every plan change goes straight to Blender (only what changed is rebuilt); what the designer moves, turns or deletes
+     by hand in Blender comes back into the plan (bridge: booth_status → devices[].live.spec / rev / changes). */
+  const liveMac=()=>{ const ds=(BO().B?.st?.devices||[]).filter(d=>d.status==="approved"&&d.live?.on); return ds.find(d=>d.id===T.lv.dev)||ds[0]||null; };
+  const liveOn=p=>!!p&&T.lv.pid===p.id;
+  /* Blender only gets the designs this booth really has: a surface without one keeps its slot name aside ("art_slot"),
+     so a design left on the Mac by another booth can never show, and the plan gets its slots back when Blender sends it. */
+  function liveSpec(p){ const s=fixSpec(JSON.parse(JSON.stringify(p.spec))); const has=path=>!!p.slots?.[path]?.file;
+    for(const w of s.walls){ w.colour=w.colour||"#FA6428"; for(const k of ["art","art_inside"]) if(w[k]&&!has(w[k])){ w[k+"_slot"]=w[k]; delete w[k]; } }
+    for(const q of s.pieces) if(q.type==="art"&&q.art&&!has(q.art)){ q.art_slot=q.art; q.art=""; }
+    return s; }
+  function fromLive(spec){ const s=JSON.parse(JSON.stringify(spec));
+    for(const w of s.walls||[]) for(const k of ["art","art_inside"]) if(w[k+"_slot"]){ w[k]=w[k]||w[k+"_slot"]; delete w[k+"_slot"]; }
+    for(const q of s.pieces||[]) if(q.art_slot){ q.art=q.art||q.art_slot; delete q.art_slot; }
+    return s; }
+  async function liveSnap(o){ const blob=await BO().fetchFile(o); if(T.lv.img) URL.revokeObjectURL(T.lv.img); T.lv.img=URL.createObjectURL(blob); T.lv.imgAt=Date.now(); }
+  async function liveCall(p,op,extra={}){ const bcall=BO().bcall; const mac=liveMac(); if(!mac) throw new Error("Blender isn't open in Live mode on the Mac.");
+    let r=await bcall("booth_submit",{kind:"live",title:p.name||"Booth",device_id:mac.id,spec:extra.spec||null,files:extra.files||{},options:{op,...(extra.options||{})}});
+    for(let i=0;i<90&&(r.status==="queued"||r.status==="running");i++){ T.lv.msg=r.msg||"Working in Blender…"; draw(); await new Promise(ok=>setTimeout(ok,2000)); r=await bcall("booth_job",{job_id:r.id||r.job_id}); }
+    if(r.status!=="done") throw new Error(r.error||"Blender didn't answer.");
+    const pic=(r.outputs||[]).find(o=>o.path==="live_view.png"); if(pic) await liveSnap(pic);
+    return r; }
+  async function liveApply(p,snapshot=true){ T.lv.busy="Building in Blender…"; T.lv.err=""; draw();
+    try{ const files={}; for(const sl of slotsOf(p.spec)){ const d=p.slots?.[sl.path]; if(!d?.file) continue; const sig=d.file.id||d.file.mem||d.file.name;
+        if(T.lv.sent[sl.path]===sig) continue; T.lv.busy=`Sending ${sl.label} to Blender…`; draw(); files[sl.path]=await upload(await blobOf(d.file),sl.path.split("/").pop()); T.lv.sent[sl.path]=sig; }
+      T.lv.busy="Building in Blender…"; draw();
+      const r=await liveCall(p,"apply",{spec:liveSpec(p),files,options:{snapshot}});
+      const res=r.result||{}; if(res.rev!=null) T.lv.rev=res.rev; p.liveRev=T.lv.rev;
+      T.lv.msg=res.built?(res.built.length?`Rebuilt ${res.built.length===1?res.built[0]:res.built.length+" parts"} · kept ${res.kept}`:"Nothing to rebuild: Blender already matches the plan"):"";
+      if(res.failed?.length) T.lv.msg+=` · left out: ${res.failed.map(x=>x.split(" (")[0]).join(", ")}`; }
+    catch(e){ T.lv.err=e?.message||String(e?.code||e); }
+    T.lv.busy=""; draw(); }
+  async function liveStart(p){ const mac=liveMac(); if(!mac) return; T.lv={...T.lv,pid:p.id,dev:mac.id,img:T.lv.pid===p.id?T.lv.img:"",sent:T.lv.pid===p.id?T.lv.sent:{},news:[],err:""};
+    // Blender may already hold this booth with changes made by hand while the studio was closed: those win
+    const lv=mac.live; if(p.liveRev!=null&&lv?.spec&&lv.title===(p.name||"Booth")&&lv.rev!=null&&lv.rev!==p.liveRev&&!validSpec(lv.spec)){ p.spec=fromLive(lv.spec); T.lv.news.unshift({at:Date.now(),names:["what you did in Blender since last time (the plan now follows it)"]}); }
+    T.lv.rev=lv?.rev??null; T.lv.seen=Date.now(); await liveApply(p); await save(p); livePoll(); }
+  function liveStop(){ clearTimeout(T.lv.timer); T.lv.pid=null; draw(); }
+  async function livePoll(){ clearTimeout(T.lv.timer); const p=T.cur; if(!p||!liveOn(p)||P.hidden) return;
+    try{ const st=await BO().bcall("booth_status"); if(BO().B) BO().B.st=st; const mac=(st.devices||[]).find(d=>d.id===T.lv.dev); const lv=mac?.live;
+      if(!lv?.on){ T.lv.off=true; }
+      else { T.lv.off=false;
+        if(!T.lv.busy&&lv.rev!=null&&lv.rev!==T.lv.rev&&lv.spec&&lv.title===(p.name||"Booth")){
+          const fresh=(lv.changes||[]).filter(c=>c.rev>(T.lv.rev??-1)); const names=[...new Set(fresh.flatMap(c=>c.names))];
+          if(!validSpec(lv.spec)){ p.spec=fromLive(lv.spec); T.lv.rev=lv.rev; p.liveRev=lv.rev; if(names.length){ T.lv.news.unshift({at:Date.now(),names}); T.lv.news=T.lv.news.slice(0,6); (p.planChat=p.planChat||[]).push({role:"ai",text:`In Blender you changed: ${names.join(", ")}. The plan follows.`}); }
+            await save(p); draw(); if(names.length) liveCall(p,"snapshot").then(draw).catch(()=>{}); } } }
+      draw(); }
+    catch(e){ T.lv.err=e?.message||String(e?.code||e); draw(); }
+    T.lv.timer=setTimeout(livePoll,3000); }
+  function liveHTML(p){ const mac=liveMac(), on=liveOn(p);
+    if(!on) return `<section class="rl-card bo-card bow-live"><div class="bo-mac-t"><b>Live in Blender</b><span class="bo-pill ${mac?"on":"off"}">${mac?"ready":"not open"}</span></div>
+      ${mac?`<p class="muted">Blender is open on <b>${esc(mac.name)}</b>. Build this booth there now and watch every change happen; what you move by hand comes back into this plan.</p>
+        <div class="btns"><button class="btn primary" type="button" data-w="livego" ${T.lv.busy?"disabled":""}>Build it live in Blender</button></div>`
+      :`<p class="muted">Open Blender on the Mac: the BAE Booth panel (sidebar, N) has Live on. It needs the add-on 1.1 or newer.</p>`}</section>`;
+    const busy=T.lv.busy;
+    return `<section class="rl-card bo-card bow-live on"><div class="bo-mac-t"><b>Live in Blender</b><span class="bo-pill ${T.lv.off?"bad":busy?"wait":"on"}">${T.lv.off?"Blender closed":busy?"working":"live"}</span></div>
+      <div class="bow-livepic">${T.lv.img?`<img src="${T.lv.img}" alt="The booth in Blender now">`:`<div class="bo-ph">${busy?esc(busy):"Waiting for the first picture…"}</div>`}${busy&&T.lv.img?`<span class="bow-livebusy">${esc(busy)}</span>`:""}</div>
+      <p class="muted bo-small" dir="auto">${T.lv.off?"Blender stopped answering: open it on the Mac (Live on), then press Send the plan again.":esc(T.lv.msg||"Every change to the plan shows in Blender in a second or two.")}${mac?` · ${esc(mac.name)}`:""}${T.lv.rev!=null?` · version ${T.lv.rev}`:""}</p>
+      ${T.lv.news.length?`<div class="bow-livenews">${T.lv.news.slice(0,3).map(n=>`<div dir="auto"><b>Changed in Blender:</b> ${esc(n.names.join(", "))}</div>`).join("")}</div>`:""}
+      ${T.lv.err?`<p class="bo-err" dir="auto">${esc(T.lv.err)}</p>`:""}
+      <div class="btns"><button class="btn small" type="button" data-w="livesnap" ${busy?"disabled":""}>New picture</button><button class="btn small" type="button" data-w="livefocus" ${busy?"disabled":""}>Frame the booth in Blender</button><button class="btn small" type="button" data-w="livego" ${busy?"disabled":""}>Send the plan again</button><button class="btn small" type="button" data-w="livestop">Stop live</button></div></section>`; }
   function draw(){
     if(!sample&&!T.cur){ W.innerHTML=""; return; }
     if(!T.cur){ W.innerHTML=`<section class="rl-card bo-card bow-home"><div class="bo-mac-t"><b>Booths</b></div>
@@ -7005,7 +7066,7 @@ Return JSON: {"image": <number of the picture, 1-based> or null, "box": {"x","y"
         ${T.list.length?`<div class="bow-proj">${T.list.map(x=>`<button class="bo-row" type="button" data-w="open" data-id="${esc(x.id)}"><span dir="auto">${esc(x.name||"Booth")}</span><span class="muted">${esc(STEPS[stepIdx(x.step)]?.[1]||"")} · ${new Date(x.updated||x.created).toLocaleDateString()}</span></button>`).join("")}</div>`:""}</section>`; return; }
     const p=T.cur;
     W.innerHTML=`<section class="bow-head"><button class="g-back" type="button" data-w="home"><i aria-hidden="true">←</i>Booths</button><input class="bow-name" id="bowName" value="${esc(p.name||"")}" aria-label="Booth name" dir="auto"><button class="btn small" type="button" data-w="del">Delete</button></section>
-      ${stepper(p)}${p.step==="talk"?talkHTML(p):p.step==="plan"&&p.spec?planHTML(p):p.step==="designs"&&p.spec?designsHTML(p):p.step==="build"&&p.spec?buildHTML(p):talkHTML(p)}
+      ${stepper(p)}${p.spec&&p.step!=="talk"?liveHTML(p):""}${p.step==="talk"?talkHTML(p):p.step==="plan"&&p.spec?planHTML(p):p.step==="designs"&&p.spec?designsHTML(p):p.step==="build"&&p.spec?buildHTML(p):talkHTML(p)}
       ${T.err?`<p class="bo-err" dir="auto">${esc(T.err)}</p>`:""}`;
     const ch=$("bowChat"); if(ch) ch.scrollTop=ch.scrollHeight; }
 
@@ -7027,9 +7088,11 @@ Return JSON: {"image": <number of the picture, 1-based> or null, "box": {"x","y"
       await save(p); }); }
   async function doPlan(extra){ const p=T.cur; await run("Measuring and writing the plan…",async()=>{
       const r=await makePlan(p,extra); const bad=validSpec(r?.spec); if(bad) throw new Error("The plan didn't come out right ("+bad+"). Press Make the plan again.");
-      p.spec=r.spec; if(!p.name||/^New booth/.test(p.name)) p.name=r.spec.name||p.name; p.planChat=[{role:"ai",text:String(r.say||"")}]; p.step="plan"; await save(p); }); }
+      p.spec=r.spec; if(!p.name||/^New booth/.test(p.name)) p.name=r.spec.name||p.name; p.planChat=[{role:"ai",text:String(r.say||"")}]; p.step="plan"; await save(p); });
+    if(liveOn(p)&&p.spec) liveApply(p); }
   async function doEdit(text){ const p=T.cur; if(!text) return; (p.planChat=p.planChat||[]).push({role:"me",text}); await run("Changing the plan…",async()=>{
-      const r=await editPlan(p,text); if(r?.spec&&!validSpec(r.spec)) p.spec=r.spec; p.planChat.push({role:"ai",text:String(r?.say||"Done.")}); await save(p); }); }
+      const r=await editPlan(p,text); if(r?.spec&&!validSpec(r.spec)){ p.spec=r.spec; p._changed=true; } p.planChat.push({role:"ai",text:String(r?.say||"Done.")}); await save(p); });
+    if(p._changed&&liveOn(p)){ delete p._changed; liveApply(p); } delete p._changed; }
   async function newBooth(mode){ const p={id:"b"+rid(),name:"New booth",mode,step:"talk",chat:[],files:[],slots:{},created:Date.now()};
     T.cur=p; T.list.unshift(p); await save(p); draw(); $("bowText")?.focus(); }
 
@@ -7040,20 +7103,24 @@ Return JSON: {"image": <number of the picture, 1-based> or null, "box": {"x","y"
   W.addEventListener("change",async e=>{ const t=e.target;
     if(t.id==="bowFile"&&t.files?.length){ const names=[...t.files].map(f=>f.name); const tx=$("bowText"); if(tx&&!tx.value.trim()) tx.placeholder=`${names.join(", ")} — add a message, or press Send`; }
     if(t.id==="bowName"&&T.cur){ T.cur.name=t.value.trim()||"Booth"; save(T.cur); }
-    if(t.dataset.w==="slotfile"&&t.files?.[0]&&T.cur){ const p=T.cur, path=t.dataset.p; await run("Keeping the design…",async()=>{ (p.slots=p.slots||{})[path]={file:await keep(t.files[0]),from:"upload"}; await save(p); }); } });
+    if(t.dataset.w==="slotfile"&&t.files?.[0]&&T.cur){ const p=T.cur, path=t.dataset.p; await run("Keeping the design…",async()=>{ (p.slots=p.slots||{})[path]={file:await keep(t.files[0]),from:"upload"}; await save(p); }); if(liveOn(p)) liveApply(p,false); } });
   W.addEventListener("click",async e=>{ const b=e.target.closest("[data-w]"); if(!b||b.tagName==="FORM"||b.tagName==="INPUT") return; const a=b.dataset.w, p=T.cur;
     if(a==="new") newBooth(b.dataset.m);
-    else if(a==="open"){ T.cur=T.list.find(x=>x.id===b.dataset.id)||null; T.job=null; draw(); if(T.cur?.step==="build") poll(); }
-    else if(a==="home"){ T.cur=null; clearTimeout(T.timer); draw(); }
+    else if(a==="open"){ T.cur=T.list.find(x=>x.id===b.dataset.id)||null; T.job=null; if(T.lv.pid&&T.lv.pid!==T.cur?.id) liveStop(); draw(); if(T.cur?.step==="build") poll(); }
+    else if(a==="home"){ T.cur=null; clearTimeout(T.timer); liveStop(); draw(); }
     else if(a==="del"&&p){ if(b.dataset.sure){ await remove(p); T.cur=null; draw(); } else { b.dataset.sure="1"; b.textContent="Delete this booth? Press again"; setTimeout(()=>{ if(b.isConnected){ delete b.dataset.sure; b.textContent="Delete"; } },4000); } }
     else if(a==="go"&&p){ p.step=b.dataset.s; await save(p); draw(); if(p.step==="build") poll(); }
     else if(a==="unfile"&&p){ p.files.splice(+b.dataset.i,1); await save(p); draw(); }
     else if(a==="pick"&&p){ const d=p.chat[+b.dataset.i]?.ideas?.[+b.dataset.j]; if(d){ p.idea=d; send(`Let's go with “${d.title}”. ${d.concept}`); } }
     else if(a==="plan") doPlan();
     else if(a==="replan") doPlan("Write the plan again from the start, checking every measurement.");
-    else if(a==="plain"&&p){ (p.slots=p.slots||{})[b.dataset.p]={colour:true}; await save(p); draw(); }
+    else if(a==="plain"&&p){ (p.slots=p.slots||{})[b.dataset.p]={colour:true}; delete T.lv.sent[b.dataset.p]; await save(p); draw(); if(liveOn(p)) liveApply(p,false); }
+    else if(a==="livego"&&p){ if(liveOn(p)) liveApply(p); else liveStart(p); }
+    else if(a==="livestop") liveStop();
+    else if(a==="livesnap"&&p){ T.lv.busy="Taking a picture…"; draw(); try{ await liveCall(p,"snapshot"); T.lv.err=""; }catch(err){ T.lv.err=err?.message||String(err); } T.lv.busy=""; draw(); }
+    else if(a==="livefocus"&&p){ try{ await liveCall(p,"focus"); await liveCall(p,"snapshot"); }catch(err){ T.lv.err=err?.message||String(err); } draw(); }
     else if(a==="find"&&p){ const s=slotsOf(p.spec).find(x=>x.path===b.dataset.p); await run(`Looking for ${s.label} in your files…`,async()=>{ const r=await findInPdf(p,s);
-        const f=new File([r.blob],s.path.split("/").pop(),{type:"image/png"}); (p.slots=p.slots||{})[s.path]={file:await keep(f),from:"pdf",say:r.say}; await save(p); }); }
+        const f=new File([r.blob],s.path.split("/").pop(),{type:"image/png"}); (p.slots=p.slots||{})[s.path]={file:await keep(f),from:"pdf",say:r.say}; await save(p); }); if(liveOn(p)) liveApply(p,false); }
     else if(a==="build"&&p) run("Sending…",async()=>{ await build(p); setTimeout(poll,1500); });
     else if(a==="cancel"&&p&&p.jobs?.[0]){ try{ await BO().bcall("booth_cancel",{job_id:p.jobs[0]}); }catch{} poll(); }
     else if(a==="dl"&&T.job){ const o=(T.job.outputs||[]).find(x=>x.file_id===b.dataset.f); if(!o) return; const was=b.textContent; b.disabled=true; b.textContent="Downloading…";

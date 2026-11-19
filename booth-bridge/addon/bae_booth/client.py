@@ -22,6 +22,15 @@ class Client:
         self._proc = None
         self._awake = None
         self.thread = None
+        # Live: the Blender that is open builds the booth itself (see engine/live.py)
+        self.live = False
+        self.live_q = queue.Queue()  # jobs for Blender's main thread (the add-on's timer runs them)
+        self.live_state = None  # {"rev", "title", "spec"} of the booth in this Blender
+        self.live_changed = []
+        self.live_sent = ("start", 0)  # (rev, time) last told to the bridge; the first beat always says what is here
+        self.live_was = False
+        self.live_job = None
+        self._render = None  # the thread running a background build
         os.makedirs(home, exist_ok=True)
 
     # ------------------------------------------------------------ state for the panel
@@ -110,18 +119,105 @@ class Client:
         if r.get("status") == "pending":
             self.set(status="pending", text="Waiting for approval in BAE Studio", code=r.get("code"), device=r.get("id"))
             return 3
-        if not self.accepting:
+        self.live_beat()
+        rendering = self._render is not None and self._render.is_alive()
+        if not self.accepting and not self.live:
             self.awake(False)
             self.set(status="paused", text="Paused: not taking jobs", code=None)
             return 10
         self.awake(True)
-        st, r = self.call("POST", "/d/next")
+        if rendering and not self.live:
+            return 2
+        st, r = self.call("POST", "/d/next?live=1" if (rendering or not self.accepting) else "/d/next")
         job = r.get("job") if isinstance(r, dict) else None
         if not job:
-            self.set(status="ready", text="Ready: waiting for jobs", code=None, job=None, pct=0)
-            return 4
-        self.run(job)
+            if not rendering:
+                self.set(status="ready", text="Ready: waiting for jobs" if self.accepting else "Live only (not taking renders)", code=None, job=None, pct=0)
+            return 1 if self.live else 4
+        if job.get("kind") == "live":
+            self.run_live(job)
+            return 0.2
+        self._render = threading.Thread(target=self.run, args=(job,), name="bae-booth-render", daemon=True)
+        self._render.start()
         return 1
+
+    # ------------------------------------------------------------ Live
+    def changed_live(self, state, changed):
+        """Called on Blender's main thread when the booth changed (a studio change or the designer's own hands)."""
+        self.live_state = state
+        if changed:
+            self.live_changed = (self.live_changed + list(changed))[-40:]
+
+    def live_beat(self):
+        """Tell the bridge that Live is on and what the booth is now (the spec only when it changed)."""
+        if not self.live:
+            if self.live_was:
+                try:
+                    self.call("POST", "/d/live", {"on": False}, timeout=15)
+                except Exception:
+                    pass
+                self.live_was = False
+            return
+        s = self.live_state or {}
+        rev = s.get("rev")
+        if rev == self.live_sent[0] and time.time() - self.live_sent[1] < 5 and self.live_was:
+            return
+        body = {"on": True, "rev": rev, "title": s.get("title", "")}
+        if rev != self.live_sent[0]:
+            body["spec"] = s.get("spec")
+            body["changed"], self.live_changed = self.live_changed, []
+        st, r = self.call("POST", "/d/live", body, timeout=20)
+        if st == 200:
+            self.live_sent, self.live_was = (rev, time.time()), True
+
+    def run_live(self, job):
+        jid = job["id"]
+        o = job.get("options") or {}
+        here = os.path.join(self.home, "live", "files")
+        out = os.path.join(self.home, "live", "out", jid)
+        os.makedirs(here, exist_ok=True)
+        os.makedirs(out, exist_ok=True)
+        try:
+            for f in job.get("files", []):  # designs stay on this Mac: a later change only sends new ones
+                p = os.path.join(here, f["path"])
+                os.makedirs(os.path.dirname(p), exist_ok=True)
+                with open(p + ".part", "wb") as fh:
+                    for n in range(f["pieces"]):
+                        st, b = self.call("GET", f"/d/file/{f['file_id']}/{n}", timeout=120)
+                        if st != 200:
+                            raise RuntimeError(f"could not download {f['path']} ({st})")
+                        fh.write(b)
+                os.replace(p + ".part", p)
+            item = {"op": o.get("op", "apply"), "spec": job.get("spec"), "options": o, "title": job.get("title"), "here": here, "out": out,
+                    "event": threading.Event(), "result": None, "error": None, "pct": 0, "msg": "Starting"}
+            self.live_job = item
+            self.live_q.put(item)
+            t0, last = time.time(), 0
+            while not item["event"].wait(0.5):
+                if time.time() - t0 > 170:
+                    raise RuntimeError("Blender did not finish in time (is a dialog open in Blender?)")
+                if time.time() - last > 2:
+                    last = time.time()
+                    try:
+                        self.call("POST", "/d/progress/" + jid, {"pct": item["pct"], "msg": item["msg"]}, timeout=15)
+                    except Exception:
+                        pass
+            if item["error"]:
+                raise RuntimeError(item["error"])
+            res = item["result"] or {}
+            for f in res.get("files", []):
+                self.send(jid, os.path.join(out, f["path"]), f["path"], f.get("label", ""))
+            self.live_beat()
+            self.call("POST", "/d/done/" + jid, {"ok": True, "result": res})
+        except Exception as e:
+            traceback.print_exc()
+            try:
+                self.call("POST", "/d/done/" + jid, {"ok": False, "error": str(e)[:1500]})
+            except Exception:
+                pass
+        finally:
+            self.live_job = None
+            shutil.rmtree(out, ignore_errors=True)
 
     # ------------------------------------------------------------ one job
     def run(self, job):
@@ -159,7 +255,7 @@ class Client:
                 json.dump({k: job[k] for k in ("kind", "spec", "options") if k in job}, fh)
 
             # 2. Blender, in the background
-            self._proc = subprocess.Popen(self.engine_cmd + [d], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            self._proc = proc = subprocess.Popen(self.engine_cmd + [d], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
             lines = queue.Queue()
             threading.Thread(target=lambda s=self._proc.stdout: [lines.put(x) for x in s] and None, daemon=True).start()
             # report every few seconds while Blender works, even when it prints nothing for minutes

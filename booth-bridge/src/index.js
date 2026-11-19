@@ -4,6 +4,7 @@ import ADDON_INIT from "../addon/bae_booth/__init__.py";
 import ADDON_CLIENT from "../addon/bae_booth/client.py";
 import ENGINE_RUN from "../addon/bae_booth/engine/run_job.py";
 import ENGINE_BUILD from "../addon/bae_booth/engine/build_booth.py";
+import ENGINE_LIVE from "../addon/bae_booth/engine/live.py";
 
 /* BAE 3D Booth bridge — a small job queue between BAE Studio and the render Mac.
 
@@ -17,7 +18,9 @@ import ENGINE_BUILD from "../addon/bae_booth/engine/build_booth.py";
    which shows the connector address once, until the connector is used for the first time.
    Optional: set ACCESS_TOKEN on the worker to choose the token yourself.
 */
-const VERSION = "1.0.2";
+const VERSION = "1.1.0";
+const LIVE_WAIT_S = 25; // booth_submit kind live waits this long for Blender to answer
+const LIVE_PICKUP_S = 40; // a live job no Blender picked up in this time fails
 const PROTOCOLS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const CH = 512 * 1024; // file piece size, for uploads and downloads
 const ONLINE_S = 45; // a Mac that called in the last 45 s is online
@@ -28,7 +31,7 @@ const TOOLS = [
   {
     name: "booth_status",
     title: "Render Macs and queue",
-    description: "Lists the render Macs (pending ones show the 6-digit code their Blender add-on displays), whether each is online, the queue, and the connector address to share with the team.",
+    description: "Lists the render Macs (pending ones show the 6-digit code their Blender add-on displays), whether each is online, the queue, and the connector address to share with the team. Each Mac has live: when its Blender is open with Live on, live.on is true and live.spec is the booth as it is NOW in that Blender (including what the designer moved by hand), with live.rev (raised on every change) and live.changes (the last hand changes: [{rev, at, names}], newest last).",
     inputSchema: { type: "object", properties: {} },
     annotations: { readOnlyHint: true },
   },
@@ -47,16 +50,17 @@ const TOOLS = [
   {
     name: "booth_submit",
     title: "Queue a booth job",
-    description: "Queues a job for the render Mac. kind build: builds the booth from spec (centimetres) in Blender and renders the views in options. files maps a path used in spec (e.g. tex/front.png) to an upload_id from booth_upload.",
+    description: "Queues a job for the render Mac. kind build: builds the booth from spec (centimetres) in a background Blender and renders the views in options (final pictures and the .blend). kind live: works in the Blender the designer has OPEN (Live on in the BAE Booth panel), and this call waits up to 25 s and returns the finished job: options.op apply = make the open booth match spec (only changed walls and pieces are rebuilt, in a second; a picture of the viewport comes back as output live_view.png unless options.snapshot is false), snapshot = just the picture (options.view = a camera such as 01_front_left, else what the viewport shows), scene = read the booth as it is now (result.state.spec), focus = frame the booth in the viewport. files maps a path used in spec (e.g. tex/front.png) to an upload_id from booth_upload; for live, a design sent once stays on the Mac, so send only new or changed designs. device_id picks the Mac (default: the one in Live).",
     inputSchema: {
       type: "object",
       properties: {
         title: { type: "string" },
-        kind: { type: "string", enum: ["build"] },
+        kind: { type: "string", enum: ["build", "live"] },
         spec: { type: "object" },
         files: { type: "object", additionalProperties: { type: "string" } },
         options: { type: "object" },
         by: { type: "string", description: "who asked (a display name), shown in the job list" },
+        device_id: { type: "string", description: "kind live: the Mac to use (default: the Mac whose Blender is in Live)" },
       },
       required: ["kind", "spec"],
     },
@@ -64,7 +68,7 @@ const TOOLS = [
   {
     name: "booth_jobs",
     title: "List booth jobs",
-    description: "The latest jobs with status (queued, running, done, failed, cancelled), progress and their output files.",
+    description: "The latest build jobs with status (queued, running, done, failed, cancelled), progress and their output files (live changes are not listed).",
     inputSchema: { type: "object", properties: { limit: { type: "number" } } },
     annotations: { readOnlyHint: true },
   },
@@ -164,7 +168,15 @@ async function rpc(msg, env, H, url) {
           const data = Buffer.from(String(a.data || ""), "base64");
           r = await H.upload({ upload_id: a.upload_id, name: a.name, mime: a.mime, bytes: a.bytes, offset: +a.offset || 0 }, data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
         }
-        else if (name === "booth_submit") r = await H.submit(a);
+        else if (name === "booth_submit") {
+          r = await H.submit(a);
+          if (r.kind === "live") { // wait for the open Blender, so one call gives the answer
+            const t0 = Date.now();
+            let j = await H.job(r.job_id, true);
+            while ((j.status === "queued" || j.status === "running") && Date.now() - t0 < LIVE_WAIT_S * 1000) { await new Promise((ok) => setTimeout(ok, 400)); j = await H.job(r.job_id, true); }
+            r = j;
+          }
+        }
         else if (name === "booth_jobs") r = await H.jobs(a.limit);
         else if (name === "booth_job") r = await H.job(a.job_id, true);
         else if (name === "booth_download") {
@@ -194,7 +206,8 @@ async function device(request, url, d, H) {
   if (!dev) return json({ error: "unknown device", status: "unknown" }, 401);
   if (verb === "hello") return json(await H.hello(dev.id));
   if (dev.status !== "approved") return json({ error: "not approved yet", status: dev.status }, 403);
-  if (verb === "next" && request.method === "POST") return json(await H.claim(dev.id));
+  if (verb === "next" && request.method === "POST") return json(await H.claim(dev.id, url.searchParams.get("live") === "1"));
+  if (verb === "live" && request.method === "POST") return json(await H.live(dev.id, await request.json().catch(() => ({}))));
   if (verb === "file" && arg) {
     const p = await H.piece(arg, (+n || 0) * CH, dev.id);
     return new Response(p.data, { headers: { "content-type": "application/octet-stream", "x-total": String(p.bytes), ...cors } });
@@ -220,6 +233,8 @@ export class Hub extends DurableObject {
       CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, job TEXT, role TEXT, path TEXT, name TEXT, mime TEXT, bytes INTEGER, got INTEGER, label TEXT, created INTEGER);
       CREATE TABLE IF NOT EXISTS chunks (file TEXT, n INTEGER, data BLOB, PRIMARY KEY (file, n));
     `);
+    // 1.1: Live (the Blender the designer has open)
+    for (const a of ["ALTER TABLE jobs ADD COLUMN target TEXT", "ALTER TABLE devices ADD COLUMN live INTEGER", "ALTER TABLE devices ADD COLUMN scene TEXT"]) { try { this.sql.exec(a); } catch {} }
   }
   q(s, ...a) { return this.sql.exec(s, ...a).toArray(); }
   one(s, ...a) { return this.q(s, ...a)[0] || null; }
@@ -263,13 +278,35 @@ export class Hub extends DurableObject {
   sweep() {
     const now = Date.now();
     for (const d of this.q("SELECT id FROM devices WHERE job IS NOT NULL AND seen<?", now - LOST_S * 1000)) this.requeueFrom(d.id);
+    // live jobs are answered at once or not at all: never leave one waiting
+    this.sql.exec("UPDATE jobs SET status='failed', finished=?, msg='Failed', error='Blender did not pick this up. Open Blender on the Mac and switch Live on in the BAE Booth panel.' WHERE kind='live' AND status='queued' AND created<?", now, now - LIVE_PICKUP_S * 1000);
+    this.sql.exec("UPDATE jobs SET status='failed', finished=?, msg='Failed', error='Blender stopped answering during this change.' WHERE kind='live' AND status='running' AND started<?", now, now - 180e3);
+  }
+  liveOf(d, now, withSpec) {
+    const on = !!d.live && now - d.live < ONLINE_S * 1000;
+    if (!on) return { on: false };
+    const sc = safeParse(d.scene) || {};
+    const o = { on: true, rev: sc.rev ?? null, title: sc.title || "", changes: sc.changes || [] };
+    if (withSpec) o.spec = sc.spec || null;
+    return o;
+  }
+  async live(devId, b) {
+    const now = Date.now();
+    if (!b.on) { this.sql.exec("UPDATE devices SET live=0 WHERE id=?", devId); return { ok: true }; }
+    const old = safeParse(this.one("SELECT scene FROM devices WHERE id=?", devId)?.scene) || {};
+    const sc = { rev: "rev" in b ? b.rev : old.rev ?? null, title: b.title ?? old.title ?? "", spec: b.spec !== undefined ? b.spec : old.spec ?? null, changes: old.changes || [] };
+    if (Array.isArray(b.changed) && b.changed.length) sc.changes = [...sc.changes, { rev: sc.rev, at: now, names: b.changed.slice(0, 40).map((x) => String(x).slice(0, 120)) }].slice(-30);
+    const txt = JSON.stringify(sc);
+    if (txt.length > 900000) throw new Error("The booth is too large to share live.");
+    this.sql.exec("UPDATE devices SET live=?, scene=? WHERE id=?", now, txt, devId);
+    return { ok: true };
   }
   async status(base, fixedToken) {
     this.sweep();
     const now = Date.now();
-    const devices = this.q("SELECT id,name,code,status,seen,info,job FROM devices ORDER BY created").map((d) => ({
+    const devices = this.q("SELECT id,name,code,status,seen,info,job,live,scene FROM devices ORDER BY created").map((d) => ({
       id: d.id, name: d.name, status: d.status, code: d.status === "pending" ? d.code : null,
-      online: now - d.seen < ONLINE_S * 1000, last_seen_s: Math.round((now - d.seen) / 1000), job: d.job, info: safeParse(d.info),
+      online: now - d.seen < ONLINE_S * 1000, last_seen_s: Math.round((now - d.seen) / 1000), job: d.job, info: safeParse(d.info), live: this.liveOf(d, now, true),
     }));
     const c = (s) => this.one("SELECT COUNT(*) c FROM jobs WHERE status=?", s).c;
     const token = fixedToken || (await this.token());
@@ -317,8 +354,18 @@ export class Hub extends DurableObject {
   async submit(a) {
     this.cleanup();
     const kind = String(a.kind || "build");
-    if (kind !== "build") throw new Error("kind must be build.");
-    if (!a.spec || typeof a.spec !== "object") throw new Error("spec (an object) is required.");
+    if (kind !== "build" && kind !== "live") throw new Error("kind must be build or live.");
+    const op = kind === "live" ? String(a.options?.op || "apply") : null;
+    if (op && !["apply", "snapshot", "scene", "focus"].includes(op)) throw new Error("options.op must be apply, snapshot, scene or focus.");
+    if ((kind === "build" || op === "apply") && (!a.spec || typeof a.spec !== "object")) throw new Error("spec (an object) is required.");
+    let target = null;
+    if (kind === "live") {
+      const now = Date.now();
+      const d = a.device_id ? this.one("SELECT id,live FROM devices WHERE id=? AND status='approved'", a.device_id) : this.one("SELECT id,live FROM devices WHERE status='approved' AND live>? ORDER BY live DESC LIMIT 1", now - ONLINE_S * 1000);
+      if (!d) throw new Error(a.device_id ? "No such Mac." : "No Blender is open in Live mode. Open Blender on the Mac; Live is on in the BAE Booth panel (sidebar, N).");
+      if (!(d.live && now - d.live < ONLINE_S * 1000)) throw new Error("That Mac's Blender is not in Live mode right now.");
+      target = d.id;
+    }
     const files = a.files && typeof a.files === "object" ? a.files : {};
     for (const [p, up] of Object.entries(files)) {
       if (!/^[\w./-]{1,200}$/.test(p) || p.includes("..") || p.startsWith("/")) throw new Error(`Bad file path: ${p}`);
@@ -326,13 +373,13 @@ export class Hub extends DurableObject {
       if (!f) throw new Error(`Unknown upload for ${p}.`);
       if (f.got < f.bytes) throw new Error(`${p} is not complete yet.`);
     }
-    const input = JSON.stringify({ kind, spec: a.spec, options: a.options || {} });
+    const input = JSON.stringify({ kind, spec: a.spec || null, options: a.options || {} });
     if (input.length > 1.5e6) throw new Error("The spec is too large.");
     const id = "job_" + rand(10);
-    this.sql.exec("INSERT INTO jobs (id,title,kind,status,created,input,pct,msg,log,by,cancel) VALUES (?,?,?,?,?,?,0,?,'',?,0)", id, String(a.title || "Booth").slice(0, 120), kind, "queued", Date.now(), input, "Waiting for a render Mac", String(a.by || "").slice(0, 80));
+    this.sql.exec("INSERT INTO jobs (id,title,kind,status,created,input,pct,msg,log,by,cancel,target) VALUES (?,?,?,?,?,?,0,?,'',?,0,?)", id, String(a.title || "Booth").slice(0, 120), kind, "queued", Date.now(), input, kind === "live" ? "Waiting for Blender" : "Waiting for a render Mac", String(a.by || "").slice(0, 80), target);
     for (const [p, up] of Object.entries(files)) this.sql.exec("UPDATE files SET job=?, path=? WHERE id=?", id, p, up);
     const position = this.one("SELECT COUNT(*) c FROM jobs WHERE status='queued'").c;
-    return { job_id: id, status: "queued", position };
+    return { job_id: id, kind, status: "queued", position };
   }
   view(j, full) {
     const outputs = this.q("SELECT id,path,mime,bytes,got,label FROM files WHERE job=? AND role='out' ORDER BY created, path", j.id)
@@ -342,7 +389,7 @@ export class Hub extends DurableObject {
     if (full) { o.log = (j.log || "").slice(-4000); o.result = safeParse(j.result); o.position = j.status === "queued" ? this.one("SELECT COUNT(*) c FROM jobs WHERE status='queued' AND created<=?", j.created).c : null; }
     return o;
   }
-  async jobs(limit) { this.sweep(); return { jobs: this.q("SELECT * FROM jobs ORDER BY created DESC LIMIT ?", Math.max(1, Math.min(50, +limit || 12))).map((j) => this.view(j, false)) }; }
+  async jobs(limit) { this.sweep(); return { jobs: this.q("SELECT * FROM jobs WHERE kind!='live' ORDER BY created DESC LIMIT ?", Math.max(1, Math.min(50, +limit || 12))).map((j) => this.view(j, false)) }; }
   async job(id, full) { this.sweep(); const j = this.one("SELECT * FROM jobs WHERE id=?", id); if (!j) throw new Error("No such job."); return this.view(j, full); }
   async cancel(id) {
     const j = this.one("SELECT * FROM jobs WHERE id=?", id);
@@ -351,11 +398,18 @@ export class Hub extends DurableObject {
     else if (j.status === "running") this.sql.exec("UPDATE jobs SET cancel=1, msg='Stopping…' WHERE id=?", id);
     return this.view(this.one("SELECT * FROM jobs WHERE id=?", id), false);
   }
-  async claim(devId) {
+  async claim(devId, liveOnly) {
     this.sweep();
+    // live first: the designer is looking at the screen
+    const lj = this.one("SELECT * FROM jobs WHERE status='queued' AND kind='live' AND target=? ORDER BY created LIMIT 1", devId);
+    if (lj) {
+      this.sql.exec("UPDATE jobs SET status='running', device=?, started=?, msg='Working in Blender', pct=0 WHERE id=?", devId, Date.now(), lj.id);
+      return { job: this.forDevice(this.one("SELECT * FROM jobs WHERE id=?", lj.id)) };
+    }
+    if (liveOnly) return { job: null };
     const busy = this.one("SELECT job FROM devices WHERE id=?", devId)?.job;
     if (busy) { const j = this.one("SELECT * FROM jobs WHERE id=? AND status='running'", busy); if (j) return { job: this.forDevice(j) }; }
-    const j = this.one("SELECT * FROM jobs WHERE status='queued' ORDER BY created LIMIT 1");
+    const j = this.one("SELECT * FROM jobs WHERE status='queued' AND kind!='live' ORDER BY created LIMIT 1");
     if (!j) return { job: null };
     const now = Date.now();
     this.sql.exec("UPDATE jobs SET status='running', device=?, started=?, msg='Starting on the Mac', pct=0 WHERE id=?", devId, now, j.id);
@@ -396,13 +450,13 @@ export class Hub extends DurableObject {
   async done(devId, jobId, b) {
     const j = this.mine(devId, jobId);
     const status = j.cancel ? "cancelled" : b.ok ? "done" : "failed";
-    this.sql.exec("UPDATE jobs SET status=?, finished=?, pct=?, msg=?, error=?, result=? WHERE id=?", status, Date.now(), b.ok ? 100 : j.pct, status === "done" ? "Done" : status === "cancelled" ? "Cancelled" : "Failed", b.ok ? null : String(b.error || "The Mac reported an error.").slice(0, 2000), JSON.stringify(b.result || null).slice(0, 50000), jobId);
-    this.sql.exec("UPDATE devices SET job=NULL WHERE id=?", devId);
+    this.sql.exec("UPDATE jobs SET status=?, finished=?, pct=?, msg=?, error=?, result=? WHERE id=?", status, Date.now(), b.ok ? 100 : j.pct, status === "done" ? "Done" : status === "cancelled" ? "Cancelled" : "Failed", b.ok ? null : String(b.error || "The Mac reported an error.").slice(0, 2000), (() => { const t = JSON.stringify(b.result || null); return t.length > 900000 ? JSON.stringify({ too_large: true }) : t; })(), jobId);
+    if (j.kind !== "live") this.sql.exec("UPDATE devices SET job=NULL WHERE id=?", devId);
     return { ok: true, status };
   }
   cleanup() {
     const old = Date.now() - KEEP_DAYS * 86400e3;
-    for (const j of this.q("SELECT id FROM jobs WHERE finished IS NOT NULL AND finished<?", old)) {
+    for (const j of this.q("SELECT id FROM jobs WHERE finished IS NOT NULL AND (finished<? OR (kind='live' AND finished<?))", old, Date.now() - 86400e3)) {
       for (const f of this.q("SELECT id FROM files WHERE job=?", j.id)) { this.sql.exec("DELETE FROM chunks WHERE file=?", f.id); this.sql.exec("DELETE FROM files WHERE id=?", f.id); }
       this.sql.exec("DELETE FROM jobs WHERE id=?", j.id);
     }
@@ -441,6 +495,8 @@ function addonZip(origin) {
     ["bae_booth/client.py", ADDON_CLIENT],
     ["bae_booth/engine/run_job.py", ENGINE_RUN],
     ["bae_booth/engine/build_booth.py", ENGINE_BUILD],
+    ["bae_booth/engine/live.py", ENGINE_LIVE],
+    ["bae_booth/engine/__init__.py", ""],
     ["bae_booth/config.json", JSON.stringify({ bridge_url: origin, version: VERSION }, null, 1)],
   ].map(([n, t]) => [enc.encode(n), enc.encode(t)]);
   const parts = [], central = [];

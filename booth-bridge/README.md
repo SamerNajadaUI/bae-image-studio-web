@@ -30,11 +30,18 @@ Teammates: each adds the connector once with the same address (BAE Studio → 3D
 - Blender 4.2 or newer (built and tested on 4.5 LTS). Blender's **Online access** must be on; the add-on panel has a button for it.
 - While it is taking jobs the add-on keeps the Mac awake (`caffeinate`); turn this off in the add-on's preferences.
 - Pause / Take jobs, Jobs folder and Pair again are in the panel. Removing the Mac in the studio makes it pair again.
+- **Live** (add-on 1.1, on by default): the studio builds the booth inside the Blender you have open, in a scene called
+  "BAE Booth" (your own scenes are not touched). Each change to the plan rebuilds only what changed, in a second or two.
+  What you move, turn, scale or delete by hand goes back into the studio's plan and the contractor's sheet. Final renders
+  still run in a separate background Blender, with the same builder, so they match what you saw.
 
 ## Tools (for the studio)
 
 `booth_status`, `booth_device`, `booth_upload`, `booth_submit`, `booth_jobs`, `booth_job`, `booth_download`, `booth_cancel`.
 Files travel in 512 KB pieces (base64 in the connector, raw bytes to the Mac). Finished jobs are kept 30 days.
+Live: `booth_submit` with `kind: "live"` and `options.op` = `apply` (make the open booth match the spec), `snapshot`,
+`scene` or `focus`; it waits up to 25 s and returns the finished job. `booth_status` shows each Mac's `live` state,
+including the booth as it is now in Blender. Live jobs are not listed in `booth_jobs` and are deleted after a day.
 
 ## Security
 
