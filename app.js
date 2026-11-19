@@ -29,6 +29,12 @@ const AT_OUTFITS=[
  ["of_17","BAE staff polo, jeans (women)","Staff","women's black cotton pique polo shirt, slightly fitted at the waist, flat collar, short placket, short cap sleeves with ribbed cuffs; dark indigo high-waisted straight-leg jeans; slim black leather belt with a matte silver buckle; clean white leather sneakers. This is the official Bank al Etihad staff uniform: the small white emblem on the wearer's left chest and the white Arabic and English logo lockup across the upper back are part of the garment, keep them exactly as on the sheet (same shape, size and position, never redrawn, restyled or recoloured); the lockup shows only when the back is seen, the chest emblem only from the front; no other logo or text anywhere"],
  ["of_18","Bassmet al Etihad polo, jeans (men)","Staff","men's black cotton pique polo shirt, straight regular fit, flat collar, short button placket, short sleeves with ribbed cuffs; dark indigo straight-leg jeans; slim black leather belt with a matte silver buckle; clean white leather sneakers. This is the official Bassmet al Etihad staff uniform: the small white Bassmet al Etihad logo (symbol and Arabic lettering) on the wearer's left chest and the same logo, large, centred on the upper back are part of the garment, keep them exactly as on the sheet (same symbol, same Arabic lettering, same proportions, size and position, pure white, never redrawn, retyped, translated, restyled or recoloured); the large logo shows only when the back is seen, the chest logo only from the front; no other logo or text anywhere"],
  ["of_19","Bassmet al Etihad polo, jeans (women)","Staff","women's black cotton pique polo shirt, slightly fitted at the waist, flat collar, short button placket, short cap sleeves with ribbed cuffs; dark indigo high-waisted straight-leg jeans; slim black leather belt with a matte silver buckle; clean white leather sneakers. This is the official Bassmet al Etihad staff uniform: the small white Bassmet al Etihad logo (symbol and Arabic lettering) on the wearer's left chest and the same logo, large, centred on the upper back are part of the garment, keep them exactly as on the sheet (same symbol, same Arabic lettering, same proportions, size and position, pure white, never redrawn, retyped, translated, restyled or recoloured); the large logo shows only when the back is seen, the chest logo only from the front; no other logo or text anywhere"]
+ ["of_20","Oatmeal half-zip, gingham shirt","Men","oatmeal-beige heathered cotton half-zip sweatshirt with a stand collar, plain and unbranded; light blue and white gingham button-down cotton shirt underneath; black pleated straight-leg trousers; steel watch with a white dial on a black leather strap; dark tortoiseshell round glasses"],
+ ["of_21","Suede jacket, striped polo","Women","dark chocolate-brown suede cropped bomber jacket with a shirt collar and elastic hem; brown and cream striped knit sleeveless polo; cream high-waist pleated wide-leg trousers; slim black leather belt with a gold buckle; taupe top-handle leather bag with gold hardware, unbranded; dark tortoiseshell sunglasses; chunky gold rings, gold bracelet watch and gold dome earrings"],
+ ["of_22","Olive overshirt, white tee","Men","sage-olive cotton twill overshirt worn open with rolled sleeves and a chest pocket; plain white crew-neck T-shirt; mid-blue straight carpenter jeans; tan leather belt; clean white leather low-top sneakers; steel watch with a navy dial on a tan leather strap; thin silver chain"],
+ ["of_23","Camel knit half-zip, tie","Men","camel ribbed wool half-zip sweater with a high collar; crisp white dress shirt; dark green silk tie with a small brown medallion pattern; dark brown tailored straight trousers; black leather monk-strap shoes with chunky soles"],
+ ["of_24","Cream knit, suede jacket","Men","cream ribbed wool crew-neck sweater; dark indigo straight jeans; dark brown suede zip-up jacket with a shirt collar; light taupe suede Chelsea boots; paper takeaway coffee cup with a kraft sleeve, unbranded"],
+ ["of_25","Camel jacket, white shirt","Women","camel brushed wool cropped collarless jacket with gold buttons and four flap pockets; ivory silk shirt; black high-waist pleated wide-leg trousers; black structured leather top-handle bag with silver hardware, plain and unbranded; black cat-eye sunglasses; gold chain bracelet, gold drop earrings, silver ring"],
 ].map(([id,name,cat,d])=>({id,name,cat,d,src:`refs/${id}_t.jpg`}));
 const atOutfit=name=>AT_OUTFITS.find(o=>o.name.toLowerCase()===String(name||"").toLowerCase());
 const atOutfitsIn=text=>[...String(text||"").matchAll(/\[outfit: ([^\]]+)\]/gi)].map(m=>atOutfit(m[1])).filter(Boolean);
@@ -4658,11 +4664,25 @@ async function uxMicInit(){
   const btn=$("uxMic"), inp=$("rlInput"); if(!btn||!inp) return;
   let d=null; try{ d=await window.claude?.use?.("dictation"); }catch{} if(!d) return;
   btn.hidden=false; let base="";
-  d.onPartial?.(({text})=>{ if(S.mic==="pc") return; inp.value=base+(text||""); inp.dispatchEvent(new Event("input",{bubbles:true})); });
-  d.onFinal?.(({text})=>{ if(S.mic==="pc") return; base=(base+(text||"")).trim()+" "; inp.value=base; inp.dispatchEvent(new Event("input",{bubbles:true})); });
-  d.onState?.(({state})=>{ if(S.mic!=="pc") btn.setAttribute("aria-pressed",String(state==="listening")); });
+  d.onPartial?.(({text})=>{ if(S.mic!=="rl") return; inp.value=base+(text||""); inp.dispatchEvent(new Event("input",{bubbles:true})); });
+  d.onFinal?.(({text})=>{ if(S.mic!=="rl") return; base=(base+(text||"")).trim()+" "; inp.value=base; inp.dispatchEvent(new Event("input",{bubbles:true})); });
+  d.onState?.(({state})=>{ if(S.mic==="rl") btn.setAttribute("aria-pressed",String(state==="listening")); });
   btn.onclick=()=>{ if(btn.getAttribute("aria-pressed")==="true"){ d.stop().catch(()=>{}); return; } S.mic="rl";
     base=inp.value.trim()?inp.value.trim()+" ":""; d.start().catch(e=>{ btn.setAttribute("aria-pressed","false"); if(e?.code==="not_granted") btn.hidden=true; }); };
+}
+
+/* the Brief box (Photography and Icons): speak it instead of typing. Shares the one dictation with Reels and the Art Director
+   (S.mic says which box is listening); the words are added after what is already written. */
+async function briefMicInit(){
+  const btn=$("briefMic"); if(!btn) return;
+  let d=null; try{ d=await window.claude?.use?.("dictation"); }catch{} if(!d) return;
+  btn.hidden=false; let base="";
+  const put=t=>{ const inp=$("brief"); if(!inp) return; inp.value=t; inp.dispatchEvent(new Event("input",{bubbles:true})); };
+  d.onPartial?.(({text})=>{ if(S.mic==="brief") put(base+(text||"")); });
+  d.onFinal?.(({text})=>{ if(S.mic!=="brief") return; base=(base+(text||"")).trim()+" "; put(base); });
+  d.onState?.(({state})=>{ if(S.mic==="brief") btn.setAttribute("aria-pressed",String(state==="listening")); });
+  btn.onclick=()=>{ if(btn.getAttribute("aria-pressed")==="true"){ d.stop().catch(()=>{}); return; } S.mic="brief";
+    const v=String($("brief")?.value||"").trim(); base=v?v+" ":""; d.start().catch(e=>{ btn.setAttribute("aria-pressed","false"); if(e?.code==="not_granted") btn.hidden=true; }); };
 }
 
 /* ---------- ready-made starts ---------- */
@@ -4886,7 +4906,7 @@ function uxInit(){
     try{ const up=await rlUploadMag(f,"storyboard-sheet-"+(i+1)); if(!up?.id) throw {message:"Magnific returned no identifier"}; RL_SBBIG.add(up.id); Object.assign(b,{id:up.id,web:up.web||null,status:"ok",sheet:true,fromUser:true,moment:"your image",at:Date.now()}); rlEvent(`The user replaced storyboard sheet ${i+1} with their own image.`); }
     catch(err){ b.status=b.id?"ok":"err"; b.err="Couldn't upload: "+String(err?.message||err?.code||err).slice(0,140); }
     finally{ delete b._live; rlSave(); rlBoard(); } });
-  uxApply(); uxObserve(); uxMicInit();
+  uxApply(); uxObserve(); uxMicInit(); briefMicInit();
 }
 
 /* ---------- wiring ---------- */
@@ -6565,17 +6585,19 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
     try{ const r=await mcp.callTool(BSRV,tool,input||{},{cache:false}); const v=r?.payload&&typeof r.payload==="object"?r.payload:(()=>{ try{ return JSON.parse((r?.content||[]).map(c=>c.text||"").join("")); }catch{ return {}; } })(); return v; }
     catch(e){ log("✕","booth "+tool,{code:e?.code,message:e?.message}); throw e; } };
   const setupCode=c=>/server_not_connected|not_in_manifest|selection_required|needs_reauth|not_granted|capability_disabled|server_not_found/.test(String(c||""));
+  /* claude.ai asks the viewer to allow a connector only while a call started by a click waits: these mean "not allowed yet", fixed by a click */
+  const askCode=c=>/approval_required|consent_required|upstream_error/.test(String(c||""));
 
   async function refresh(){
-    try{ B.st=await bcall("booth_status"); B.err=""; B.errCode="";
+    try{ B.st=await bcall("booth_status"); B.err=""; B.errCode=""; window.__boWork?.ready();
       const j=await bcall("booth_jobs",{limit:8}); B.jobs=j.jobs||[];
       if(B.job){ const k=await bcall("booth_job",{job_id:B.job.id}); B.job=k; if(k.status==="done") await previews(k); }
     }catch(e){ B.errCode=e?.code||"error"; B.err=e?.message||String(e?.code||e); }
     draw(); schedule();
   }
-  function schedule(){ clearTimeout(B.timer); if(!B.open||P.hidden) return;
+  function schedule(){ clearTimeout(B.timer); if(!B.open||P.hidden||B.ask) return;
     const live=(B.st?.devices||[]).some(d=>d.status==="pending")||B.jobs.some(j=>j.status==="queued"||j.status==="running");
-    if(setupCode(B.errCode)) return; B.timer=setTimeout(refresh,live?4000:20000); }
+    if(setupCode(B.errCode)||askCode(B.errCode)) return; B.timer=setTimeout(refresh,live?4000:20000); }
 
   async function fetchFile(o){ let off=0, parts=[];
     while(off!=null){ const p=await bcall("booth_download",{file_id:o.file_id,offset:off}); parts.push(b64Blob(p.data,o.mime)); off=p.next; }
@@ -6600,7 +6622,7 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
   async function cancel(id){ try{ await bcall("booth_cancel",{job_id:id}); }catch{} refresh(); }
 
   function setupHTML(){
-    const why=B.errCode==="needs_reauth"?"The BAE 3D Booth connector needs to be reconnected (claude.ai → Settings → Connectors).":B.errCode==="not_in_manifest"?"The BAE 3D Booth connector is turned off for this page. Turn it on from this page's permissions menu, then press Check again.":"The BAE 3D Booth connector is not added to your claude.ai yet.";
+    const why=askCode(B.errCode)?"claude.ai couldn't open the BAE 3D Booth connector: it is not added to your claude.ai yet (the window said “No matching connector found”), or the window was closed before Allow.":B.errCode==="needs_reauth"?"The BAE 3D Booth connector needs to be reconnected (claude.ai → Settings → Connectors).":B.errCode==="not_in_manifest"?"The BAE 3D Booth connector is turned off for this page. Turn it on from this page's permissions menu, then press Check again.":"The BAE 3D Booth connector is not added to your claude.ai yet.";
     return `<section class="rl-card bo-card"><b>Set up (once)</b><p class="muted">${esc(why)}</p>
       <ol class="bo-steps"><li><b>The bridge</b> (done once, by the studio owner): deploy it from the <i>booth/bridge</i> folder (Deploy to Cloudflare). Its home page shows the connector address and the Blender add-on.</li>
       <li><b>The connector</b> (every person in the team): claude.ai → Settings → Connectors → Add custom connector. Name <b>BAE 3D Booth</b>, address from the bridge page, or ask the studio owner for it.</li>
@@ -6629,6 +6651,11 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
   function draw(){
     if(!mcp){ body.innerHTML=`<section class="rl-card bo-card"><b>Open BAE Studio in claude.ai</b><p class="muted">The 3D Booth works through a claude.ai connector.</p></section>`; return; }
     if(setupCode(B.errCode)){ body.innerHTML=setupHTML(); return; }
+    if(askCode(B.errCode)&&B.tried){ body.innerHTML=setupHTML(); return; }
+    if(B.ask||askCode(B.errCode)){ body.innerHTML=`<section class="rl-card bo-card"><b>Connect the 3D Booth</b>
+      <p class="muted">${B.ask?"BAE Studio uses the BAE 3D Booth connector to reach the render Mac. Press Connect; claude.ai asks you once to allow it.":"claude.ai didn't get your answer just now. Press Connect and choose Allow."}</p>
+      <div class="btns"><button class="btn primary" type="button" data-bo="connect">Connect</button></div>
+      <p class="muted bo-small">Not added the connector yet? Connect tells you the steps.</p></section>`; return; }
     if(!B.st){ body.innerHTML=`<section class="rl-card bo-card"><p class="muted">${B.err?esc(B.err):"Connecting to the render Mac…"}</p>${B.err?`<div class="btns"><button class="btn small" type="button" data-bo="check">Try again</button></div>`:""}</section>`; return; }
     const ready=(B.st.devices||[]).some(d=>d.status==="approved");
     const others=B.jobs.filter(j=>!B.job||j.id!==B.job.id);
@@ -6643,7 +6670,7 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
   }
 
   body.addEventListener("click",async e=>{ const b=e.target.closest("[data-bo]"); if(!b) return; const a=b.dataset.bo;
-    if(a==="check"){ B.err=""; B.errCode=""; B.st=null; draw(); refresh(); }
+    if(a==="check"||a==="connect"){ B.tried=true; B.ask=false; B.err=""; B.errCode=""; B.st=null; draw(); refresh(); }
     else if(a==="test") test();
     else if(a==="approve"||a==="remove") devAct(b.dataset.id,a,b);
     else if(a==="cancel") cancel(b.dataset.id);
@@ -6651,11 +6678,476 @@ Return ONLY JSON: {"verdict":"ok","issues":[]}`,{images:orig?[orig,blob]:[blob],
     else if(a==="dl"){ const o=(B.job?.outputs||[]).find(x=>x.file_id===b.dataset.f); if(o) download(o,b); }
     else if(a==="copy"){ try{ await navigator.clipboard.writeText(B.st?.connector_url||""); b.textContent="Copied"; }catch{ const r=document.createRange(); r.selectNodeContents(body.querySelector(".bo-addr")); getSelection().removeAllRanges(); getSelection().addRange(r); b.textContent="Selected: press Copy"; } setTimeout(()=>b.textContent="Copy the address",2000); }
   });
-  const open=()=>{ P.hidden=false; P.scrollTop=0; B.open=true; draw(); refresh(); };
+  const open=async()=>{ P.hidden=false; P.scrollTop=0; B.open=true;
+    /* call the connector on its own only once this viewer has allowed it; otherwise wait for the Connect click */
+    const st=B.st?"granted":await window.claude?.use?.("permissions").then(p=>p?.state("mcp:"+BSRV)).catch(()=>"unavailable");
+    B.ask=st!=="granted"&&!B.st; draw(); if(!B.ask) refresh(); };
   $("openBooth")?.addEventListener("click",open);
   $("closeBooth")?.addEventListener("click",()=>{ P.hidden=true; B.open=false; clearTimeout(B.timer); $("openBooth")?.focus(); });
   document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&B.open&&!P.hidden) refresh(); });
-  window.__bo={B,refresh};
+  window.__bo={B,refresh,bcall,fetchFile,saveB,draw};
+})();
+
+/* ======================================================================================================
+   BAE 3D Booth (phase 2): booth projects. Talk first, then Plan, Designs, Build.
+   1 Talk     a booth designer (Claude) discusses the idea: reads the floor plan / designs / photo of the space if there are any,
+              asks, proposes 2-3 layout ideas with a sketch. NOTHING is built until Samer presses "Make the plan".
+   2 Plan     Claude writes the booth spec (cm, front-left corner, the same schema as booth/bridge/addon/bae_booth/engine/build_booth.py);
+              the page draws it from above with every piece numbered; changes by talking ("move the TV to the right").
+   3 Designs  one card per printed surface: upload the design, find it in the PDF (Claude marks the box, the page crops it) or keep the colour.
+   4 Build    the job goes to the render Mac (phase 1 bridge): all views, the .blend, the contractor's placement sheet drawn here.
+   Projects: data/users/<uid>/booths/p/<id> (+ localStorage copy); files: the assets store (editors) or this session only.
+   ====================================================================================================== */
+(()=>{
+  const P=$("booth"), W=$("boWork"); if(!P||!W) return;
+  const BO=()=>window.__bo||{};
+  const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
+  const rid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+  const LKEY="bae_booth_projects", CHB=524288, PDFJS="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+  const VIEWS=["01_front_left","02_front","03_back_right","04_left_side","05_inside","06_top"];
+  const T={list:[],cur:null,busy:"",err:"",ready:false,pages:{},mem:new Map(),job:null,imgs:{},timer:0,loaded:false,
+    lv:{pid:null,dev:null,rev:null,img:"",msg:"",busy:"",err:"",sent:{},timer:0,news:[],seen:0}};
+  const STEPS=[["talk","Talk"],["plan","Plan"],["designs","Designs"],["build","Build"]];
+
+  /* ---------- the schema Claude writes (kept in step with build_booth.py) ---------- */
+  const SPEC_DOC=`BOOTH SPEC (JSON). Units: centimetres. Origin: the FRONT-LEFT corner of the site, x to the right, y towards the back, z up.
+{
+ "name": "...", "file": "short_file_name", "units":"cm", "width": <site width x>, "depth": <site depth y>, "height": <default wall height>,
+ "floors":[{"name","x","y","w","d","colour":"#hex"}],
+ "walls":[{"name","from":[x,y],"to":[x,y],"thick":<cm>,"height"?:<cm>,"colour"?:"#hex","art"?:"tex/<slot>.png","art_inside"?:"tex/<slot>.png",
+           "openings"?:[{"name","at":<cm from 'from' along the wall>,"width","height","radius"?:<rounded top corners>,"post"?:{"width","height"}}]}],
+ "pieces":[
+   {"type":"box","name","x","y","w","d","h","z"?:0,"colour":"#hex","emit"?:0,"alpha"?:1,"rough"?:0.5},       (x,y = the box's front-left corner)
+   {"type":"cylinder","name","x","y","r","h","z"?:0,"colour"},                                                (x,y = centre)
+   {"type":"table","name","x","y","r","h","colour"},                                                          (round top on a brass stem)
+   {"type":"ring","name","x","y","ring":<radius of the circle of seats>,"r","h","count","start"?:<deg>,"colour"},  (stools around a centre)
+   {"type":"art","name","from":[x,y],"to":[x,y],"z","h","art":"tex/<slot>.png","lift"?:0.6,"emit"?:0}       (a flat print or panel; its LEFT edge at 'from')
+ ],
+ "cameras"?:[{"file":"07_name","name","eye":[x,y,z],"look":[x,y,z],"lens":24}],
+ "notes":["every conflict or assumption, one line each"]
+}
+WALL RULE: a wall runs from 'from' to 'to'; its OUTSIDE (where its "art" is seen) is on the RIGHT of that direction, its thickness goes to the LEFT (inward).
+So a booth's front wall runs left to right ([0,0]→[W,0]) and is seen from the front; the back wall runs [W,D]→[0,D]; the left wall [0,D]→[0,0]; the right wall [W,0]→[W,D].
+"art_inside" is a print on the other face. Art images are stretched over the whole wall (length × height), openings stay open.
+Doors: an opening "at" cm from the wall's 'from' end. Glass walls: thin boxes with "alpha":0.25 and colour "#DCEBF0".
+Sizes are real: a bar table h 110 r 30, stool h 45 r 15, chair 44×44×45, sofa 180×80×80, counter 120×60×105, TV 65" = 144×4×81 hung at z 95-120.
+Colours: Bank al Etihad palette only: #FA6428 orange, #C13A23 dark orange, #FB9A75 medium, #FDCBB4 soft, #FFFAF4 light, #19181E ink, #ECE8DF stone, #CCC3B4 dark stone. Floors light stone or warm grey.
+Never draw or invent a logo or words: any logo or text appears only inside a design image the user gives.`;
+  const BRAND=`Bank al Etihad (BAE), Jordan. Brand: "Deep Clarity", warm and precise; orange family colours; the logo is never redrawn (only official files). Booths are for real events: malls, outdoor plazas, exhibitions.`;
+
+  /* ---------- storage ---------- */
+  const col=async()=>{ try{ await rlStoreInit(); return RLS.db&&RLS.uid?RLS.db.collection(`data/users/${RLS.uid}/booths/p`):null; }catch{ return null; } };
+  const lsGet=()=>{ try{ return JSON.parse(localStorage.getItem(LKEY)||"[]"); }catch{ return []; } };
+  const lsPut=list=>{ try{ localStorage.setItem(LKEY,JSON.stringify(list.slice(0,30))); }catch{} };
+  function slim(p){ const q=JSON.parse(JSON.stringify(p)); q.chat=(q.chat||[]).slice(-40); let s=JSON.stringify(q);
+    while(s.length>230000&&q.chat.length>4){ q.chat.splice(0,4); s=JSON.stringify(q); } return q; }
+  async function save(p){ p.updated=Date.now(); const q=slim(p);
+    const list=lsGet().filter(x=>x.id!==p.id); list.unshift(q); lsPut(list);
+    const c=await col(); if(c){ try{ await c.doc(p.id).set(q); p.synced=true; }catch(e){ p.synced=false; log("✕","booth save",{code:e?.code,message:e?.message}); } } }
+  async function loadList(){ let cloud=[]; const c=await col();
+    if(c){ try{ const sn=await c.get(); cloud=sn.docs.map(d=>JSON.parse(JSON.stringify(d.data()))).filter(x=>x?.id); }catch{} }
+    const m=new Map(); for(const x of [...lsGet(),...cloud]){ const o=m.get(x.id); if(!o||(x.updated||0)>(o.updated||0)) m.set(x.id,x); }
+    T.list=[...m.values()].sort((a,b)=>(b.updated||0)-(a.updated||0)); T.loaded=true; }
+  async function remove(p){ T.list=T.list.filter(x=>x.id!==p.id); lsPut(lsGet().filter(x=>x.id!==p.id)); const c=await col(); if(c) c.doc(p.id).delete().catch(()=>{}); }
+
+  /* ---------- files: kept in the assets store when this viewer may, otherwise for this session ---------- */
+  async function keep(file){
+    try{ const A=await window.claude?.use?.("assets"); if(A){ const r=await A.upload(file); return {id:r.id,url:r.url,name:file.name,type:file.type,size:file.size}; } }catch(e){ log("✕","booth asset",{code:e?.code,message:e?.message}); }
+    const k="m_"+rid(); T.mem.set(k,file); return {mem:k,name:file.name,type:file.type,size:file.size}; }
+  async function blobOf(f){ if(f.mem){ const b=T.mem.get(f.mem); if(!b) throw new Error(`${f.name} was only kept for the session that added it. Add it again.`); return b; }
+    const r=await fetch(f.url||("/_blob/"+f.id)); if(!r.ok) throw new Error("couldn't read "+f.name); return r.blob(); }
+
+  /* ---------- PDF pages (pdf.js on the main thread) ---------- */
+  let pdfjsP=null;
+  const script=src=>new Promise((ok,no)=>{ const s=document.createElement("script"); s.src=src; s.onload=ok; s.onerror=()=>no(new Error("the PDF reader didn't load")); document.head.appendChild(s); });
+  const pdfjs=()=>pdfjsP||(pdfjsP=script(PDFJS+"pdf.worker.min.js").then(()=>script(PDFJS+"pdf.min.js")).then(()=>{ window.pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS+"pdf.worker.min.js"; return window.pdfjsLib; }).catch(e=>{ pdfjsP=null; throw e; }));
+  async function pagesOf(f){ /* -> [{canvas (about 2400 px), small Blob for Claude}] */
+    const key=f.id||f.mem; if(T.pages[key]) return T.pages[key];
+    const blob=await blobOf(f); const out=[];
+    if(/pdf/i.test(f.type)||/\.pdf$/i.test(f.name)){
+      const lib=await pdfjs(); const doc=await lib.getDocument({data:new Uint8Array(await blob.arrayBuffer())}).promise;
+      for(let i=1;i<=Math.min(doc.numPages,16);i++){ const pg=await doc.getPage(i); const v0=pg.getViewport({scale:1}); const sc=Math.min(4,2400/Math.max(v0.width,v0.height));
+        const v=pg.getViewport({scale:sc}); const c=document.createElement("canvas"); c.width=Math.round(v.width); c.height=Math.round(v.height);
+        const g=c.getContext("2d"); g.fillStyle="#fff"; g.fillRect(0,0,c.width,c.height); await pg.render({canvasContext:g,viewport:v}).promise; out.push({canvas:c}); }
+    } else { const bmp=await createImageBitmap(blob); const sc=Math.min(1,2400/Math.max(bmp.width,bmp.height)); const c=document.createElement("canvas"); c.width=Math.round(bmp.width*sc); c.height=Math.round(bmp.height*sc); c.getContext("2d").drawImage(bmp,0,0,c.width,c.height); out.push({canvas:c}); }
+    for(const o of out){ const s=Math.min(1,1568/Math.max(o.canvas.width,o.canvas.height)); const c=document.createElement("canvas"); c.width=Math.round(o.canvas.width*s); c.height=Math.round(o.canvas.height*s); c.getContext("2d").drawImage(o.canvas,0,0,c.width,c.height); o.small=await new Promise(r=>c.toBlob(r,"image/jpeg",.88)); o.thumb=c.toDataURL("image/jpeg",.6); }
+    return T.pages[key]=out; }
+  async function claudeImages(p){ /* the pictures Claude looks at, numbered, with a list saying what each one is */
+    const max=Math.max(1,Math.min(16,(sampleImages?.maxCount||sampleImages?.max||10)));
+    const imgs=[], list=[];
+    for(const f of p.files||[]){ let pages; try{ pages=await pagesOf(f); }catch(e){ list.push(`${f.name}: could not be read (${e.message})`); continue; }
+      pages.forEach((o,i)=>{ if(imgs.length<max){ imgs.push(o.small); list.push(`image ${imgs.length} = ${f.name}${pages.length>1?` page ${i+1}`:""} (${f.role||"file"})`); } }); }
+    return {imgs,list}; }
+
+  /* ---------- geometry, drawing from above ---------- */
+  const num=v=>Number.isFinite(+v)?+v:0;
+  function wallParts(w,spec){ const [x0,y0]=w.from, [x1,y1]=w.to, L=Math.hypot(x1-x0,y1-y0)||1, dx=(x1-x0)/L, dy=(y1-y0)/L, T=num(w.thick)||10;
+    const cuts=[...(w.openings||[])].sort((a,b)=>a.at-b.at), segs=[]; let cur=0;
+    for(const o of cuts){ if(o.at>cur) segs.push([cur,o.at]); cur=o.at+o.width; } if(cur<L) segs.push([cur,L]);
+    const pt=(s,t)=>[x0+dx*s-dy*t, y0+dy*s+dx*t];
+    return {L,segs,cuts,pt,T}; }
+  function pieceList(spec){ /* every placed thing with its centre and size, for the numbers and the sheet */
+    const out=[];
+    for(const p of spec.pieces||[]){ const t=p.type;
+      if(t==="box") out.push({name:p.name,cx:num(p.x)+num(p.w)/2,cy:num(p.y)+num(p.d)/2,size:`${p.w} × ${p.d} × ${p.h} cm`,p});
+      else if(t==="cylinder"||t==="table") out.push({name:p.name,cx:num(p.x),cy:num(p.y),size:`Ø ${2*num(p.r)} cm, h ${p.h}`,p});
+      else if(t==="ring") out.push({name:`${p.name} × ${p.count}`,cx:num(p.x),cy:num(p.y),size:`ring Ø ${2*num(p.ring)} cm`,p});
+      else if(t==="art"){ const [a,b]=[p.from||[0,0],p.to||[0,0]]; out.push({name:p.name,cx:(a[0]+b[0])/2,cy:(a[1]+b[1])/2,size:`${Math.round(Math.hypot(b[0]-a[0],b[1]-a[1]))} × ${p.h} cm`,p}); } }
+    for(const w of spec.walls||[]) for(const o of w.openings||[]){ const g=wallParts(w,spec); const c=g.pt(o.at+o.width/2,0); out.push({name:`${o.name||"Opening"} (${w.name})`,cx:c[0],cy:c[1],size:`opening ${o.width} × ${o.height} cm`,door:1}); }
+    /* small or overhead things (cords, lamps, posts, beams) stay in the list but get no number on the drawing, and two numbers never sit on one spot */
+    const minor=x=>{ const q=x.p; if(!q) return false; const big=Math.max(num(q.w),num(q.d),2*num(q.r)); return num(q.z)>=150||big<=10||(q.type==="box"&&Math.min(num(q.w),num(q.d))<=8); };
+    const shown=[]; return out.map((x,i)=>{ const y={...x,n:i+1}; y.mark=!minor(x)&&!shown.some(s=>Math.hypot(s.cx-x.cx,s.cy-x.cy)<25); if(y.mark) shown.push(y); return y; }); }
+  function topSVG(spec,o={}){
+    const Wd=num(spec.width)||600, D=num(spec.depth)||400, pad=Math.max(Wd,D)*.06, Y=y=>D-y, list=o.numbers===false?[]:pieceList(spec);
+    const fs=Math.max(Wd,D)/55; let s=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${-pad} ${-pad} ${Wd+2*pad} ${D+2*pad}" class="bo-top" role="img" aria-label="${esc(spec.name||"Booth")} from above">`;
+    s+=`<rect x="0" y="0" width="${Wd}" height="${D}" fill="#F4F1EB" stroke="#CCC3B4" stroke-dasharray="${fs/2} ${fs/2}" stroke-width="${fs/8}"/>`;
+    for(const f of spec.floors||[]) s+=`<rect x="${num(f.x)}" y="${Y(num(f.y)+num(f.d))}" width="${num(f.w)}" height="${num(f.d)}" fill="${esc(f.colour||"#E9E4DA")}" opacity=".7"/>`;
+    for(const z of o.zones||[]) s+=`<rect x="${num(z.x)}" y="${Y(num(z.y)+num(z.d))}" width="${num(z.w)}" height="${num(z.d)}" rx="${fs/2}" fill="#FA6428" fill-opacity=".14" stroke="#C13A23" stroke-width="${fs/10}"/><text x="${num(z.x)+num(z.w)/2}" y="${Y(num(z.y)+num(z.d)/2)}" font-size="${fs*1.1}" text-anchor="middle" dominant-baseline="middle" fill="#19181E">${esc(z.name)}</text>`;
+    for(const p of spec.pieces||[]){ const c=esc(p.colour||"#FB9A75"), op=p.alpha&&p.alpha<1?.35:.95;
+      if(p.type==="box") s+=`<rect x="${num(p.x)}" y="${Y(num(p.y)+num(p.d))}" width="${num(p.w)}" height="${num(p.d)}" fill="${c}" fill-opacity="${op}" stroke="#19181E" stroke-opacity=".25" stroke-width="${fs/14}"/>`;
+      else if(p.type==="cylinder"||p.type==="table") s+=`<circle cx="${num(p.x)}" cy="${Y(num(p.y))}" r="${num(p.r)}" fill="${c}" fill-opacity="${op}" stroke="#19181E" stroke-opacity=".25" stroke-width="${fs/14}"/>`;
+      else if(p.type==="ring") for(let k=0;k<num(p.count);k++){ const a=2*Math.PI*k/num(p.count)+num(p.start)*Math.PI/180; s+=`<circle cx="${num(p.x)+num(p.ring)*Math.cos(a)}" cy="${Y(num(p.y)+num(p.ring)*Math.sin(a))}" r="${num(p.r)}" fill="${c}"/>`; }
+      else if(p.type==="art"){ const [a,b]=[p.from||[0,0],p.to||[0,0]]; s+=`<line x1="${a[0]}" y1="${Y(a[1])}" x2="${b[0]}" y2="${Y(b[1])}" stroke="#C13A23" stroke-width="${fs/2.5}" stroke-linecap="round"/>`; } }
+    for(const w of spec.walls||[]){ const g=wallParts(w,spec); const col=w.art?"#C13A23":esc(w.colour||"#FA6428");
+      for(const [a,b] of g.segs){ const q=[g.pt(a,0),g.pt(b,0),g.pt(b,g.T),g.pt(a,g.T)]; s+=`<polygon points="${q.map(([x,y])=>`${x},${Y(y)}`).join(" ")}" fill="${col}"/>`; }
+      for(const c of g.cuts){ const a=g.pt(c.at,g.T/2), b=g.pt(c.at+c.width,g.T/2); s+=`<line x1="${a[0]}" y1="${Y(a[1])}" x2="${b[0]}" y2="${Y(b[1])}" stroke="#19181E" stroke-opacity=".45" stroke-width="${fs/10}" stroke-dasharray="${fs/3} ${fs/3}"/>`; } }
+    for(const x of list.filter(q=>q.mark)){ const r=fs*.95; s+=`<circle cx="${x.cx}" cy="${Y(x.cy)}" r="${r}" fill="#19181E"/><text x="${x.cx}" y="${Y(x.cy)}" font-size="${fs*1.05}" text-anchor="middle" dominant-baseline="central" fill="#fff">${x.n}</text>`; }
+    s+=`<text x="${Wd/2}" y="${-pad*.35}" font-size="${fs*1.2}" text-anchor="middle" fill="#55535c">BACK · ${Wd} cm</text><text x="${Wd/2}" y="${D+pad*.75}" font-size="${fs*1.2}" text-anchor="middle" fill="#55535c">FRONT</text><text x="${-pad*.45}" y="${D/2}" font-size="${fs*1.2}" text-anchor="middle" fill="#55535c" transform="rotate(-90 ${-pad*.45} ${D/2})">${D} cm</text>`;
+    return s+"</svg>"; }
+  function slotsOf(spec){ const out=[], seen=new Set();
+    const add=(path,label,w,h)=>{ if(!path||seen.has(path)) return; seen.add(path); out.push({path,label,w:Math.round(w),h:Math.round(h)}); };
+    for(const w of spec.walls||[]){ const L=Math.hypot(w.to[0]-w.from[0],w.to[1]-w.from[1]), H=num(w.height)||num(spec.height)||250; add(w.art,`${w.name} (outside)`,L,H); add(w.art_inside,`${w.name} (inside)`,L,H); }
+    for(const p of spec.pieces||[]) if(p.type==="art"){ const [a,b]=[p.from||[0,0],p.to||[0,0]]; add(p.art,p.name,Math.hypot(b[0]-a[0],b[1]-a[1]),num(p.h)); }
+    return out; }
+  /* The render Mac's engine reads the spec literally: a piece without a number it needs stops the whole build.
+     fixSpec repairs what Claude wrote (numbers as text, art panels without a position, unknown types) and leaves out,
+     with a note, anything that cannot be built. forBuild then removes the designs that were not given. */
+  const isPt=(a,n=2)=>Array.isArray(a)&&a.length>=n&&a.slice(0,n).every(v=>v!==null&&v!==""&&Number.isFinite(+v));
+  const pt=(a,n=2)=>a.slice(0,n).map(v=>+v);
+  const hex=(c,d)=>/^#[0-9a-f]{6}$/i.test(String(c||""))?c:d;
+  function fixSpec(s){ const left=[]; const pos=v=>num(v)>0;
+    s.units="cm"; s.width=num(s.width); s.depth=num(s.depth); s.height=num(s.height)||250;
+    s.floors=(Array.isArray(s.floors)?s.floors:[]).filter(f=>f&&pos(f.w)&&pos(f.d)).map((f,i)=>({...f,name:String(f.name||`Floor ${i+1}`),x:num(f.x),y:num(f.y),w:num(f.w),d:num(f.d),colour:hex(f.colour,"#D9D4CA")}));
+    s.walls=(Array.isArray(s.walls)?s.walls:[]).filter(w=>{ const ok=w&&isPt(w.from)&&isPt(w.to)&&Math.hypot(w.to[0]-w.from[0],w.to[1]-w.from[1])>1; if(!ok&&w) left.push(w.name||"a wall"); return ok; }).map((w,i)=>{
+      const o={...w,name:String(w.name||`Wall ${i+1}`),from:pt(w.from),to:pt(w.to),thick:num(w.thick)||10};
+      if(w.height!=null) o.height=num(w.height)||s.height; else delete o.height;
+      if(w.colour) o.colour=hex(w.colour,"#FA6428"); else delete o.colour;
+      o.openings=(Array.isArray(w.openings)?w.openings:[]).filter(q=>q&&pos(q.width)&&pos(q.height)).map(q=>{ const r={...q,at:num(q.at),width:num(q.width),height:num(q.height)};
+        if(q.radius!=null) r.radius=num(q.radius); if(q.post&&!(pos(q.post.width)&&pos(q.post.height))) delete r.post; return r; });
+      for(const k of ["art","art_inside"]) if(typeof o[k]!=="string"||!o[k]) delete o[k];
+      return o; });
+    const need={box:["w","d","h"],cylinder:["r","h"],table:["r","h"],ring:["count","ring","r","h"]};
+    s.pieces=(Array.isArray(s.pieces)?s.pieces:[]).map((p,i)=>{ if(!p||typeof p!=="object") return null;
+      const q={...p,name:String(p.name||`Piece ${i+1}`)}; let t=String(q.type||"").toLowerCase();
+      if(t==="art"||t==="panel"||t==="print"||t==="sign"){ t="art";
+        if(!(isPt(q.from)&&isPt(q.to))&&isPt([q.x,q.y])&&pos(q.w)){ q.from=[+q.x,+q.y]; q.to=[+q.x+ +q.w,+q.y]; }
+        if(!(isPt(q.from)&&isPt(q.to))||!pos(q.h)){ left.push(q.name); return null; }
+        q.from=pt(q.from); q.to=pt(q.to); q.x=q.from[0]; q.y=q.from[1]; q.h=num(q.h); }
+      else { if(!need[t]) t=pos(q.w)&&pos(q.d)&&pos(q.h)?"box":pos(q.r)&&pos(q.h)?"cylinder":"";
+        if(!t||!isPt([q.x,q.y])||!need[t].every(k=>pos(q[k]))){ left.push(q.name); return null; }
+        q.x=+q.x; q.y=+q.y; for(const k of need[t]) q[k]=num(q[k]); if(t==="ring") q.count=Math.max(1,Math.min(40,Math.round(q.count))); }
+      q.type=t; q.z=num(q.z); q.colour=hex(q.colour,"#F15A22");
+      for(const k of ["emit","alpha","rough","metal","lift","start","stem"]) if(q[k]!=null) q[k]=num(q[k]);
+      if(q.alpha!=null&&!(q.alpha>0&&q.alpha<=1)) delete q.alpha;
+      return q; }).filter(Boolean);
+    s.cameras=(Array.isArray(s.cameras)?s.cameras:[]).filter(c=>c&&c.file&&isPt(c.eye,3)&&isPt(c.look,3)).map(c=>({...c,file:String(c.file).replace(/[^\w-]/g,"_"),name:String(c.name||c.file),eye:pt(c.eye,3),look:pt(c.look,3),lens:num(c.lens)||28}));
+    s.notes=Array.isArray(s.notes)?s.notes.map(String):[];
+    if(left.length) s.notes.push("Left out because a size or position was missing: "+[...new Set(left)].join(", ")+". Ask me to add them again.");
+    return s; }
+  function validSpec(s){ if(!s||typeof s!=="object") return "no spec";
+    if(!(num(s.width)>0&&num(s.depth)>0)) return "width and depth are missing";
+    fixSpec(s); if(!s.walls.length&&!s.pieces.length) return "nothing to build"; return ""; }
+  /* what the Mac gets: only the designs that were really given; a printed panel kept as "plain colour" becomes a plain panel */
+  function forBuild(p,files){ const s=fixSpec(JSON.parse(JSON.stringify(p.spec)));
+    for(const w of s.walls){ for(const k of ["art","art_inside"]) if(w[k]&&!files[w[k]]) delete w[k]; w.colour=w.colour||"#FA6428"; }
+    s.pieces=s.pieces.map(q=>{ if(q.type!=="art"||files[q.art]) return q;
+      const [a,b]=[q.from,q.to], dx=b[0]-a[0], dy=b[1]-a[1], T=2;
+      if(Math.abs(dy)<0.5) return {type:"box",name:q.name,x:Math.min(a[0],b[0]),y:a[1]-(dx>0?T:0),z:q.z,w:Math.abs(dx),d:T,h:q.h,colour:q.colour,rough:0.6};
+      if(Math.abs(dx)<0.5) return {type:"box",name:q.name,x:a[0]-(dy<0?T:0),y:Math.min(a[1],b[1]),z:q.z,w:T,d:Math.abs(dy),h:q.h,colour:q.colour,rough:0.6};
+      return {...q,art:"",plain:q.colour}; }).filter(q=>q.type!=="art"||q.art||q.plain);
+    return s; }
+
+  /* ---------- talking to the booth designer ---------- */
+  const history=p=>(p.chat||[]).slice(-24).map(m=>`${m.role==="me"?"DESIGNER (user)":"YOU"}: ${m.text}${m.ideas?.length?`\n  [you proposed ideas: ${m.ideas.map(i=>i.title).join(" / ")}]`:""}`).join("\n");
+  async function talk(p,text){
+    const {imgs,list}=await claudeImages(p);
+    const prompt=`You are the senior booth and event-space designer of the in-house creative studio of ${BRAND}
+You are talking with a designer from the team. This is the DISCUSSION before anything is built: understand, ask, propose, agree. You never build here.
+Speak in the user's language and dialect (Jordanian Arabic when they write Arabic), short and warm, like a creative director in a meeting.
+
+WHAT THE USER STARTED WITH: ${p.mode==="plan"?"a floor plan (and maybe the designs of the walls)":"only an empty space, no plan and no design yet"}.
+FILES ATTACHED (pictures in this order): ${list.length?list.join("; "):"none"}.
+WHAT WE AGREED SO FAR: ${p.summary||"(nothing yet)"}
+THE TALK SO FAR:
+${history(p)||"(this is the start)"}
+THE USER NOW SAYS: ${text}
+
+HOW TO ANSWER
+- If there is a plan: say in one or two lines what you read (overall size, areas, doors, main pieces) and list any measurement that does not add up. Ask only what the plan does not tell you.
+- If there is only a space: find out, over the talk, the size (width × depth, height if limited), where it is (mall, outdoor, exhibition hall), the occasion, the activities and pieces they want, who visits, and anything that must be there. Ask at most TWO questions per message, the most important first.
+- When you know enough, propose 2 or 3 DIFFERENT layout ideas (or improvements of their plan): each with a title, a one-line concept, why it works for the visitors and the bank, and its zones as rectangles in cm from the site's FRONT-LEFT corner (x right, y back) inside the site's width and depth, so the page can sketch it. Do not propose ideas again if the user is already developing one: refine it instead.
+- Be honest about problems (a TV that does not fit, a door too narrow, a queue with no room).
+- "ready": true ONLY when the user has clearly chosen or approved a direction and the size is known; otherwise false. Never decide for them.
+- "summary": in English, everything agreed so far that the plan must follow (size, entrances, zones, pieces with sizes, materials, colours, the chosen idea). Rewrite it whole each time, max 1200 characters.
+Return JSON: {"say": "...", "ideas": [{"title","concept","why","zones":[{"name","x","y","w","d"}]}] or [], "ready": false, "summary": "...", "title": "a short name for this booth in the user's language (2-5 words, e.g. «بوث الكريسماس»), or null if unknown yet", "site": {"width": cm, "depth": cm, "height": cm} or null}`;
+    return rlAsk(prompt,{images:imgs,modelTier:"complex"}); }
+  async function makePlan(p,extra){
+    const {imgs,list}=await claudeImages(p);
+    const prompt=`You are the booth builder of the in-house creative studio of ${BRAND}
+Write the exact booth SPEC that a Blender script builds, from what was agreed with the designer. Measure carefully: every piece goes exactly where the plan says; the contractor builds from these numbers.
+${SPEC_DOC}
+
+FILES (pictures in this order): ${list.length?list.join("; "):"none"}. Read the plan's dimensions from the drawings when there is a plan; read each area's elevation for heights and pieces.
+WHAT WAS AGREED: ${p.summary||"(see the talk)"}
+CHOSEN IDEA: ${p.idea?JSON.stringify(p.idea):"(see the talk)"}
+THE TALK:
+${history(p)}
+${extra?`EXTRA INSTRUCTION: ${extra}`:""}
+
+RULES
+- Every wall that carries a printed design gets "art":"tex/<short_slot_name>.png" (one image per wall face). Free-standing printed panels, signs, backlit graphics are "art" pieces with their own slot. Plain walls just get a colour.
+- Put every agreed piece (furniture, screens, counters, lights, plants as simple boxes or cylinders) at its real size and place.
+- Add 1 or 2 "cameras" that show the most important corner from inside at eye level (z about 160).
+- "notes": every assumption you made and every conflict in the plan, one short line each, in the user's language.
+Return JSON: {"spec": {...}, "say": "one or two lines to the designer about what you built and what to check"}`;
+    return rlAsk(prompt,{images:imgs,modelTier:"complex"}); }
+  async function editPlan(p,text){
+    const prompt=`You keep the booth SPEC of the in-house creative studio of ${BRAND} up to date. The designer asks for a change.
+${SPEC_DOC}
+CURRENT SPEC: ${JSON.stringify(p.spec)}
+THE DESIGNER SAYS: ${text}
+Change ONLY what was asked (and what it moves with it), keep everything else exactly, keep the same slot names. If the request is unclear or impossible, do not change the spec and ask.
+Return JSON: {"spec": {...full spec...} or null when nothing changed, "say": "short answer in the designer's language"}`;
+    return rlAsk(prompt,{modelTier:"complex"}); }
+  async function findInPdf(p,slot){
+    const {imgs,list}=await claudeImages(p);
+    if(!imgs.length) throw new Error("there is no plan or design file in this booth");
+    const r=await rlAsk(`Find, in the attached pictures, the 2D design (front view / elevation artwork) that should be printed on this surface of a booth:
+SURFACE: ${slot.label} — ${slot.w} cm wide × ${slot.h} cm high. ${p.summary?`Context: ${p.summary.slice(0,600)}`:""}
+PICTURES: ${list.join("; ")}
+Give the box around the ARTWORK ONLY (inside its dimension lines, labels and arrows; no page title), as fractions 0..1 of that picture (x,y from the top-left). If you cannot find it, say so.
+Return JSON: {"image": <number of the picture, 1-based> or null, "box": {"x","y","w","h"} or null, "say": "one short line in the designer's language"}`,{images:imgs,modelTier:"complex"});
+    if(!r?.image||!r?.box) throw new Error(r?.say||"not found in the files");
+    let k=0; for(const f of p.files||[]){ const pages=await pagesOf(f); for(const o of pages){ k++; if(k===+r.image){ const c=o.canvas, b=r.box;
+      const x=Math.max(0,b.x*c.width), y=Math.max(0,b.y*c.height), w=Math.min(c.width-x,b.w*c.width), h=Math.min(c.height-y,b.h*c.height);
+      const out=document.createElement("canvas"); out.width=Math.round(w); out.height=Math.round(h); out.getContext("2d").drawImage(c,x,y,w,h,0,0,out.width,out.height);
+      const blob=await new Promise(rr=>out.toBlob(rr,"image/png")); return {blob,say:r.say}; } } }
+    throw new Error("that picture is not there any more"); }
+
+  /* ---------- sending the build to the Mac ---------- */
+  async function upload(blob,name){ const bcall=BO().bcall; let id=null;
+    for(let off=0;off<blob.size;off+=CHB){ const part=blob.slice(off,off+CHB);
+      const data=await new Promise((ok,no)=>{ const fr=new FileReader(); fr.onload=()=>ok(String(fr.result).split(",")[1]||""); fr.onerror=no; fr.readAsDataURL(part); });
+      const a={offset:off,data}; if(id) a.upload_id=id; else Object.assign(a,{name,mime:blob.type||"image/png",bytes:blob.size});
+      const r=await bcall("booth_upload",a); id=r.upload_id; }
+    return id; }
+  async function build(p){ const bcall=BO().bcall; if(!bcall) throw new Error("the 3D Booth connector isn't ready");
+    T.busy="Sending the designs…"; draw(); const files={};
+    for(const s of slotsOf(p.spec)){ const d=p.slots?.[s.path]; if(!d?.file) continue; T.busy=`Sending ${s.label}…`; draw(); files[s.path]=await upload(await blobOf(d.file),s.path.split("/").pop()); }
+    const spec=forBuild(p,files), views=[...VIEWS,...spec.cameras.map(c=>c.file)];
+    T.busy="Queuing the build…"; draw();
+    const r=await bcall("booth_submit",{title:p.name||"Booth",kind:"build",spec,files,options:{views,width:1920,height:1080,samples:128,blend:true}});
+    p.jobs=[r.job_id,...(p.jobs||[])].slice(0,20); p.step="build"; await save(p); T.job={id:r.job_id,status:"queued",pct:0,msg:"Waiting for the render Mac",outputs:[]}; }
+  async function poll(){ clearTimeout(T.timer); const p=T.cur; if(!p||P.hidden||!p.jobs?.length||p.step!=="build") return;
+    try{ const k=await BO().bcall("booth_job",{job_id:p.jobs[0]}); T.job=k;
+      if(k.status==="done") for(const o of k.outputs||[]) if(/_preview\.jpg$/.test(o.path)&&!T.imgs[o.file_id]){ try{ T.imgs[o.file_id]=URL.createObjectURL(await BO().fetchFile(o)); }catch{} } }
+    catch(e){ T.err=e?.message||String(e?.code||e); }
+    draw(); if(T.job&&(T.job.status==="queued"||T.job.status==="running")) T.timer=setTimeout(poll,4000); }
+
+  /* ---------- the contractor's placement sheet (drawn here, from the spec) ---------- */
+  async function sheetPNG(p){ const spec=p.spec, list=pieceList(spec), Wd=1800, top=topSVG(spec);
+    const img=await new Promise((ok,no)=>{ const im=new Image(); im.onload=()=>ok(im); im.onerror=no; im.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(top); });
+    const mapW=1150, mapH=Math.round(mapW*img.height/img.width), rowH=30, H=Math.max(mapH+160,140+list.length*rowH+(spec.notes?.length||0)*26+60);
+    const c=document.createElement("canvas"); c.width=Wd; c.height=H; const g=c.getContext("2d");
+    g.fillStyle="#FFFAF4"; g.fillRect(0,0,Wd,H); g.fillStyle="#19181E"; g.font="34px sans-serif"; g.fillText(`${spec.name||p.name||"Booth"} — placement sheet`,40,64);
+    g.font="18px sans-serif"; g.fillStyle="#55535c"; g.fillText(`${spec.width} × ${spec.depth} cm · positions are the CENTRE of each piece, in cm from the LEFT edge and from the FRONT edge`,40,98);
+    g.drawImage(img,30,130,mapW,mapH);
+    let y=150; const x0=mapW+60; g.font="17px sans-serif";
+    for(const it of list){ g.fillStyle="#19181E"; g.beginPath(); g.arc(x0+12,y-6,12,0,7); g.fill(); g.fillStyle="#fff"; g.textAlign="center"; g.fillText(String(it.n),x0+12,y); g.textAlign="left";
+      g.fillStyle="#19181E"; g.fillText(String(it.name).slice(0,38),x0+34,y); g.fillStyle="#7a7782"; g.fillText(`${Math.round(it.cx)} from left · ${Math.round(it.cy)} from front · ${it.size}`,x0+34,y+16); y+=rowH+8; }
+    if(spec.notes?.length){ y+=10; g.fillStyle="#C13A23"; g.fillText("Notes",x0,y); y+=24; g.fillStyle="#19181E"; for(const n of spec.notes){ g.fillText(String(n).slice(0,70),x0,y); y+=24; } }
+    return new Promise(r=>c.toBlob(r,"image/png")); }
+
+  /* ---------- drawing the page ---------- */
+  const stepIdx=s=>STEPS.findIndex(x=>x[0]===s);
+  function chatHTML(p){ return (p.chat||[]).map((m,i)=>`<div class="bow-m ${m.role==="me"?"me":"ai"}"><div class="bow-b" dir="auto">${esc(m.text).replace(/\n/g,"<br>")}${m.files?.length?`<div class="bow-f">📎 ${m.files.map(esc).join(", ")}</div>`:""}</div>
+      ${m.ideas?.length?`<div class="bow-ideas">${m.ideas.map((d,j)=>`<div class="bow-idea${p.idea?.title===d.title?" on":""}"><div class="bow-sk">${topSVG({width:p.site?.width||600,depth:p.site?.depth||400,floors:[],walls:[],pieces:[]},{zones:d.zones,numbers:false})}</div><b dir="auto">${esc(d.title)}</b><p dir="auto">${esc(d.concept)}</p>${d.why?`<p class="muted bo-small" dir="auto">${esc(d.why)}</p>`:""}<button class="btn small" type="button" data-w="pick" data-i="${i}" data-j="${j}">${p.idea?.title===d.title?"Chosen":"Develop this idea"}</button></div>`).join("")}</div>`:""}</div>`).join(""); }
+  function stepper(p){ const k=stepIdx(p.step); return `<ol class="bow-steps">${STEPS.map(([s,l],i)=>`<li class="${i<k?"done":i===k?"on":""}"><button type="button" data-w="go" data-s="${s}" ${i>k&&!(i===1&&p.spec)&&!(i>1&&p.spec)?"disabled":""}>${i+1} · ${l}</button></li>`).join("")}</ol>`; }
+  function talkHTML(p){ const empty=!(p.chat||[]).length;
+    return `<section class="rl-card bo-card"><div class="bow-chat" id="bowChat">${empty?`<p class="muted" dir="auto">${p.mode==="plan"?"Attach the floor plan (PDF or pictures) and the wall designs if you have them, and tell the designer about the booth. Nothing is built until you agree on the idea.":"Tell the designer about the space: its size, where it is, the occasion and what should happen in it. A photo of the empty space helps. Nothing is built until you agree on the idea."}</p>`:chatHTML(p)}${T.busy?`<div class="bow-m ai"><div class="bow-b"><span class="rl-typing">${esc(T.busy)}</span></div></div>`:""}</div>
+      ${p.files?.length?`<div class="bow-files">${p.files.map((f,i)=>`<span class="bow-file">${esc(f.name)}<button type="button" aria-label="Remove ${esc(f.name)}" data-w="unfile" data-i="${i}">×</button></span>`).join("")}</div>`:""}
+      <form class="bow-in" data-w="send"><label class="btn small bow-att">Attach<input type="file" id="bowFile" accept="application/pdf,image/*" multiple hidden></label><textarea id="bowText" rows="2" dir="auto" placeholder="${p.mode==="plan"?"Tell the designer about this booth…":"The space, the occasion, what should happen in it…"}"></textarea><button class="btn primary" type="submit" ${T.busy?"disabled":""}>Send</button></form>
+      ${p.ready?`<div class="bow-ready"><p dir="auto"><b>Ready for the plan.</b> ${esc(p.summary||"").slice(0,300)}</p><button class="btn primary" type="button" data-w="plan" ${T.busy?"disabled":""}>Make the plan</button></div>`:""}</section>`; }
+  function planHTML(p){ const s=p.spec, list=pieceList(s);
+    return `<section class="rl-card bo-card"><div class="bow-planhead"><b>${esc(s.name||p.name)}</b><span class="muted">${s.width} × ${s.depth} cm · height ${s.height} cm</span></div>
+      <div class="bow-map">${topSVG(s)}</div>
+      ${s.notes?.length?`<div class="bow-notes"><b>To check</b><ul>${s.notes.map(n=>`<li dir="auto">${esc(n)}</li>`).join("")}</ul></div>`:""}
+      <details class="bow-list"><summary>Every piece and its place (${list.length})</summary><ol>${list.map(x=>`<li><b dir="auto">${esc(x.name)}</b> <span class="muted">${Math.round(x.cx)} cm from left · ${Math.round(x.cy)} cm from front · ${esc(x.size)}</span></li>`).join("")}</ol></details>
+      <div class="bow-chat small" id="bowChat">${(p.planChat||[]).map(m=>`<div class="bow-m ${m.role==="me"?"me":"ai"}"><div class="bow-b" dir="auto">${esc(m.text)}</div></div>`).join("")}${T.busy?`<div class="bow-m ai"><div class="bow-b"><span class="rl-typing">${esc(T.busy)}</span></div></div>`:""}</div>
+      <form class="bow-in" data-w="edit"><textarea id="bowText" rows="2" dir="auto" placeholder="Change something: “move the TV to the right corner”, “the door is 400 wide”…"></textarea><button class="btn primary" type="submit" ${T.busy?"disabled":""}>Change</button></form>
+      <div class="btns"><button class="btn" type="button" data-w="go" data-s="talk">Back to the talk</button><button class="btn" type="button" data-w="replan" ${T.busy?"disabled":""}>Make the plan again</button><button class="btn primary" type="button" data-w="go" data-s="designs">The plan is right → Designs</button></div></section>`; }
+  function designsHTML(p){ const slots=slotsOf(p.spec), hasFiles=(p.files||[]).length>0;
+    return `<section class="rl-card bo-card"><p class="muted">One design per printed surface, at its real size. Logos and words only come from your files; nothing is redrawn.</p>
+      ${slots.length?`<div class="bow-slots">${slots.map(s=>{ const d=p.slots?.[s.path]; const src=d?.file?(d.file.url||(d.file.mem&&T.mem.get(d.file.mem)?URL.createObjectURL(T.mem.get(d.file.mem)):"")):"";
+        return `<div class="bow-slot"><div class="bow-prev" style="aspect-ratio:${Math.max(.2,Math.min(6,s.w/(s.h||1)))}">${src?`<img src="${esc(src)}" alt="">`:`<span>${d?.colour?"Plain colour":"No design yet"}</span>`}</div>
+          <b dir="auto">${esc(s.label)}</b><span class="muted bo-small">${s.w} × ${s.h} cm${d?.say?` · ${esc(d.say)}`:""}</span>
+          <div class="btns"><label class="btn small">Upload<input type="file" accept="image/*" hidden data-w="slotfile" data-p="${esc(s.path)}"></label>${hasFiles?`<button class="btn small" type="button" data-w="find" data-p="${esc(s.path)}" ${T.busy?"disabled":""}>Find it in my files</button>`:""}<button class="btn small" type="button" data-w="plain" data-p="${esc(s.path)}">Plain colour</button></div></div>`; }).join("")}</div>`
+      :`<p class="muted">This plan has no printed surfaces: the walls keep their colours.</p>`}
+      <div class="btns"><button class="btn" type="button" data-w="go" data-s="plan">Back to the plan</button><button class="btn primary" type="button" data-w="go" data-s="build">Designs are ready → Build</button></div></section>`; }
+  function buildHTML(p){ const k=T.job, st=BO().B?.st, macs=(st?.devices||[]).filter(d=>d.status==="approved"), mac=macs.find(d=>d.online)||macs[0], live=k&&(k.status==="queued"||k.status==="running");
+    const outs=k?.outputs||[], stills=outs.filter(o=>/\.png$/.test(o.path)), blend=outs.find(o=>/\.blend$/.test(o.path));
+    return `<section class="rl-card bo-card"><p class="muted">${mac?`Render Mac: <b>${esc(mac.name)}</b> · ${mac.online?"online":"offline: the build waits and starts when Blender is open on it"}`:"No render Mac approved yet (see Render Mac below)."}</p>
+      <div class="btns"><button class="btn primary" type="button" data-w="build" ${T.busy||live?"disabled":""}>${T.busy?esc(T.busy):p.jobs?.length?"Build again":"Build the booth"}</button><button class="btn" type="button" data-w="sheet">Placement sheet (PNG)</button><button class="btn" type="button" data-w="go" data-s="plan">Change the plan</button></div>
+      ${k?`<div class="bo-job"><div class="bo-mac-t"><b>${esc(k.title||p.name)}</b><span class="bo-pill ${k.status==="done"?"on":k.status==="failed"?"bad":live?"wait":"off"}">${esc(k.status)}</span></div>
+        ${live?`<div class="bo-bar"><i style="width:${Math.max(3,k.pct||0)}%"></i></div><p class="muted">${esc(k.msg||"")}</p><div class="btns"><button class="btn small" type="button" data-w="cancel">Cancel</button></div>`:""}
+        ${k.status==="failed"?`<p class="bo-err">${esc((k.error||"").slice(0,500))}</p>`:""}
+        ${k.status==="done"?`<div class="bo-shots">${stills.map(s=>{ const pv=outs.find(o=>o.path===s.path.replace(/\.png$/,"_preview.jpg")); return `<figure>${pv&&T.imgs[pv.file_id]?`<img src="${T.imgs[pv.file_id]}" alt="${esc(s.label)}">`:`<div class="bo-ph">Loading…</div>`}<figcaption>${esc(s.label)}</figcaption><button class="btn small" type="button" data-w="dl" data-f="${esc(s.file_id)}">Download PNG</button></figure>`; }).join("")}</div>
+          <div class="btns">${blend?`<button class="btn small" type="button" data-w="dl" data-f="${esc(blend.file_id)}">Download the Blender file</button>`:""}<button class="btn small" type="button" data-w="dlall">Download everything (.zip)</button><span class="muted bo-small">${k.result?.device?esc(`Rendered on ${k.result.device.split(" (")[0]} in ${k.result.seconds} s`):""}</span></div>`:""}</div>`:""}
+    </section>`; }
+  /* ---------- Live: the booth is built in the Blender that is open on the Mac (add-on 1.1, engine/live.py) ----------
+     Every plan change goes straight to Blender (only what changed is rebuilt); what the designer moves, turns or deletes
+     by hand in Blender comes back into the plan (bridge: booth_status → devices[].live.spec / rev / changes). */
+  const liveMac=()=>{ const ds=(BO().B?.st?.devices||[]).filter(d=>d.status==="approved"&&d.live?.on); return ds.find(d=>d.id===T.lv.dev)||ds[0]||null; };
+  const liveOn=p=>!!p&&T.lv.pid===p.id;
+  /* Blender only gets the designs this booth really has: a surface without one keeps its slot name aside ("art_slot"),
+     so a design left on the Mac by another booth can never show, and the plan gets its slots back when Blender sends it. */
+  function liveSpec(p){ const s=fixSpec(JSON.parse(JSON.stringify(p.spec))); const has=path=>!!p.slots?.[path]?.file;
+    for(const w of s.walls){ w.colour=w.colour||"#FA6428"; for(const k of ["art","art_inside"]) if(w[k]&&!has(w[k])){ w[k+"_slot"]=w[k]; delete w[k]; } }
+    for(const q of s.pieces) if(q.type==="art"&&q.art&&!has(q.art)){ q.art_slot=q.art; q.art=""; }
+    return s; }
+  function fromLive(spec){ const s=JSON.parse(JSON.stringify(spec));
+    for(const w of s.walls||[]) for(const k of ["art","art_inside"]) if(w[k+"_slot"]){ w[k]=w[k]||w[k+"_slot"]; delete w[k+"_slot"]; }
+    for(const q of s.pieces||[]) if(q.art_slot){ q.art=q.art||q.art_slot; delete q.art_slot; }
+    return s; }
+  async function liveSnap(o){ const blob=await BO().fetchFile(o); if(T.lv.img) URL.revokeObjectURL(T.lv.img); T.lv.img=URL.createObjectURL(blob); T.lv.imgAt=Date.now(); }
+  async function liveCall(p,op,extra={}){ const bcall=BO().bcall; const mac=liveMac(); if(!mac) throw new Error("Blender isn't open in Live mode on the Mac.");
+    let r=await bcall("booth_submit",{kind:"live",title:p.name||"Booth",device_id:mac.id,spec:extra.spec||null,files:extra.files||{},options:{op,...(extra.options||{})}});
+    for(let i=0;i<90&&(r.status==="queued"||r.status==="running");i++){ T.lv.msg=r.msg||"Working in Blender…"; draw(); await new Promise(ok=>setTimeout(ok,2000)); r=await bcall("booth_job",{job_id:r.id||r.job_id}); }
+    if(r.status!=="done") throw new Error(r.error||"Blender didn't answer.");
+    const pic=(r.outputs||[]).find(o=>o.path==="live_view.png"); if(pic) await liveSnap(pic);
+    return r; }
+  async function liveApply(p,snapshot=true){ T.lv.busy="Building in Blender…"; T.lv.err=""; draw();
+    try{ const files={}; for(const sl of slotsOf(p.spec)){ const d=p.slots?.[sl.path]; if(!d?.file) continue; const sig=d.file.id||d.file.mem||d.file.name;
+        if(T.lv.sent[sl.path]===sig) continue; T.lv.busy=`Sending ${sl.label} to Blender…`; draw(); files[sl.path]=await upload(await blobOf(d.file),sl.path.split("/").pop()); T.lv.sent[sl.path]=sig; }
+      T.lv.busy="Building in Blender…"; draw();
+      const r=await liveCall(p,"apply",{spec:liveSpec(p),files,options:{snapshot}});
+      const res=r.result||{}; if(res.rev!=null) T.lv.rev=res.rev; p.liveRev=T.lv.rev;
+      T.lv.msg=res.built?(res.built.length?`Rebuilt ${res.built.length===1?res.built[0]:res.built.length+" parts"} · kept ${res.kept}`:"Nothing to rebuild: Blender already matches the plan"):"";
+      if(res.failed?.length) T.lv.msg+=` · left out: ${res.failed.map(x=>x.split(" (")[0]).join(", ")}`; }
+    catch(e){ T.lv.err=e?.message||String(e?.code||e); }
+    T.lv.busy=""; draw(); }
+  async function liveStart(p){ const mac=liveMac(); if(!mac) return; T.lv={...T.lv,pid:p.id,dev:mac.id,img:T.lv.pid===p.id?T.lv.img:"",sent:T.lv.pid===p.id?T.lv.sent:{},news:[],err:""};
+    // Blender may already hold this booth with changes made by hand while the studio was closed: those win
+    const lv=mac.live; if(p.liveRev!=null&&lv?.spec&&lv.title===(p.name||"Booth")&&lv.rev!=null&&lv.rev!==p.liveRev&&!validSpec(lv.spec)){ p.spec=fromLive(lv.spec); T.lv.news.unshift({at:Date.now(),names:["what you did in Blender since last time (the plan now follows it)"]}); }
+    T.lv.rev=lv?.rev??null; T.lv.seen=Date.now(); await liveApply(p); await save(p); livePoll(); }
+  function liveStop(){ clearTimeout(T.lv.timer); T.lv.pid=null; draw(); }
+  async function livePoll(){ clearTimeout(T.lv.timer); const p=T.cur; if(!p||!liveOn(p)||P.hidden) return;
+    try{ const st=await BO().bcall("booth_status"); if(BO().B) BO().B.st=st; const mac=(st.devices||[]).find(d=>d.id===T.lv.dev); const lv=mac?.live;
+      const was=T.lv.off; let changed=false;
+      if(!lv?.on){ T.lv.off=true; }
+      else { T.lv.off=false;
+        if(!T.lv.busy&&lv.rev!=null&&lv.rev!==T.lv.rev&&lv.spec&&lv.title===(p.name||"Booth")){
+          const fresh=(lv.changes||[]).filter(c=>c.rev>(T.lv.rev??-1)); const names=[...new Set(fresh.flatMap(c=>c.names))];
+          if(!validSpec(lv.spec)){ p.spec=fromLive(lv.spec); T.lv.rev=lv.rev; p.liveRev=lv.rev; if(names.length){ T.lv.news.unshift({at:Date.now(),names}); T.lv.news=T.lv.news.slice(0,6); (p.planChat=p.planChat||[]).push({role:"ai",text:`In Blender you changed: ${names.join(", ")}. The plan follows.`}); }
+            await save(p); changed=true; if(names.length) liveCall(p,"snapshot").then(draw).catch(()=>{}); } } }
+      if(changed||was!==T.lv.off||T.lv.err){ T.lv.err=""; draw(); } }
+    catch(e){ T.lv.err=e?.message||String(e?.code||e); draw(); }
+    T.lv.timer=setTimeout(livePoll,3000); }
+  function liveHTML(p){ const mac=liveMac(), on=liveOn(p);
+    if(!on) return `<section class="rl-card bo-card bow-live"><div class="bo-mac-t"><b>Live in Blender</b><span class="bo-pill ${mac?"on":"off"}">${mac?"ready":"not open"}</span></div>
+      ${mac?`<p class="muted">Blender is open on <b>${esc(mac.name)}</b>. Build this booth there now and watch every change happen; what you move by hand comes back into this plan.</p>
+        <div class="btns"><button class="btn primary" type="button" data-w="livego" ${T.lv.busy?"disabled":""}>Build it live in Blender</button></div>`
+      :`<p class="muted">Open Blender on the Mac: the BAE Booth panel (sidebar, N) has Live on. It needs the add-on 1.1 or newer.</p>`}</section>`;
+    const busy=T.lv.busy;
+    return `<section class="rl-card bo-card bow-live on"><div class="bo-mac-t"><b>Live in Blender</b><span class="bo-pill ${T.lv.off?"bad":busy?"wait":"on"}">${T.lv.off?"Blender closed":busy?"working":"live"}</span></div>
+      <div class="bow-livepic">${T.lv.img?`<img src="${T.lv.img}" alt="The booth in Blender now">`:`<div class="bo-ph">${busy?esc(busy):"Waiting for the first picture…"}</div>`}${busy&&T.lv.img?`<span class="bow-livebusy">${esc(busy)}</span>`:""}</div>
+      <p class="muted bo-small" dir="auto">${T.lv.off?"Blender stopped answering: open it on the Mac (Live on), then press Send the plan again.":esc(T.lv.msg||"Every change to the plan shows in Blender in a second or two.")}${mac?` · ${esc(mac.name)}`:""}${T.lv.rev!=null?` · version ${T.lv.rev}`:""}</p>
+      ${T.lv.news.length?`<div class="bow-livenews">${T.lv.news.slice(0,3).map(n=>`<div dir="auto"><b>Changed in Blender:</b> ${esc(n.names.join(", "))}</div>`).join("")}</div>`:""}
+      ${T.lv.err?`<p class="bo-err" dir="auto">${esc(T.lv.err)}</p>`:""}
+      <div class="btns"><button class="btn small" type="button" data-w="livesnap" ${busy?"disabled":""}>New picture</button><button class="btn small" type="button" data-w="livefocus" ${busy?"disabled":""}>Frame the booth in Blender</button><button class="btn small" type="button" data-w="livego" ${busy?"disabled":""}>Send the plan again</button><button class="btn small" type="button" data-w="livestop">Stop live</button></div></section>`; }
+  function draw(){
+    if(!sample&&!T.cur){ W.innerHTML=""; return; }
+    if(!T.cur){ W.innerHTML=`<section class="rl-card bo-card bow-home"><div class="bo-mac-t"><b>Booths</b></div>
+        <p class="muted">Start a new booth. You talk the idea through with the booth designer first; nothing is built until you agree.</p>
+        <div class="bow-start"><button class="bow-choice" type="button" data-w="new" data-m="plan"><b>I have a floor plan</b><span>Upload the plan and the designs</span></button><button class="bow-choice" type="button" data-w="new" data-m="space"><b>I only have a space</b><span>Size, place and occasion: the designer proposes the booth</span></button></div>
+        ${T.list.length?`<div class="bow-proj">${T.list.map(x=>`<button class="bo-row" type="button" data-w="open" data-id="${esc(x.id)}"><span dir="auto">${esc(x.name||"Booth")}</span><span class="muted">${esc(STEPS[stepIdx(x.step)]?.[1]||"")} · ${new Date(x.updated||x.created).toLocaleDateString()}</span></button>`).join("")}</div>`:""}</section>`; return; }
+    const p=T.cur;
+    // what the designer is typing survives every redraw (Live redraws while Blender changes things)
+    const keep=["bowText","bowName"].map(id=>{ const el=$(id); return el?{id,v:el.value,f:document.activeElement===el,a:el.selectionStart,b:el.selectionEnd}:null; }).filter(Boolean);
+    const ch0=$("bowChat"), atEnd=!ch0||ch0.scrollHeight-ch0.scrollTop-ch0.clientHeight<40, top0=ch0?.scrollTop||0;
+    W.innerHTML=`<section class="bow-head"><button class="g-back" type="button" data-w="home"><i aria-hidden="true">←</i>Booths</button><input class="bow-name" id="bowName" value="${esc(p.name||"")}" aria-label="Booth name" dir="auto"><button class="btn small" type="button" data-w="del">Delete</button></section>
+      ${stepper(p)}${p.spec&&p.step!=="talk"?liveHTML(p):""}${p.step==="talk"?talkHTML(p):p.step==="plan"&&p.spec?planHTML(p):p.step==="designs"&&p.spec?designsHTML(p):p.step==="build"&&p.spec?buildHTML(p):talkHTML(p)}
+      ${T.err?`<p class="bo-err" dir="auto">${esc(T.err)}</p>`:""}`;
+    const same=T.drawn===p.id+"/"+p.step; T.drawn=p.id+"/"+p.step;
+    for(const k of keep){ const el=$(k.id); if(!el||(!same&&k.id==="bowText")) continue; if(k.id==="bowText"||k.f) el.value=k.v; if(k.f){ el.focus({preventScroll:true}); try{ el.setSelectionRange(k.a,k.b); }catch{} } }
+    const ch=$("bowChat"); if(ch) ch.scrollTop=atEnd?ch.scrollHeight:top0; }
+
+  /* ---------- actions ---------- */
+  const say=(p,role,text,extra)=>{ (p.chat=p.chat||[]).push({role,text,t:Date.now(),...extra}); };
+  async function run(label,fn){ if(T.busy) return; T.busy=label; T.err=""; draw();
+    try{ await fn(); }catch(e){ T.err=e?.code==="not_granted"?"Claude isn't available on this page right now.":(e?.message||String(e?.code||e)); log("✕","booth work",{code:e?.code,message:e?.message}); }
+    T.busy=""; draw(); }
+  async function send(text,files){ const p=T.cur; if(!text&&!files?.length) return;
+    await run(files?.length?"Reading your files…":"Thinking…",async()=>{
+      const names=[]; for(const f of files||[]){ const k=await keep(f); k.role=/pdf/i.test(f.type)?"plan or designs (PDF)":"picture"; (p.files=p.files||[]).push(k); names.push(f.name); }
+      say(p,"me",text||(names.length?"(files)":""),names.length?{files:names}:{}); draw(); T.busy="Thinking…"; draw();
+      const r=await talk(p,text||`I attached: ${names.join(", ")}`);
+      say(p,"ai",String(r?.say||"…"),r?.ideas?.length?{ideas:r.ideas}:{});
+      if(r?.summary) p.summary=String(r.summary).slice(0,1500);
+      if(r?.site&&num(r.site.width)>0) p.site={width:num(r.site.width),depth:num(r.site.depth)||num(r.site.width),height:num(r.site.height)||250};
+      p.ready=!!r?.ready;
+      if((!p.name||/^New booth/.test(p.name))&&r?.title) p.name=String(r.title).slice(0,60);
+      await save(p); }); }
+  async function doPlan(extra){ const p=T.cur; await run("Measuring and writing the plan…",async()=>{
+      const r=await makePlan(p,extra); const bad=validSpec(r?.spec); if(bad) throw new Error("The plan didn't come out right ("+bad+"). Press Make the plan again.");
+      p.spec=r.spec; if(!p.name||/^New booth/.test(p.name)) p.name=r.spec.name||p.name; p.planChat=[{role:"ai",text:String(r.say||"")}]; p.step="plan"; await save(p); });
+    if(liveOn(p)&&p.spec) liveApply(p); }
+  async function doEdit(text){ const p=T.cur; if(!text) return; (p.planChat=p.planChat||[]).push({role:"me",text}); await run("Changing the plan…",async()=>{
+      const r=await editPlan(p,text); if(r?.spec&&!validSpec(r.spec)){ p.spec=r.spec; p._changed=true; } p.planChat.push({role:"ai",text:String(r?.say||"Done.")}); await save(p); });
+    if(p._changed&&liveOn(p)){ delete p._changed; liveApply(p); } delete p._changed; }
+  async function newBooth(mode){ const p={id:"b"+rid(),name:"New booth",mode,step:"talk",chat:[],files:[],slots:{},created:Date.now()};
+    T.cur=p; T.list.unshift(p); await save(p); draw(); $("bowText")?.focus(); }
+
+  W.addEventListener("submit",e=>{ const f=e.target.closest("form[data-w]"); if(!f) return; e.preventDefault(); const tx=$("bowText"), v=(tx?.value||"").trim();
+    if(f.dataset.w==="send"){ const files=[...($("bowFile")?.files||[])]; if(tx) tx.value=""; send(v,files); }
+    else if(f.dataset.w==="edit"){ if(tx) tx.value=""; doEdit(v); } });
+  W.addEventListener("keydown",e=>{ if(e.target.id==="bowText"&&e.key==="Enter"&&!e.shiftKey&&!e.isComposing){ e.preventDefault(); e.target.closest("form")?.requestSubmit(); } });
+  W.addEventListener("change",async e=>{ const t=e.target;
+    if(t.id==="bowFile"&&t.files?.length){ const names=[...t.files].map(f=>f.name); const tx=$("bowText"); if(tx&&!tx.value.trim()) tx.placeholder=`${names.join(", ")} — add a message, or press Send`; }
+    if(t.id==="bowName"&&T.cur){ T.cur.name=t.value.trim()||"Booth"; save(T.cur); }
+    if(t.dataset.w==="slotfile"&&t.files?.[0]&&T.cur){ const p=T.cur, path=t.dataset.p; await run("Keeping the design…",async()=>{ (p.slots=p.slots||{})[path]={file:await keep(t.files[0]),from:"upload"}; await save(p); }); if(liveOn(p)) liveApply(p,false); } });
+  W.addEventListener("click",async e=>{ const b=e.target.closest("[data-w]"); if(!b||b.tagName==="FORM"||b.tagName==="INPUT") return; const a=b.dataset.w, p=T.cur;
+    if(a==="new") newBooth(b.dataset.m);
+    else if(a==="open"){ T.cur=T.list.find(x=>x.id===b.dataset.id)||null; T.job=null; if(T.lv.pid&&T.lv.pid!==T.cur?.id) liveStop(); draw(); if(T.cur?.step==="build") poll(); }
+    else if(a==="home"){ T.cur=null; clearTimeout(T.timer); liveStop(); draw(); }
+    else if(a==="del"&&p){ if(b.dataset.sure){ await remove(p); T.cur=null; draw(); } else { b.dataset.sure="1"; b.textContent="Delete this booth? Press again"; setTimeout(()=>{ if(b.isConnected){ delete b.dataset.sure; b.textContent="Delete"; } },4000); } }
+    else if(a==="go"&&p){ p.step=b.dataset.s; await save(p); draw(); if(p.step==="build") poll(); }
+    else if(a==="unfile"&&p){ p.files.splice(+b.dataset.i,1); await save(p); draw(); }
+    else if(a==="pick"&&p){ const d=p.chat[+b.dataset.i]?.ideas?.[+b.dataset.j]; if(d){ p.idea=d; send(`Let's go with “${d.title}”. ${d.concept}`); } }
+    else if(a==="plan") doPlan();
+    else if(a==="replan") doPlan("Write the plan again from the start, checking every measurement.");
+    else if(a==="plain"&&p){ (p.slots=p.slots||{})[b.dataset.p]={colour:true}; delete T.lv.sent[b.dataset.p]; await save(p); draw(); if(liveOn(p)) liveApply(p,false); }
+    else if(a==="livego"&&p){ if(liveOn(p)) liveApply(p); else liveStart(p); }
+    else if(a==="livestop") liveStop();
+    else if(a==="livesnap"&&p){ T.lv.busy="Taking a picture…"; draw(); try{ await liveCall(p,"snapshot"); T.lv.err=""; }catch(err){ T.lv.err=err?.message||String(err); } T.lv.busy=""; draw(); }
+    else if(a==="livefocus"&&p){ try{ await liveCall(p,"focus"); await liveCall(p,"snapshot"); }catch(err){ T.lv.err=err?.message||String(err); } draw(); }
+    else if(a==="find"&&p){ const s=slotsOf(p.spec).find(x=>x.path===b.dataset.p); await run(`Looking for ${s.label} in your files…`,async()=>{ const r=await findInPdf(p,s);
+        const f=new File([r.blob],s.path.split("/").pop(),{type:"image/png"}); (p.slots=p.slots||{})[s.path]={file:await keep(f),from:"pdf",say:r.say}; await save(p); }); if(liveOn(p)) liveApply(p,false); }
+    else if(a==="build"&&p) run("Sending…",async()=>{ await build(p); setTimeout(poll,1500); });
+    else if(a==="cancel"&&p&&p.jobs?.[0]){ try{ await BO().bcall("booth_cancel",{job_id:p.jobs[0]}); }catch{} poll(); }
+    else if(a==="dl"&&T.job){ const o=(T.job.outputs||[]).find(x=>x.file_id===b.dataset.f); if(!o) return; const was=b.textContent; b.disabled=true; b.textContent="Downloading…";
+      try{ let blob=await BO().fetchFile(o), name=o.path; if(/\.blend$/.test(name)){ const z=new JSZip(); z.file(name,blob); blob=await z.generateAsync({type:"blob"}); name=name.replace(/\.blend$/,"_blend.zip"); } await BO().saveB(blob,name); b.textContent="Saved"; }
+      catch(err){ b.textContent="Couldn't download"; } setTimeout(()=>{ b.disabled=false; b.textContent=was; },2500); }
+    else if(a==="dlall"&&T.job&&p){ const was=b.textContent; b.disabled=true; b.textContent="Preparing…";
+      try{ if(!window.JSZip) throw new Error("zip"); const z=new JSZip(); for(const o of (T.job.outputs||[]).filter(x=>!/_preview\.jpg$/.test(x.path))){ b.textContent=`Preparing ${o.path}…`; z.file(o.path,await BO().fetchFile(o)); }
+        z.file("placement_sheet.png",await sheetPNG(p)); z.file("booth_spec.json",JSON.stringify(p.spec,null,1));
+        await BO().saveB(await z.generateAsync({type:"blob"}),`${(p.name||"booth").replace(/[^\w؀-ۿ-]+/g,"_")}.zip`); b.textContent="Saved"; }
+      catch(err){ b.textContent="Couldn't download"; } setTimeout(()=>{ b.disabled=false; b.textContent=was; },2500); }
+    else if(a==="sheet"&&p){ try{ await BO().saveB(await sheetPNG(p),`${(p.name||"booth").replace(/[^\w؀-ۿ-]+/g,"_")}_placement_sheet.png`); }catch(err){ T.err="Couldn't draw the sheet."; draw(); } }
+  });
+  window.__boWork={ ready(){ if(!T.loaded){ T.loaded=true; loadList().then(draw); } else draw(); }, T, topSVG, pieceList, slotsOf, sheetPNG };
+  $("closeBooth")?.addEventListener("click",()=>clearTimeout(T.timer));
+  $("openBooth")?.addEventListener("click",()=>window.__boWork.ready());
 })();
 
 boot();
