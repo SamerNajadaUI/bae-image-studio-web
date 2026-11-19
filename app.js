@@ -4658,11 +4658,25 @@ async function uxMicInit(){
   const btn=$("uxMic"), inp=$("rlInput"); if(!btn||!inp) return;
   let d=null; try{ d=await window.claude?.use?.("dictation"); }catch{} if(!d) return;
   btn.hidden=false; let base="";
-  d.onPartial?.(({text})=>{ if(S.mic==="pc") return; inp.value=base+(text||""); inp.dispatchEvent(new Event("input",{bubbles:true})); });
-  d.onFinal?.(({text})=>{ if(S.mic==="pc") return; base=(base+(text||"")).trim()+" "; inp.value=base; inp.dispatchEvent(new Event("input",{bubbles:true})); });
-  d.onState?.(({state})=>{ if(S.mic!=="pc") btn.setAttribute("aria-pressed",String(state==="listening")); });
+  d.onPartial?.(({text})=>{ if(S.mic!=="rl") return; inp.value=base+(text||""); inp.dispatchEvent(new Event("input",{bubbles:true})); });
+  d.onFinal?.(({text})=>{ if(S.mic!=="rl") return; base=(base+(text||"")).trim()+" "; inp.value=base; inp.dispatchEvent(new Event("input",{bubbles:true})); });
+  d.onState?.(({state})=>{ if(S.mic==="rl") btn.setAttribute("aria-pressed",String(state==="listening")); });
   btn.onclick=()=>{ if(btn.getAttribute("aria-pressed")==="true"){ d.stop().catch(()=>{}); return; } S.mic="rl";
     base=inp.value.trim()?inp.value.trim()+" ":""; d.start().catch(e=>{ btn.setAttribute("aria-pressed","false"); if(e?.code==="not_granted") btn.hidden=true; }); };
+}
+
+/* the Brief box (Photography and Icons): speak it instead of typing. Shares the one dictation with Reels and the Art Director
+   (S.mic says which box is listening); the words are added after what is already written. */
+async function briefMicInit(){
+  const btn=$("briefMic"); if(!btn) return;
+  let d=null; try{ d=await window.claude?.use?.("dictation"); }catch{} if(!d) return;
+  btn.hidden=false; let base="";
+  const put=t=>{ const inp=$("brief"); if(!inp) return; inp.value=t; inp.dispatchEvent(new Event("input",{bubbles:true})); };
+  d.onPartial?.(({text})=>{ if(S.mic==="brief") put(base+(text||"")); });
+  d.onFinal?.(({text})=>{ if(S.mic!=="brief") return; base=(base+(text||"")).trim()+" "; put(base); });
+  d.onState?.(({state})=>{ if(S.mic==="brief") btn.setAttribute("aria-pressed",String(state==="listening")); });
+  btn.onclick=()=>{ if(btn.getAttribute("aria-pressed")==="true"){ d.stop().catch(()=>{}); return; } S.mic="brief";
+    const v=String($("brief")?.value||"").trim(); base=v?v+" ":""; d.start().catch(e=>{ btn.setAttribute("aria-pressed","false"); if(e?.code==="not_granted") btn.hidden=true; }); };
 }
 
 /* ---------- ready-made starts ---------- */
@@ -4886,7 +4900,7 @@ function uxInit(){
     try{ const up=await rlUploadMag(f,"storyboard-sheet-"+(i+1)); if(!up?.id) throw {message:"Magnific returned no identifier"}; RL_SBBIG.add(up.id); Object.assign(b,{id:up.id,web:up.web||null,status:"ok",sheet:true,fromUser:true,moment:"your image",at:Date.now()}); rlEvent(`The user replaced storyboard sheet ${i+1} with their own image.`); }
     catch(err){ b.status=b.id?"ok":"err"; b.err="Couldn't upload: "+String(err?.message||err?.code||err).slice(0,140); }
     finally{ delete b._live; rlSave(); rlBoard(); } });
-  uxApply(); uxObserve(); uxMicInit();
+  uxApply(); uxObserve(); uxMicInit(); briefMicInit();
 }
 
 /* ---------- wiring ---------- */
