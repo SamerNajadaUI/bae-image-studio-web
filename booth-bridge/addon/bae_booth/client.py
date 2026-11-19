@@ -29,6 +29,9 @@ class Client:
         self.live_changed = []
         self.live_sent = ("start", 0)  # (rev, time) last told to the bridge; the first beat always says what is here
         self.live_was = False
+        self.live_ok = False  # the bridge knows Live (1.1+); an older bridge gets the old behaviour exactly
+        self.live_old = False  # True when the bridge said it does not know Live
+        self.live_retry = 0
         self.live_job = None
         self._render = None  # the thread running a background build
         os.makedirs(home, exist_ok=True)
@@ -126,14 +129,19 @@ class Client:
             self.set(status="paused", text="Paused: not taking jobs", code=None)
             return 10
         self.awake(True)
-        if rendering and not self.live:
+        live = self.live and self.live_ok
+        if rendering and not live:
             return 2
+        if not self.accepting and not live:
+            self.awake(False)
+            self.set(status="paused", text="Paused: not taking jobs", code=None)
+            return 10
         st, r = self.call("POST", "/d/next?live=1" if (rendering or not self.accepting) else "/d/next")
         job = r.get("job") if isinstance(r, dict) else None
         if not job:
             if not rendering:
                 self.set(status="ready", text="Ready: waiting for jobs" if self.accepting else "Live only (not taking renders)", code=None, job=None, pct=0)
-            return 1 if self.live else 4
+            return 1 if live else 4
         if job.get("kind") == "live":
             self.run_live(job)
             return 0.2
@@ -158,6 +166,8 @@ class Client:
                     pass
                 self.live_was = False
             return
+        if self.live_old and time.time() < self.live_retry:
+            return
         s = self.live_state or {}
         rev = s.get("rev")
         if rev == self.live_sent[0] and time.time() - self.live_sent[1] < 5 and self.live_was:
@@ -168,7 +178,9 @@ class Client:
             body["changed"], self.live_changed = self.live_changed, []
         st, r = self.call("POST", "/d/live", body, timeout=20)
         if st == 200:
-            self.live_sent, self.live_was = (rev, time.time()), True
+            self.live_sent, self.live_was, self.live_ok, self.live_old = (rev, time.time()), True, True, False
+        elif st == 404:  # a bridge older than 1.1: no Live until it is updated; ask again in a minute
+            self.live_ok, self.live_old, self.live_retry = False, True, time.time() + 60
 
     def run_live(self, job):
         jid = job["id"]

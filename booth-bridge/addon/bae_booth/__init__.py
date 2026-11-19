@@ -207,7 +207,9 @@ class BAEBOOTH_PT_panel(bpy.types.Panel):
             L.label(text=s["error"][:90], icon="INFO")
         # Live
         box = L.box()
-        if p and p.live:
+        if p and p.live and C.live_old:
+            box.label(text="Live needs the bridge 1.1 (not updated yet)", icon="INFO")
+        elif p and p.live:
             lj = C.live_job
             st = C.live_state or {}
             if lj:
