@@ -15,7 +15,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 176 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 177 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openResize`, `openBrand`):
 
@@ -371,3 +371,11 @@ Known limits: tiles appear in his Magnific history; a 2560×1440 source means th
 ## v176: the image on screen belongs to one chat
 - Bug: after "New chat" a change request edited the previous chat's image, because `cur()` read the studio's global result card. Now `stale()` records the images that exist when a chat starts (New chat, delete, opening a Recent chat) and `cur()` ignores them. Test: `node dev/newchat-test.js`.
 - Known limit: opening an older chat from Recent cannot continue editing its old image; the next request builds a new photo.
+
+## v177: chats are independent, fixed summary, one photo gives several things, brand rules, phone scrolling
+- Recent: opening a chat closes the list and redraws that chat. Each result message stores `res.ids`, `res.k`, `res.p` (Magnific ids, model key, prompt); `tkLoad` puts that chat's last image back in the result card, so "change this" works on the chat's own image after reopening or a reload (this replaces the v176 limit).
+- Summary: `sumHTML()` draws ONE fixed panel `#pcSum` under the messages from the last recap; it stays after results ("Create again"). Messages no longer carry the recap or the Create row. Scene and place have an "Edit" text box (`pend.txt`).
+- One reference photo, several takes: `pend.photos=[{id,takes}]` with takes from composition / angle / light / grade. After sending, the picture gets `role` + `also` + `lock` (Claude may not re-role a locked picture). `roleUse(R)` / `roleName(R)` build the combined instruction for the image writer.
+- Brand rules (chat prompt + both image writers): "خليك حاضر / be present" = show the lived moment, never the product or the transaction (product only when asked in words); the place is always modern, premium, minimal, tidy and the Jordanian character comes from the people; default medium long shot, people in the middle third, calm left and right thirds for a headline, people 3–4 m in front of a plain background; default 16:9 2K; garments never carry a logo even if the outfit sheet shows one.
+- Real tests (Seedream 5.5, 3 images, 240 credits, seen at 1024 px): centring, medium distance, clean sides and a modern room work. Visible background blur only appears when there are objects behind the people; with a plain wall there is nothing to blur. The small emblem on the of_20 half-zip still appears: the sheet itself must be replaced with a clean one.
+- Phones and tablets (`max-width:1023px` or no hover): one scroll only (the page); the message box sticks to the bottom (`body.talk .hero{overflow:clip}` makes that possible). Under 768 px pickers open as a full-screen sheet with their own scroll (`html.pc-sheet` locks the page). `dev/resp-test.js` checks all of this; `dev/newchat-test.js` checks chat independence.
