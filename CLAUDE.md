@@ -15,7 +15,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 169 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 170 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openResize`, `openBrand`):
 
@@ -349,3 +349,5 @@ Known limits: tiles appear in his Magnific history; a 2560×1440 source means th
 `Claude model` (under the chat): Auto, Fable 5.2, Opus 5.5, Sonnet 5.5, Haiku 5.5, kept in `bae_talk_model`, sent as `model` on the chat turn and on the prompt writer. The page can only ask: `probe()` makes a tiny `sample()` call and shows `modelApplied` ("Answering now: …", or "That model is not available here"). The shape of `modelApplied` is assumed (a string, or an object with model / name / id) and has never been seen for real.
 
 **v169: the character library on Magnific.** Characters tab (All tools → Browse all → Characters, editors only): "Send all to Magnific" (`clMagAll`) uploads every sheet that has no Magnific identifier yet, at full size, as `character-<name>`, keeps the identifiers in `bae_user_magids` (same map `magId` reads) and writes the list to the account doc `data/users/<uid>/magchars` as `{map:{<docId>:{name,cat,mag}},n,t}`. A sheet that fails is counted and said; pressing again sends only what is missing. Uploads cost no credits. Test: `dev/clmag-test.js` (10 checks).
+
+**v170: BAE References replace the three old sets.** The Mari Juliano (`r0xx`), Youth campaign (`yt0x`) and guideline (`bae_b*`) photos are gone from the code and from `refs/`; only the two studio masters (`st_minimal_01/02`) stay in set `bae`. The tab "BAE References" (still `data-tab="bae"`) shows the team's own photos: module `BL` (`blLoad`, `blSync`, `blImport`, `blBlob`, `blDescribe`), docs `brefs/<id>` `{d, thumb, asset, mime, px, mag, at}` (rule: read view, write admin), refs `bl_<id>` with `bl:true`. Editors press "Sync from Magnific": it lists the Magnific folder `BL_FOLDER` ("bae reference"), brings in what is new, removes what left the folder, and never deletes on an empty answer. LIMIT: the page can only read an image from Magnific through `creations_read`, so the stored team copy is about 1024 px; the owner's renders use the 2K original because the Magnific identifier is kept in `bae_user_magids`. `PICK_LOCATION`/`PICK_BOLD` are filled with the first four library photos; auto-pick chooses from the library by description. Test: `dev/blib-test.js` (15 checks).

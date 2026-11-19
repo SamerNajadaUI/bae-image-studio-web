@@ -118,75 +118,26 @@ atMake("brief",false); atMake("rlInput",true);
 setTimeout(()=>{ try{ clLoad().then(atRefresh).catch(()=>{}); }catch{} },1200);
 
 /* ---------------- reference catalog (Mari Juliano lifestyle) ---------------- */
-const REFS = [
- ["r007","Extreme close-up portrait, woman with curly hair and freckles tasting from a spoon, soft warm daylight, shallow depth"],
- ["r017","Over-the-shoulder at a warm wood desk, two people planning on a laptop, window light, papers and glasses"],
- ["r018","Young woman writing on a whiteboard while holding a phone, bright window light, white shirt and green knit vest"],
- ["r020","Smiling woman with a dachshund at a home table, denim jacket, terracotta mug, calm morning light"],
- ["r025","Man in a navy suit seated on a wooden chair, minimal white brick wall, studio-like restraint, negative space"],
- ["r026","Detail: hand carrying a burgundy leather bag past a dining table, pleated skirt, warm side light"],
- ["r028","Father holding his toddler on a green sofa, tender intimate moment, soft daylight"],
- ["r030","Woman and child on a sculpted wooden bench before a green hedge wall with a timber window frame"],
- ["r032","Older woman with grey hair standing in a minimal warm beige room, pendant lamp, generous negative space"],
- ["r033","Woman reading at a wooden desk beside a large window, plants, quiet home-office calm"],
- ["r034","Older man crouching to greet a dog on a sunny residential sidewalk, open shade and grass"],
- ["r037","Small café: two women chatting at the counter, terrazzo, warm wood, natural interior light"],
- ["r038","Father and daughter on a picnic blanket in a park looking at a phone together, bright sun, trees"],
- ["r053","Father with two children at a table building a craft project, warm interior, engaged faces"],
- ["r056","Product detail: hands adjusting a smartwatch on a blue tabletop, crisp light, tactile"],
- ["r058","Woman resting on the floor after a home workout, pink exercise ball, warm light on wood floor"],
- ["r059","Medium close-up of a woman laughing while fitting earbuds, clean background, candid joy"],
- ["r061","Woman laughing on a sofa with a laptop in a warm golden-lit living room"],
- ["r064","Family in a kitchen at breakfast, father lifting son, mother behind, warm morning sun"],
- ["r065","Low-angle: friends applying sunscreen under a blue sky, playful and bright"],
- ["r066","Mother kneeling to talk with her son at home, wooden chair, soft window light"],
- ["r073","Wide: two friends lounging on a bed in a soft pink room, daylight from a window"],
- ["r076","Woman lying on a sofa smiling, overhead angle, knit textures, natural light"],
- ["r080","Friends sharing dinner around a round wooden table with plants, warm and lively"],
- ["r083","Close-up of a woman eating a salad outdoors in bright sun, candid bite"],
- ["r093","Couple sitting on a vintage car sharing food bowls outdoors, relaxed daylight"],
- ["r103","Group lunch around a round table seen from above, dishes, plants, warm tones"],
- ["r107","Couple and a small dog on a bench against a pink studio wall, rolled blankets, playful"]
-].map(([id,d])=>({id,d,src:`refs/${id}.jpg`,set:"mj",studio:false}));
+const REFS = []; /* the Mari Juliano set was removed in v170: the team now keeps its own photos in "BAE References" (see BL) */
 /* Photos from the Bank al Etihad guidelines (photography chapter, pp.106–114) */
 const BAE_REFS = [
  ["st_minimal_01","BAE STUDIO STYLE (master reference): woman standing centred against a seamless warm cream wall with a soft pool of light, tone-on-tone camel satin blouse and tan pleated wide-leg trousers, light-oak table with two small props, wide negative space",1],
- ["st_minimal_02","BAE STUDIO STYLE (master reference): man seated cross-legged on a light-oak chair, navy tailored suit over a cream crew-neck knit, burgundy socks, white-painted textured wall with soft raking sunlight, light oak floor, wide negative space",1],
- ["bae_b113_0","BAE studio people: woman in a white shirt seated, warm plaster backdrop, soft directional light, calm confident gaze",1],
- ["bae_b114_1","BAE studio set: bearded man in a camel knit cardigan over a white tee at a white desk, warm textured plaster wall, centred, direct gaze",1],
- ["bae_b114_2","BAE studio set: woman in a cream turtleneck with a jade-green knit skirt seated, patterned backdrop and sheer curtain, restrained architectural set",1],
- ["bae_b113_1","BAE studio product: hand holding a phone with the banking app, warm wood background, soft dramatic light",1],
- ["bae_b106_1","BAE depth: foreground bokeh of warm flowers framing a woman in a black tailored jacket and a blue-and-white printed midi skirt",0],
- ["bae_b107_0","BAE selective focus: young woman writing in a white blouse with a printed blue-and-red silk scarf, soft warm background, window light",0],
- ["bae_b107_1","BAE selective focus through a blurred foreground, woman in a black coat, intimate",0],
- ["bae_b107_3","BAE layered depth: man seen through a window with reflections, warm light",0],
- ["bae_b108_2","BAE medium close-up: two women laughing together in pink and blue madras-check shirts against a warm wall, candid connection",0],
- ["bae_b111_1","BAE foreground bokeh: profile of a woman behind a soft warm blurred foreground",0],
- ["bae_b111_2","BAE clarity: man in sunglasses sharp amid a motion-blurred city street",0],
- ["bae_b111_3","BAE movement: woman mid-stride in a motion-blurred urban scene",0]
+ ["st_minimal_02","BAE STUDIO STYLE (master reference): man seated cross-legged on a light-oak chair, navy tailored suit over a cream crew-neck knit, burgundy socks, white-painted textured wall with soft raking sunlight, light oak floor, wide negative space",1]
 ].map(([id,d,st])=>({id,d,src:/^st_/.test(id)?`refs/${id}_t.jpg`:`refs/${id}.jpg`,set:"bae",studio:!!st,auto:/^st_/.test(id)}));
 const ALL_REFS=[...BAE_REFS,...REFS];
+/* BAE References library (see blSync) */
+const BL={list:[],loaded:0,busy:"",err:"",note:"",canEdit:false}; const BL_FOLDER="b43599ff-a42c-45b1-a469-21afde68b08d"; const blRefId=id=>"bl_"+id;
 AT_OUTFITS.forEach(o=>ALL_REFS.push({id:o.id,d:"Outfit sheet: "+o.name+" — "+o.d,src:o.src,set:"of",studio:false,auto:true,outfit:o.name}));
 const refById=id=>ALL_REFS.find(r=>r.id===id);
 const isOutfit=id=>/^of_\d/.test(String(id||""));
-const PICK_STUDIO=["st_minimal_01","st_minimal_02","bae_b113_0"];
-const PICK_LOCATION=["bae_b106_1","bae_b111_2","bae_b107_1","bae_b108_2"];
+const PICK_STUDIO=["st_minimal_01","st_minimal_02"];
+const PICK_LOCATION=[]; /* filled from BAE References when the library loads (blSync) */
 /* Youth campaign references sent by the client (style, wardrobe and camera only) */
-const YOUTH_REFS = [
- ["yt01","Youth: two young men on wooden steps under palm trees, extreme low-angle wide shot, sun flare, retro football tee, baggy light denim shorts, striped tube socks, chunky sneakers"],
- ["yt02","Youth: two girls laughing on a green bench under a concrete overpass, low wide angle, lilac athletic top, colour-block windbreaker"],
- ["yt03","Youth: three friends taking a selfie in a skate bowl, low angle, blue sky, pink tee, patterned camp shirt, bucket hat, tube socks"],
- ["yt04","Youth: five friends on a stone wall with skateboards, ultra-low wide angle, blue sky, bold colour-block streetwear, beanies, retro sneakers"],
- ["yt05","Youth: three friends laughing in the wind, big sky above, pink cardigan, butter-yellow striped oversized shirt, brown vest"],
- ["yt06","Youth: three women cheek to cheek, low angle against deep blue sky, hard sun, crochet vest, crop tops, pleated trousers, striped knit"],
- ["yt07","Youth: friends racing piggyback, motion blur, tilted low angle, olive fluffy vest, cobalt quilted vest, baggy jeans"],
- ["yt08","Youth: playful couple on a skateboard at a skatepark, bright sun, denim on denim, white tees, tinted round sunglasses"],
- ["yt09","Youth: four friends walking across grass at golden hour, low angle, striped camp shirt, lilac fluffy cardigan, floral blouse, wide-leg jeans"]
-].map(([id,d])=>({id,d,src:`refs/${id}.jpg`,set:"yt",studio:false}));
+const YOUTH_REFS = [];
 ALL_REFS.push(...YOUTH_REFS);
 /* Bold defaults lean on the BAE guideline frames (clean, refined) with one youth frame for camera energy only */
-const PICK_BOLD=["bae_b108_2","bae_b111_2","bae_b106_1","yt04"];
-const PICK_BOLD_STUDIO=["st_minimal_01","st_minimal_02","bae_b113_0"];
+const PICK_BOLD=[];
+const PICK_BOLD_STUDIO=["st_minimal_01","st_minimal_02"];
 /* BAE illustration set (guidelines p.101, light mode), used as style direction for the Icons mode */
 const ICON_REFS=[
  ["ic_savings","BAE icon: translucent coin over a stack of orange-to-burgundy coins"],
@@ -385,7 +336,7 @@ function settingRule(){ return S.setting==="Studio"?STUDIO_RULE:LOCATION_BG.trim
 const REF_STYLE = CLIENT_RULES + "\n\n" + `REFERENCE PHOTOGRAPHER STYLE (Mari Juliano, lifestyle): bright, clean natural daylight (window light or open sun); crisp, sharp subjects with true-to-life colour; candid, genuine laughter and interaction captured mid-action; tidy, styled but lived-in real homes, cafés and parks; colour-coordinated wardrobe against the set; occasional low angles against open sky and overhead tabletop views. Blend: keep the clean natural light and candid energy, shift the palette to BAE warmth, add BAE depth layers and foreground bokeh, and place it in Jordan.`;
 
 /* ---------------- state ---------------- */
-const S = { setting:"On-location", shot:"Medium close-up", look:"Bold", picked:PICK_BOLD.slice(), refTab:"yt", upload:null, analysis:null, checklist:[], models:{nano:[]}, fileArgs:false, connected:false, schemas:{}, details:{}, upModes:null };
+const S = { setting:"On-location", shot:"Medium close-up", look:"Bold", picked:PICK_BOLD.slice(), refTab:"bae", upload:null, analysis:null, checklist:[], models:{nano:[]}, fileArgs:false, connected:false, schemas:{}, details:{}, upModes:null };
 let mcp=null, sample=null, downloads=null, sampleImages=null;
 
 /* ---------------- logging ---------------- */
@@ -635,7 +586,7 @@ function onSetting(){
   const want=studio?(bold?PICK_BOLD_STUDIO:PICK_STUDIO):(bold?PICK_BOLD:PICK_LOCATION);
   if(!S.noLib&&(onlyDefaults||(studio&&!S.picked.some(id=>refById(id)?.studio)))) S.picked=want.slice();
   S.picked=S.picked.filter(id=>refById(id));
-  S.refTab=S.noLib?"user":(studio&&!bold?"bae":(bold?"yt":S.refTab));
+  S.refTab=S.noLib?"user":(S.refTab==="ch"||S.refTab==="user"?S.refTab:"bae");
   renderRefs(); syncTabs();
   $("setChip").textContent=studio?"studio set":"on-location";
   $("lookChip").textContent=bold?"bold & colourful":"elegant & calm";
@@ -683,6 +634,9 @@ function renderRefs(){
       box.appendChild(w); return; }
     b.onclick=()=>{ const j=S.picked.indexOf(r.id); if(j>=0) S.picked.splice(j,1); else if(S.picked.length<MAX_REFS) S.picked.push(r.id); renderRefs(); };
     box.appendChild(b); });
+  if(S.refTab==="bae"){ const head=document.createElement("div"); head.className="cl-head";
+    head.innerHTML=(BL.canEdit?`<div class="cl-mag"><button type="button" class="btn small" data-blsync ${BL.busy?"disabled":""}>Sync from Magnific</button><span class="t12 muted">${BL.list.length} photos from your “bae reference” folder${BL.note?" · "+esc(BL.note):""}</span></div>`:"")+(BL.busy?`<p class="t12" role="status">${esc(BL.busy)}</p>`:"")+(BL.err?`<p class="t12 bad" role="alert">${esc(BL.err)}</p>`:"")+(!BL.list.length&&BL.loaded&&!BL.busy?`<p class="muted cl-empty">${BL.canEdit?"No photos yet. Press Sync from Magnific to bring in the folder.":"No photos yet. The studio owner adds them."}</p>`:"");
+    const sy=head.querySelector("[data-blsync]"); if(sy) sy.onclick=()=>blImport(); box.prepend(head); }
   if(S.refTab==="ch"){
     if(!CL.loaded&&!CL._loading){ CL._loading=true; clLoad().then(()=>{ CL._loading=false; renderRefs(); clMigrateLocal(); }); }
     const head=document.createElement("div"); head.className="cl-head"; head.innerHTML=clTabsHTML()+(CL.canEdit&&CL.list.length?`<div class="cl-mag"><button type="button" class="btn small" data-clmag ${CL.busy?"disabled":""}>Send all to Magnific</button><span class="t12 muted">${clMagCount()} of ${CL.list.length} are on your Magnific</span></div>`:"")+(CL.busy?`<p class="t12" role="status">${esc(CL.busy)}</p>`:"")+(CL.err?`<p class="t12 bad" role="alert">${esc(CL.err)}</p>`:"");
@@ -705,9 +659,7 @@ function syncTabs(){ document.querySelectorAll("#refTabs button").forEach(b=>b.s
   $("refHint").textContent=({
     ic:"BAE illustration set (guidelines p.101, light mode). Sent to GPT 2.5 as style direction only: material, translucency, gradient, angle and lighting.",
     user:"Your own reference photos, kept only on this device. Add licensed images that show the light, wardrobe or camera angle you want.",
-    bae:"Photos from the Bank al Etihad guidelines. Picked frames go to Claude for style analysis and to Seedream 5.5 as references. Up to 10, from any set. Under each picked photo choose what to take from it: colour grading, lighting, both, or the full style. Choosing Studio picks the BAE studio frames for you.",
-    yt:"Youth campaign set: bold streetwear, low-angle wide camera, blue sky, hard sun and friends mid-laugh. Used for wardrobe, camera and energy; their logos and orange clothing are never copied.",
-    mj:"Mari Juliano lifestyle set, for clean natural light and candid energy. Mix with the other sets, up to 10 in total.",
+    bae:"The team's own Bank al Etihad photos. Picked frames go to Claude for style analysis and to Seedream 5.5 as references. Up to 10. Under each picked photo choose what to take from it: colour grading, lighting, both, or the full style.",
     ch:"The team's character library. Write a character's name in the brief and they are cast automatically."})[S.refTab]; }
 $("refTabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return; S.refTab=b.dataset.tab; syncTabs(); renderRefs(); });
 renderRefs(); syncTabs();
@@ -717,14 +669,14 @@ $("btnAuto").onclick=async()=>{
   const b=$("btnAuto"); b.disabled=true; b.textContent="Picking…";
   try{
     const o=await sample.json(`Pick 4 reference photos whose light, setting and energy best match this brief, for a Bank al Etihad photo. Brief: "${$("brief").value}" (a [shot: …] tag in the brief is the camera angle/framing the user chose: build the composition on it, describe it in plain photographic words, never print the tag itself; it overrides the Shot option).${outfitNote()} Setting: ${S.setting}. Shot: ${S.shot}.
-Look: ${S.look==="Bold"?"BOLD & COLOURFUL — pick at least 2 Youth campaign photos (ids starting \"yt\") for wardrobe and camera angle, plus at least 1 BAE photo":"ELEGANT & CALM — pick at least 2 BAE guideline photos (ids starting \"bae_\")"}.
-Rules: ${S.setting==="Studio"?"Setting is STUDIO: pick only photos marked [studio], then fill with BAE close-up/selective-focus frames.":"Setting is on-location: prefer BAE depth, focus and movement frames plus Mari Juliano frames with clean natural light."} Prefer frames where the person is centred.
-Catalog:\n${ALL_REFS.filter(r=>r.set!=="ch"&&r.set!=="ic"&&r.set!=="of").map(r=>r.id+(r.studio?" [studio]":"")+": "+r.d).join("\n")}\nReply with only a JSON array of 4 ids, e.g. ["yt04","yt06","bae_b108_2","r061"].`,{modelTier:"quick"});
+Look: ${S.look==="Bold"?"BOLD & COLOURFUL":"ELEGANT & CALM"}.
+Rules: ${S.setting==="Studio"?"Setting is STUDIO: pick the photos marked [studio] first, then the BAE reference photos closest to the brief.":"Setting is on-location: pick the BAE reference photos whose place, light, camera angle and number of people are closest to the brief; never a photo marked [studio]."} Prefer frames where the person is centred.
+Catalog:\n${ALL_REFS.filter(r=>r.set!=="ch"&&r.set!=="ic"&&r.set!=="of").map(r=>r.id+(r.studio?" [studio]":"")+": "+r.d).join("\n")}\nReply with only a JSON array of 4 ids copied exactly from the catalog.`,{modelTier:"quick"});
     if(Array.isArray(o)){ const cast=S.picked.filter(isChar); S.picked=[...cast,...o.map(String).filter(id=>refById(id)&&!isChar(id)&&!/^ic_/.test(id))].slice(0,MAX_REFS); renderRefs(); }
   }catch(e){ flash($("s1state"),sampleCopy(e),true); }
   finally{ b.disabled=false; b.textContent="Auto-pick for this brief"; }
 };
-async function refBlobs(){ const out=[]; for(const id of S.picked){ const r=refById(id); if(r?.lib&&!r.blob){ try{ r.blob=await clBlob(r.docId); }catch{} } if(r?.blob){ out.push({id,blob:r.blob}); continue; } try{ const res=await fetch(`refs/${id}.jpg`); if(res.ok) out.push({id,blob:await res.blob()}); }catch{} } return out; }
+async function refBlobs(){ const out=[]; for(const id of S.picked){ const r=refById(id); if(r?.lib&&!r.blob){ try{ r.blob=await clBlob(r.docId); }catch{} } if(r?.bl&&!r.blob){ try{ await blBlob(r); }catch{} } if(r?.blob){ out.push({id,blob:r.blob}); continue; } try{ const res=await fetch(`refs/${id}.jpg`); if(res.ok) out.push({id,blob:await res.blob()}); }catch{} } return out; }
 
 function flash(el,txt,bad){ el.textContent=txt; el.style.color=bad?"var(--warn)":"";
   if(el&&/^s[123]state$/.test(el.id)){ const m=$("flowMsg"); if(m){ m.textContent=txt; m.classList.toggle("bad",!!bad); } } }
@@ -1595,6 +1547,37 @@ async function clStoreImage(id,blob){
   try{ const u=JSON.parse(localStorage.getItem("bae_user_magids")||"{}"); delete u[clRefId(id)]; localStorage.setItem("bae_user_magids",JSON.stringify(u)); }catch{}
   rlUploadMag(blob,"character-"+id).then(up=>{ if(!up?.id) return; try{ const u=JSON.parse(localStorage.getItem("bae_user_magids")||"{}"); u[clRefId(id)]=up.id; localStorage.setItem("bae_user_magids",JSON.stringify(u)); }catch{} const c=CL.list.find(x=>x.id===id); if(c){ c._mag=true; if(S.refTab==="ch") renderRefs(); } }).catch(e=>log("·","original not sent to Magnific yet",{code:e?.code,message:e?.message}));
   return {full,fields:{thumb,asset,mime:blob.type||"image/jpeg",px:dims,orig:!!asset}}; }
+/* BAE References (v170): the team's own reference photos. The owner keeps them in ONE Magnific folder; "Sync from Magnific" copies every image
+   at full size into the page's file store (so the whole team has it), writes a one-line description for auto-pick, and removes what left the folder.
+   Docs: brefs/<id> {d, thumb, asset, mime, px, mag, at}. In ALL_REFS they sit in set "bae" with bl:true. */
+function blSync(){ for(let i=ALL_REFS.length-1;i>=0;i--) if(ALL_REFS[i].bl) ALL_REFS.splice(i,1);
+  for(const c of BL.list) ALL_REFS.push({id:blRefId(c.id),docId:c.id,d:c.d||"Bank al Etihad reference photo",src:c.thumb||"",asset:c.asset||null,mime:c.mime||"image/png",blob:null,set:"bae",studio:false,bl:true});
+  const four=BL.list.slice(0,4).map(c=>blRefId(c.id)); PICK_LOCATION.splice(0,PICK_LOCATION.length,...four); PICK_BOLD.splice(0,PICK_BOLD.length,...four);
+  S.picked=S.picked.filter(id=>refById(id)); if(S.mode!=="icon"&&S.setting!=="Studio"&&!S.picked.some(id=>!isChar(id))) S.picked=[...S.picked,...four]; refCache=null; }
+async function blLoad(){ try{ await rlStoreInit(); if(!RLS.db) return; const sn=await RLS.db.collection("brefs").get(); BL.list=sn.docs.map(d=>({id:d.id,...JSON.parse(JSON.stringify(d.data()))})).sort((a,b)=>(a.at||0)-(b.at||0)); BL.loaded=Date.now(); }
+  catch(e){ BL.loaded=Date.now(); log("✕","BAE references",{code:e?.code,message:e?.message}); }
+  try{ const u=await window.claude?.use?.("user"); BL.canEdit=!!u?.canEdit?.(); }catch{} blSync(); }
+async function blBlob(r){ if(r.blob) return r.blob; const x=await fetch("/_blob/"+r.asset); if(!x.ok) throw {code:"not_found",message:"This reference photo is missing from the library."}; const b=await x.blob(); return r.blob=b.type?b:new Blob([b],{type:r.mime||"image/png"}); }
+async function blThumb(blob){ let t=""; for(const [px,q] of [[560,.8],[480,.76],[400,.72],[320,.7]]){ const bmp=await createImageBitmap(blob); const k=Math.min(1,px/Math.max(bmp.width,bmp.height)); const c=document.createElement("canvas"); c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k); c.getContext("2d").drawImage(bmp,0,0,c.width,c.height); t=c.toDataURL("image/jpeg",q); if(t.length<=60000) break; } return t; }
+async function blDescribe(blob){ try{ if(!sample) throw 0; const small=await toJpeg(blob,1024); const o=await sample.json(`Describe this Bank al Etihad reference photo in ONE line of at most 30 words, for a catalog used to pick style references: how many people and who (e.g. a mother and a girl), what they do, the place, the camera angle and distance, the light. No names, no brands. Reply with only JSON: {"d":""}`,{images:[small],modelTier:"default",cache:false}); const d=String(o?.d||"").replace(/\s+/g," ").trim().slice(0,240); if(d) return "BAE reference: "+d; }catch{} return "Bank al Etihad reference photo"; }
+async function blImport(){ if(BL.busy) return; BL.err=""; BL.note=""; let added=0, gone=0, bad=0;
+  try{ if(!mcp||S.web) throw {message:"Magnific isn't reachable in this view. Open the studio in claude.ai."};
+    BL.busy="Reading the folder on Magnific…"; renderRefs(); if(!S.connected) await connect(true); await rlStoreInit();
+    const A=await window.claude?.use?.("assets"); if(!A||!RLS.db) throw {message:"Only the studio's editors can bring photos in."};
+    const ids=[]; let whole=false; for(let page=1;page<=8;page++){ const r=await callMag("creations_search",{from:"project-root",reference:BL_FOLDER,fileType:"image",perPage:50,page}); const got=[...new Set(collectIds(r.payload??r.content))].filter(x=>!ids.includes(x)); ids.push(...got); if(got.length<50){ whole=true; break; } }
+    if(!ids.length) throw {message:"Magnific returned no images for the folder. Nothing was changed."};
+    const have=new Set(BL.list.map(c=>c.mag)); const todo=ids.filter(x=>!have.has(x)); let n=0;
+    for(const id of todo){ n++; BL.busy=`Bringing in ${n} of ${todo.length}…`; renderRefs();
+      try{ const blob=await rlFullImage(id); if(!blob||blob.size<5000||!/^image\//.test(blob.type||"image/png")) throw {message:"no image"};
+        const bm=await createImageBitmap(blob); const [d,thumb]=[await blDescribe(blob),await blThumb(blob)]; const up=await A.upload(blob); if(!up?.id) throw {message:"not stored"};
+        const docId="b"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); const doc={d,thumb,asset:up.id,mime:blob.type||"image/png",px:[bm.width,bm.height],mag:id,at:Date.now()};
+        await RLS.db.collection("brefs").doc(docId).set(doc); BL.list.push({id:docId,...doc}); const U=clMagMap(); U[blRefId(docId)]=id; localStorage.setItem("bae_user_magids",JSON.stringify(U)); added++; blSync(); }
+      catch(e){ bad++; log("✕","reference not brought in",{id,code:e?.code,message:e?.message}); } }
+    if(whole){ for(const c of BL.list.filter(c=>c.mag&&!ids.includes(c.mag))){ try{ await RLS.db.collection("brefs").doc(c.id).delete(); if(c.asset) await A.delete(c.asset).catch(()=>{}); BL.list.splice(BL.list.indexOf(c),1); gone++; }catch(e){ log("✕","reference not removed",{code:e?.code,message:e?.message}); } } }
+    BL.note=added||gone?`${added} added${gone?`, ${gone} removed`:""}`:"already up to date"; if(bad) BL.err=`${bad} could not be brought in. Press the button again.`; }
+  catch(e){ BL.err="Couldn't sync with Magnific: "+String(e?.message||e?.code||e).slice(0,160); }
+  BL.busy=""; blSync(); { const other=S.picked.filter(id=>!isChar(id)&&!refById(id)?.bl); if(!other.length&&S.mode!=="icon"&&S.setting!=="Studio") S.picked=[...S.picked.filter(isChar),...BL.list.slice(0,4).map(c=>blRefId(c.id))]; } renderRefs(); }
+setTimeout(()=>{ if(S.web) return; blLoad().then(()=>{ try{ renderRefs(); }catch{} }); },700);
 /* Magnific copies of the library: every character sheet goes to the owner's Magnific once, at full size, named after the character,
    and the list (character -> Magnific identifier) is kept in the account, so the sheets can be used in work done outside the studio */
 function clMagMap(){ try{ return JSON.parse(localStorage.getItem("bae_user_magids")||"{}"); }catch{ return {}; } }
@@ -1814,7 +1797,7 @@ function setMode(m,init){
   $("promptLbl").textContent=icon?"GPT 2.5 icon prompt":"Seedream 5.5 prompt";
   /* keep each service's own picks: only stash the picks of the mode we are actually leaving */
   if(icon){ if(prev!=="icon") S._photoPicked=S.picked.filter(id=>!/^ic_/.test(id)); S.picked=(S._iconPicked&&S._iconPicked.some(id=>/^ic_/.test(id)))?S._iconPicked:PICK_ICON.slice(); S.refTab="ic"; }
-  else { if(prev==="icon") S._iconPicked=S.picked.slice(); S.picked=(S._photoPicked&&S._photoPicked.length?S._photoPicked:S.picked).filter(id=>!/^ic_/.test(id)); if(!S.picked.length) S.picked=PICK_BOLD.slice(); if(S.refTab==="ic") S.refTab=S.look==="Bold"?"yt":"bae"; }
+  else { if(prev==="icon") S._iconPicked=S.picked.slice(); S.picked=(S._photoPicked&&S._photoPicked.length?S._photoPicked:S.picked).filter(id=>!/^ic_/.test(id)); if(!S.picked.length) S.picked=PICK_BOLD.slice(); if(S.refTab==="ic") S.refTab="bae"; }
   S.picked=S.picked.filter(id=>refById(id));
   if(icon){ try{ const saved=localStorage.getItem("bae_icon_brief"); $("brief").value=saved||ICON_PRESETS[0][1]; }catch{ $("brief").value=ICON_PRESETS[0][1]; } }
   else { try{ $("brief").value=localStorage.getItem("bae_brief")||DEFAULT_BRIEF; }catch{} }
@@ -4544,6 +4527,7 @@ async function rlBible(){
 
 /* ================= New look + features (v84) ================= */
 /*UXDICT*/const UX_AR={
+"Sync from Magnific":"حدّث من Magnific","BAE References":"مراجع البنك","Reading the folder on Magnific…":"عم بقرأ الملف على Magnific…",
 "Send all to Magnific":"ابعث الكل على Magnific","Connecting to Magnific…":"عم بتصل بـ Magnific…","Saving the list…":"عم بحفظ القائمة…",
 "Talking":"احكي معي","Tell me the photo you need. Add pictures if you have them.":"احكيلي شو الصورة اللي بدك ياها. وضيف صور إذا عندك.","New chat":"محادثة جديدة","Claude model":"موديل Claude","Auto (the studio picks)":"تلقائي (الاستوديو بيختار)","Checking…":"عم بفحص…","This view does not say which model answers.":"هاي الواجهة ما بتحكي أي موديل بيجاوب.","Recent":"السابقة","No chats yet. Your chats will be listed here.":"ما في محادثات لسا. محادثاتك بتطلع هون.","Your chats are saved in your account.":"محادثاتك محفوظة بحسابك.","Your chats are saved on this device only.":"محادثاتك محفوظة على هاض الجهاز بس.","This chat could not be saved.":"ما قدرت أحفظ هاي المحادثة.","Add it again to use it":"ضيفها مرة ثانية لتستخدمها","Delete":"احذف","Delete this chat":"احذف هاي المحادثة","Pictures":"صور","Enter sends":"Enter للإرسال","Send":"ابعث","All tools":"كل الأدوات","Hide the tools":"خبّي الأدوات","Write here, or press the microphone and talk.":"اكتب هون، أو اكبس المايكروفون واحكي.","Your message":"رسالتك",
 "Say what you need, in your own words. You can add pictures too: your design, a photo you like, colours you like.":"احكي شو بدك بكلامك. وبتقدر تضيف صور: تصميمك، صورة عجبتك، ألوان عجبتك.","Or try one:":"أو جرّب وحدة:","Your photo":"صورتك","Change a detail by hand":"غيّر تفصيلة بإيدك","image":"صورة","images":"صور","Your pictures. Under each one: what I take from it.":"صورك. وتحت كل وحدة: شو باخذ منها.",
@@ -6084,7 +6068,7 @@ Return ONLY JSON:
     const k=genKeys()[0]; if(got.length) PC.msgs.push({r:"a",t:"",res:{imgs:got.slice(-Math.max(n,angles?4:1))},brief:b}); else say(cards[k]?.err||$("flowMsg")?.textContent||"The image didn't come back.",{err:true}); draw(); }
   /* a library image as a Magnific reference: linked library first, then a one-time upload that is remembered */
   async function magId(id){ let U={}; try{ U=JSON.parse(localStorage.getItem("bae_user_magids")||"{}"); }catch{} const have=S.magIds?.[String(id).toLowerCase()]||U[id]; if(have) return have;
-    const r=refById(id); let blob=r?.blob||null; if(!blob&&r?.lib){ try{ blob=r.blob=await clBlob(r.docId); }catch{} } if(!blob){ const res=await fetch(`refs/${id}.jpg`); if(res.ok) blob=await res.blob(); } if(!blob) return null;
+    const r=refById(id); let blob=r?.blob||null; if(!blob&&r?.lib){ try{ blob=r.blob=await clBlob(r.docId); }catch{} } if(!blob&&r?.bl){ try{ blob=await blBlob(r); }catch{} } if(!blob){ const res=await fetch(`refs/${id}.jpg`); if(res.ok) blob=await res.blob(); } if(!blob) return null;
     const up=await rlUploadMag(blob,"ref-"+id); if(up?.id){ U[id]=up.id; try{ localStorage.setItem("bae_user_magids",JSON.stringify(U)); }catch{} } return up?.id||null; }
   /* a photo built on the designer's own pictures: each one goes to Magnific at its ORIGINAL size and is named in the prompt with the one thing it gives.
      A "remake" source is @img1 and is repeated with changes; the other pictures follow, then the character sheets and the outfit sheet */
