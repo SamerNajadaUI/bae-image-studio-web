@@ -515,6 +515,9 @@ function oneImage(args){
   const visit=(o,d=0)=>{ if(!o||typeof o!=="object"||d>6) return; for(const k of Object.keys(o)){ if(KEYS.test(k)&&typeof o[k]==="number") o[k]=1; else if(o[k]&&typeof o[k]==="object"&&!/reference/i.test(k)) visit(o[k],d+1); } };
   visit(copy); return copy;
 }
+/* N variants of ONE prompt = one Magnific call with its count set to N (the tool's own rule), not N calls */
+function magCount(args,n){ const KEYS=/^(num_?images|numImages|number_?of_?images|numberOfImages|count|n|quantity|variations|batch_?size|batchSize|samples|num_?outputs|numOutputs|images_?count)$/i;
+  const copy=JSON.parse(JSON.stringify(args||{})); let hit=false; for(const k of Object.keys(copy)) if(KEYS.test(k)&&(typeof copy[k]==="number"||typeof copy[k]==="string")){ copy[k]=n; hit=true; } if(!hit) copy.count=n; return copy; }
 function replaceDeep(o,token,val){
   if(Array.isArray(o)) return o.map(x=>replaceDeep(x,token,val));
   if(o&&typeof o==="object"){ const r={}; for(const k in o) r[k]=replaceDeep(o[k],token,val); return r; }
@@ -1203,7 +1206,7 @@ async function runModel(key,refs){
   if($(m.prompt).value.trim()) $(m.prompt).value=$(m.prompt).value.replace(/\n*(Character references \(identity\)|Wardrobe reference|Reference images)[^\n]*/g,"")+(refs.length?"\n"+refLine(refs):"");
   const prompt=$(m.prompt).value.trim();
   const ang=S.mode!=="icon"&&Array.isArray(S.angles)?S.angles:null;
-  const mode=$(m.mode).value||null; const count=ang?ang.length:Math.max(1,Math.min(4,+$("count").value||1)); const aspect=aspectVal();
+  const mode=$(m.mode).value||null; const count=ang?ang.length:Math.max(1,Math.min(S.batch?8:4,+$("count").value||1)); const aspect=aspectVal();
   const up=()=>renderCard(key,c);
   try{
     if(!prompt) throw {code:"tool_error",message:"Write the prompt first (step 2)."};
@@ -1241,7 +1244,16 @@ REFERENCES ARE REQUIRED: attach EVERY item in Data.references, in exactly this o
       o.pending=false; done++; c.ph=`Rendering in Magnific… ${done} of ${count} ready`; up();
     };
     c.ph=`Rendering ${count} in Magnific…`; up();
-    const res=await Promise.allSettled(c.outs.map((_,k)=>genOne(k)));
+    /* Talking asks for its images in ONE call (count = N). A model that returns fewer gets the missing ones one by one */
+    const genBatch=async()=>{ const r=await callMag("images_generate",magCount(plan.args,count));
+      let rr=readResult(r); if(!rr.ids.length) rr=await extractWithClaude(r,"the creation identifiers of the images being generated");
+      const ids=[...new Set(rr.ids)].slice(0,count), web=rr.webUrl||rr.links.find(u=>/magnific\.com\/app\//i.test(u))||null; if(!ids.length) throw {code:"tool_error",message:"Magnific didn't return a creation to wait for."};
+      const one=async slot=>{ const id=ids[slot]; if(!id) return genOne(slot); const w=await waitFor([id],"2K image generation"); const o=c.outs[slot]; o.id=id; o.webUrl=w.webUrl||web; o._rr={...w,ids:[id],urls:[],images:[]};
+        const pv=await preview(id), shot=pv.image; o.url=pv.urls[0]||null; if(shot){ o.img=`data:${shot.mime};base64,${shot.data}`; o.blob=b64Blob(shot.data,shot.mime); }
+        o.long=Math.max(pv.w,pv.h)||(asked4k?(plan.expected_long_side_px||2048):0)||(o.img?await longSide(o.img):0)||plan.expected_long_side_px||0; if(asked4k&&/2k|4k/i.test(JSON.stringify(plan.args))) o.long=Math.max(o.long,2048);
+        o.pending=false; done++; c.ph=`Rendering in Magnific… ${done} of ${count} ready`; up(); };
+      return Promise.allSettled(c.outs.map((_,k)=>one(k))); };
+    const res=S.batch&&!ang&&count>1?await genBatch():await Promise.allSettled(c.outs.map((_,k)=>genOne(k)));
     const failed=res.filter(x=>x.status==="rejected");
     c.outs=c.outs.filter(o=>!o.pending&&(o.id||o.url||o.img));
     if(!c.outs.length) throw failed[0]?.reason||{code:"tool_error",message:"Magnific returned no image."};
@@ -4077,15 +4089,18 @@ function rlBoardCell(s,i){
     <div class="cap"><span class="t12 muted">${thumb&&st?st:esc(b.moment||"")}</span><span class="rl-btns">${b.id?`<button type="button" class="btn small" data-ux="dl" data-id="${esc(b.id)}" data-name="Storyboard sheet ${i+1}">Download</button>`:""}<label class="btn small"${live?' aria-disabled="true"':""}>Replace<input type="file" accept="image/*" class="sr" data-ux-sbrep="${i}"${live?" disabled":""}></label><button type="button" class="btn small" data-rl="board1" data-i="${i}"${live?" disabled":""}>${b.id?"Redraw":"Draw"}</button></span></div></div>`;
 }
 /* ---------- Magnific: images for cast, locations and first frames ---------- */
-async function rlImage({prompt,aspect,refs=[],label,onQueued}){
+async function rlImage({prompt,aspect,refs=[],label,onQueued,count=1}){
   const model=$("selNano").value||null;
-  const plan=await buildArgs("images_generate",`Generate exactly 1 photorealistic image with model "${model||"Seedream 5.5"}" (ByteDance Seedream 5.5). Use the prompt verbatim. Aspect ratio ${aspect}. Resolution 2K (the 2K tier, about 2048 px+ on the long side), highest quality. ${refs.length?"Attach EVERY item of Data.references as image references, in exactly this order (the first is @img1, the second @img2…), using each item's identifier.":"No references."}`,
-    {model, model_label:"Seedream 5.5", prompt, aspect_ratio:aspect, resolution:"2K", num_images:1, references:refs.length?refs.map(r=>({identifier:r.id,type:"image"})):undefined},"default");
-  let iargs=oneImage(plan.args);
+  const plan=await buildArgs("images_generate",`Generate exactly ${count} photorealistic image${count>1?"s in ONE call (set the tool's count to "+count+")":""} with model "${model||"Seedream 5.5"}" (ByteDance Seedream 5.5). Use the prompt verbatim. Aspect ratio ${aspect}. Resolution 2K (the 2K tier, about 2048 px+ on the long side), highest quality. ${refs.length?"Attach EVERY item of Data.references as image references, in exactly this order (the first is @img1, the second @img2…), using each item's identifier.":"No references."}`,
+    {model, model_label:"Seedream 5.5", prompt, aspect_ratio:aspect, resolution:"2K", num_images:count, references:refs.length?refs.map(r=>({identifier:r.id,type:"image"})):undefined},"default");
+  let iargs=count>1?magCount(plan.args,count):oneImage(plan.args);
   if(refs.length){ iargs=await rlPutRefs(iargs,refs,null,"images_generate"); const miss=refs.filter(r=>!JSON.stringify(iargs).includes(r.id)); if(miss.length) throw {code:"refs_missing",message:`Couldn't attach ${miss.map(r=>r.tag).join(", ")}; stopped before spending credits.`}; }
   const r=await callMag("images_generate",iargs);
   let rr=readResult(r); if(!rr.ids.length&&!rr.images.length) rr=await extractWithClaude(r,"the creation identifier of the image being generated");
   const id0=rr.ids[0]; const web=rr.webUrl||null;
+  if(count>1){ const ids=[...new Set(rr.ids)].slice(0,count); if(!ids.length) throw {code:"tool_error",message:"Magnific returned no creation."}; if(onQueued) onQueued(ids[0],web);
+    const got=await Promise.all(ids.map(async id=>{ try{ await waitFor([id],label||"image"); const pv=await preview(id), shot=pv.image; if(shot){ const src=`data:${shot.mime};base64,${shot.data}`; rlFull[id]=src; rlTSet(id,await rlThumb(src,480)); } return {id,web}; }catch(e){ log("✕","batch image",{id,code:e?.code}); return null; } }));
+    const all=got.filter(Boolean); if(!all.length) throw {code:"tool_error",message:"Magnific returned no image."}; return {id:all[0].id,web,all}; }
   if(id0&&onQueued) onQueued(id0,web);
   if(!rr.images.length&&!DONE.test(rr.status)&&id0) rr=await waitFor([id0],label||"image");
   const id=rr.ids[0]||id0; if(!id) throw {code:"tool_error",message:"Magnific returned no creation."};
@@ -4512,7 +4527,7 @@ async function rlBible(){
 
 /* ================= New look + features (v84) ================= */
 /*UXDICT*/const UX_AR={
-"Talking":"احكي معي","Tell me the photo you need. Add pictures if you have them.":"احكيلي شو الصورة اللي بدك ياها. وضيف صور إذا عندك.","New chat":"محادثة جديدة","Recent":"السابقة","No chats yet. Your chats will be listed here.":"ما في محادثات لسا. محادثاتك بتطلع هون.","Your chats are saved in your account.":"محادثاتك محفوظة بحسابك.","Your chats are saved on this device only.":"محادثاتك محفوظة على هاض الجهاز بس.","This chat could not be saved.":"ما قدرت أحفظ هاي المحادثة.","Add it again to use it":"ضيفها مرة ثانية لتستخدمها","Delete":"احذف","Delete this chat":"احذف هاي المحادثة","Pictures":"صور","Enter sends":"Enter للإرسال","Send":"ابعث","All tools":"كل الأدوات","Hide the tools":"خبّي الأدوات","Write here, or press the microphone and talk.":"اكتب هون، أو اكبس المايكروفون واحكي.","Your message":"رسالتك",
+"Talking":"احكي معي","Tell me the photo you need. Add pictures if you have them.":"احكيلي شو الصورة اللي بدك ياها. وضيف صور إذا عندك.","New chat":"محادثة جديدة","Claude model":"موديل Claude","Auto (the studio picks)":"تلقائي (الاستوديو بيختار)","Checking…":"عم بفحص…","This view does not say which model answers.":"هاي الواجهة ما بتحكي أي موديل بيجاوب.","Recent":"السابقة","No chats yet. Your chats will be listed here.":"ما في محادثات لسا. محادثاتك بتطلع هون.","Your chats are saved in your account.":"محادثاتك محفوظة بحسابك.","Your chats are saved on this device only.":"محادثاتك محفوظة على هاض الجهاز بس.","This chat could not be saved.":"ما قدرت أحفظ هاي المحادثة.","Add it again to use it":"ضيفها مرة ثانية لتستخدمها","Delete":"احذف","Delete this chat":"احذف هاي المحادثة","Pictures":"صور","Enter sends":"Enter للإرسال","Send":"ابعث","All tools":"كل الأدوات","Hide the tools":"خبّي الأدوات","Write here, or press the microphone and talk.":"اكتب هون، أو اكبس المايكروفون واحكي.","Your message":"رسالتك",
 "Say what you need, in your own words. You can add pictures too: your design, a photo you like, colours you like.":"احكي شو بدك بكلامك. وبتقدر تضيف صور: تصميمك، صورة عجبتك، ألوان عجبتك.","Or try one:":"أو جرّب وحدة:","Your photo":"صورتك","Change a detail by hand":"غيّر تفصيلة بإيدك","image":"صورة","images":"صور","Your pictures. Under each one: what I take from it.":"صورك. وتحت كل وحدة: شو باخذ منها.",
 "The scene":"المشهد (بشخصياتنا)","Size":"الحجم","How many":"العدد","Camera angle":"زاوية التصوير","Colours":"الألوان","Light":"الإضاءة","Location":"المكان","Style":"الستايل","Clothes":"اللبس","Same photo, small changes":"نفس الصورة مع تغيير بسيط","My design":"تصميمي","Only to look at":"بس للنقاش","Create image":"اعمل الصورة","Create 4 angles":"٤ زوايا","3 ideas":"٣ أفكار","The written brief":"البريف المكتوب","What the studio will use. You can still write it yourself.":"اللي رح يستخدمه الاستوديو. وبتقدر تكتبه بإيدك.","Who":"مين","Outfit":"اللبس","Action":"شو بيعمل","Place":"وين","Camera":"الكاميرا",
 "Reels":"الريلز","Home":"الرئيسية","New reel":"ريل جديد","Start from an idea, a brief or a storyboard":"ابدأ من فكرة أو بريف أو ستوري بورد","Director's brain":"عقل المخرج","What the Director knows and learns every day":"شو بيعرف المخرج وشو بيتعلم كل يوم",
@@ -5863,6 +5878,14 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
   const host=$("briefCard"), brief=$("brief"); if(!host||!brief) return;
   const F=[["who","Who"],["outfit","Outfit"],["action","Action"],["place","Place"],["camera","Camera"],["light","Light"],["grade","Colours"]], ONLY={who:"char",outfit:"outfit",camera:"shot"};
   const PC={msgs:[],card:{},src:null,keep:{},fix:null,busy:"",att:[],layout:null,edit:null,refs:[],n:1};
+  /* which Claude answers in this chat: the designer's pick, or the studio's tiers. The page can only ASK for a model; what was really used comes back as modelApplied */
+  try{ PC.model=localStorage.getItem("bae_talk_model")||""; }catch{ PC.model=""; } const mdl=()=>PC.model?{model:PC.model}:{};
+  const applied=r=>{ const a=r?.modelApplied; return String(typeof a==="string"?a:(a?.model||a?.name||a?.id||"")).trim(); };
+  async function probe(){ const el=$("pcUsing"); if(!el) return; if(!sample){ el.textContent="Claude isn't connected in this view."; return; } el.textContent="Checking…";
+    const one=async tier=>{ try{ return applied(await sample("Reply with the single word OK.",{...mdl(),modelTier:tier,cache:true})); }catch{ return ""; } };
+    if(PC.model){ const a=await one("default"); el.textContent=!a?"This view does not say which model answers.":a.includes(PC.model)||PC.model.includes(a)?`Answering now: ${a}`:`That model is not available here. Answering now: ${a}`; }
+    else { const a=await one("default"), b=await one("complex"); el.textContent=!a&&!b?"This view does not say which model answers.":a===b||!b?`Answering now: ${a}`:`Talk: ${a} · pictures and the final prompt: ${b}`; } if(typeof uxT==="function") uxT(el.parentElement); }
+  const NS=[1,2,4,8], nFit=v=>NS.find(x=>x>=Math.round(+v||1))||8;
   const el=document.createElement("div"); el.className="pc"; el.id="pc";
   el.innerHTML=`<div class="pc-head"><span class="pc-av" aria-hidden="true">AD</span><div class="pc-ttl"><b class="t18">Talking</b><span class="t12 muted">Tell me the photo you need. Add pictures if you have them.</span></div><button type="button" class="btn small" data-pc="recent" aria-expanded="false">Recent</button><button type="button" class="btn small" data-pc="new">New chat</button></div>
     <div class="pc-recent" id="pcRecent" hidden></div>
@@ -5872,7 +5895,7 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
     <div class="pc-att" id="pcAtt"></div>
     <div class="pc-compose"><textarea id="pcInput" dir="auto" rows="1" aria-label="Your message" placeholder="Write here, or press the microphone and talk."></textarea>
       <div class="pc-row"><label class="pc-add" title="Add pictures: a design, a photo you like, colours you like"><input type="file" accept="image/*" multiple id="pcFile" class="sr"><span aria-hidden="true">＋</span><span>Pictures</span></label><button type="button" class="pc-ic" id="pcMic" hidden aria-pressed="false" aria-label="Speak instead of typing"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button><span class="t12 light pc-hint">Enter sends</span><button type="button" class="btn primary pc-send" data-pc="send">Send</button></div></div>
-    <button type="button" class="pc-more" data-pc="more" aria-expanded="false">All tools</button>`;
+    <div class="pc-foot"><button type="button" class="pc-more" data-pc="more" aria-expanded="false">All tools</button><details class="pc-mod" id="pcMod"><summary>Claude model</summary><div class="pc-modin"><select id="pcModel" aria-label="Claude model for this chat">${[["","Auto (the studio picks)"],["claude-fable-5-2","Claude Fable 5.2"],["claude-opus-5-5","Claude Opus 5.5"],["claude-sonnet-5-5","Claude Sonnet 5.5"],["claude-haiku-5-5","Claude Haiku 5.5"]].map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select><span class="t12 muted" id="pcUsing" aria-live="polite"></span></div></details></div>`;
   const cls=document.createElement("details"); cls.className="pc-classic"; cls.innerHTML=`<summary><b>The written brief</b><span class="t12 muted">What the studio will use. You can still write it yourself.</span></summary>`;
   const inner=document.createElement("div"); inner.className="pc-classic-in"; cls.appendChild(inner);
   for(const n of [host.querySelector(".brief-meta"),brief,$("presets"),$("lvDrop"),host.querySelector(".create-row")]) if(n) inner.appendChild(n);
@@ -5913,7 +5936,7 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
     if(m.lay) h+=`<button type="button" class="pc-im wide" data-pclay="${i}"><img src="${m.lay}" alt="Rough preview inside the layout"></button><span class="t12 muted">Rough preview: your image placed in the layout's picture area.</span>`;
     return h+`</div>`; }
   function drawCard(){ const c=PC.card, box=$("pcCard"), has=F.some(([k])=>c[k])||PC.src; box.hidden=!has; if(!has){ box.innerHTML=""; return; }
-    box.innerHTML=`<div class="pc-cardh"><b>Your photo</b><span class="pc-set"><span class="pc-n" role="group" aria-label="How many images"><button type="button" data-pcn="-1" aria-label="One less" ${PC.n<=1?"disabled":""}>−</button><b>${PC.n}</b><span class="t12 muted">${PC.n>1?"images":"image"}</span><button type="button" data-pcn="1" aria-label="One more" ${PC.n>=4?"disabled":""}>+</button></span><span class="a-seg" role="group" aria-label="Setting">${["On-location","Studio"].map(v=>`<button type="button" data-pcset="${v}" aria-pressed="${(c.setting||S.setting)===v}">${v}</button>`).join("")}</span><select id="pcAspect" aria-label="Size">${[...($("aspect")?.options||[])].filter(o=>o.value!=="custom").map(o=>`<option value="${o.value}" ${(c.aspect||$("aspect").value)===o.value?"selected":""}>${esc(o.value==="auto"?"Auto":o.value)}</option>`).join("")}</select></span></div>
+    box.innerHTML=`<div class="pc-cardh"><b>Your photo</b><span class="pc-set"><span class="pc-n" role="group" aria-label="How many images"><button type="button" data-pcn="-1" aria-label="One less" ${PC.n<=1?"disabled":""}>−</button><b>${PC.n}</b><span class="t12 muted">${PC.n>1?"images":"image"}</span><button type="button" data-pcn="1" aria-label="More" ${PC.n>=8?"disabled":""}>+</button></span><span class="a-seg" role="group" aria-label="Setting">${["On-location","Studio"].map(v=>`<button type="button" data-pcset="${v}" aria-pressed="${(c.setting||S.setting)===v}">${v}</button>`).join("")}</span><select id="pcAspect" aria-label="Size">${[...($("aspect")?.options||[])].filter(o=>o.value!=="custom").map(o=>`<option value="${o.value}" ${(c.aspect||$("aspect").value)===o.value?"selected":""}>${esc(o.value==="auto"?"Auto":o.value)}</option>`).join("")}</select></span></div>
       <details class="pc-det" ${PC.cardOpen||PC.src||PC.edit?"open":""}><summary>Change a detail by hand</summary><div class="pc-fields">${F.map(([k,l])=>{ const keep=!!(PC.src&&PC.keep[k]), lock=PC.src&&k==="who"&&PC.src.f.who, v=keep?(PC.src.f[k]||"as in the photo"):(c[k]||"");
         return `<div class="pc-f${keep?" keep":""}"><span class="lbl">${l}</span>${PC.src?(lock?`<span class="pc-kc on" title="A real person is never copied. Pick a library character.">Change</span>`:`<button type="button" class="pc-kc${keep?"":" on"}" data-pckeep="${k}" aria-pressed="${!keep}">${keep?"Keep":"Change"}</button>`):""}${PC.edit===k&&!keep?`<textarea id="pcEd" dir="auto" rows="1" ${ONLY[k]?`data-only="${ONLY[k]}"`:""} placeholder="${ONLY[k]?"Type @ to pick, or write":"Write"}">${esc(c[k]||"")}</textarea>`:`<button type="button" class="pc-v" data-pcedit="${k}" ${keep?"disabled":""} dir="auto" data-noi18n>${v?pretty(v):`<i>${lock?"Pick a character":"Add"}</i>`}</button>`}</div>`; }).join("")}</div></details>`;
     box.querySelector(".pc-det")?.addEventListener("toggle",e=>{ PC.cardOpen=e.target.open; });
@@ -5994,7 +6017,7 @@ Return ONLY JSON:
 "source":null,
 "keep":null}
 - "pictures": [{"n":1,"role":"composition","what":"…"}] as explained above; [] when nothing changes.
-- "count": how many images they asked for, 1 to 4; 0 when they did not say.
+- "count": how many images they asked for: 1, 2, 4 or 8 (the studio makes them in one go from the same prompt; another number goes up to the next of these); 0 when they did not say.
 - "ask": null, or {"q":"ONE short question","options":["2 to 4 short answers"]}; only when who, action or place is truly missing and you cannot choose well yourself, when a new picture came with no hint${PC.src?", or when the source photo shows a person and the card has no @character to replace them (offer library names as options)":""}. Never more than one question.
 - "chips": 2 to 4 very short things the designer might say next, in their language, fitted to this moment (for example "تمام، صوّرها", "غيّر المكان", "أعطيني أفكار", "بدي ٤ صور"). [] when "ask" has options.
 - "do": "edit" ONLY when an image is on screen and the designer asks to change something in it; then "edit" is that single change in plain English (use "[outfit: Name]" when a library outfit is meant). "angles" when they ask for other angles of the same moment. "directions" when they ask for ideas or options, or gave a layout: then "directions" holds exactly 3 clearly different, on-brand ways to show the same message, each {"title":"3 to 5 words in the designer's language","card":{…full card…}}. "ready" when the card has who (or an object), action and place and the designer wants the picture, has nothing to add, or asks to send it to the brief or to sum it up ("ابعث للبريف", "لخّص", "خلص", "تمام"); then "say" tells them in one line to check the summary under the chat and press Create. Otherwise "talk".
@@ -6010,7 +6033,7 @@ Return ONLY JSON:
     if(!sample){ undo(); say("Claude isn't connected in this view. Open the studio in claude.ai, or write the brief yourself under All tools.",{err:true}); draw(); return; }
     if(fresh.length&&!sampleImages){ undo(); say("I can't look at pictures in this view. Describe it in words and I'll build it.",{err:true}); draw(); return; }
     PC.busy=fresh.length?"Looking at your pictures…":"Thinking…"; draw();
-    try{ const r=await rlAsk(ask(text||"Look at the attached pictures.",fresh),{modelTier:fresh.length?"complex":"default",cache:false,...(fresh.length?{images:fresh.map(i=>PC.refs[i].blob)}:{})}); await handle(r||{},fresh); if(all.length>take.length) say(`I took ${take.length} of your ${all.length} pictures. Send the others in the next message.`); }
+    try{ const r=await rlAsk(ask(text||"Look at the attached pictures.",fresh),{...mdl(),modelTier:fresh.length?"complex":"default",cache:false,...(fresh.length?{images:fresh.map(i=>PC.refs[i].blob)}:{})}); await handle(r||{},fresh); if(all.length>take.length) say(`I took ${take.length} of your ${all.length} pictures. Send the others in the next message.`); }
     catch(e){ undo(); log("✕","talking",{code:e?.code,message:e?.message}); say(e?.code==="rate_limited"?"Too many requests right now. Try again in a minute.":e?.code==="not_granted"?"Claude needs your permission in this page first.":"I couldn't answer that. Try again.",{err:true}); }
     PC.busy=""; draw(); }
   async function handle(r,fresh){ const txt=String(r.say||"").trim().slice(0,900);
@@ -6019,7 +6042,7 @@ Return ONLY JSON:
     if(PC.src&&r.source&&typeof r.source==="object"&&fresh.some(i=>PC.refs[i]===PC.src.ref)){ const f={}; for(const [k] of F) if(typeof r.source[k]==="string") f[k]=r.source[k].trim().slice(0,300); PC.src.f=f; PC.src.issues=(Array.isArray(r.source.issues)?r.source.issues:[]).map(String).slice(0,5);
       try{ const bmp=await createImageBitmap(PC.src.blob), ar=bmp.width/bmp.height, as=$("aspect"), best=[...as.options].map(o=>o.value).filter(v=>/^\d+:\d+$/.test(v)).map(v=>[v,Math.abs(Math.log(ar/(v.split(":")[0]/v.split(":")[1])))]).sort((a,b)=>a[1]-b[1])[0]; if(best) PC.card.aspect=best[0]; }catch{} }
     if(r.card&&typeof r.card==="object") PC.card={...PC.card,...clean(r.card)};
-    if(+r.count>=1) PC.n=Math.max(1,Math.min(4,Math.round(+r.count)));
+    if(+r.count>=1) PC.n=nFit(r.count);
     if(PC.src){ if(r.keep&&typeof r.keep==="object") for(const [k] of F) if(k!=="who"&&typeof r.keep[k]==="boolean") PC.keep[k]=r.keep[k]; PC.keep.who=false; for(const [k] of F) if(k!=="who"&&PC.card[k]&&r.card?.[k]&&r.keep?.[k]===undefined&&!fresh.length) PC.keep[k]=false; }
     const m={r:"a",t:txt}; if(r.ask&&typeof r.ask==="object"&&r.ask.q) m.ask={q:String(r.ask.q).slice(0,240),options:(Array.isArray(r.ask.options)?r.ask.options:[]).map(o=>String(o).slice(0,70)).slice(0,5)};
     if(!m.ask&&Array.isArray(r.chips)){ const ch=r.chips.map(o=>String(o||"").trim().slice(0,60)).filter(Boolean).slice(0,4); if(ch.length) m.chips=ch; }
@@ -6035,10 +6058,10 @@ Return ONLY JSON:
     try{ await editImage(x.k,change); }catch{} clearInterval(t); PC.busy=""; if(x.c.outs.length>n) PC.msgs.push({r:"a",t:"",res:{imgs:snap(x.k,n)}}); else say(x.c.editErr||"The change didn't come back. Nothing else was touched.",{err:true}); }
   const uses=()=>PC.refs.filter(r=>ROLE_USE[r.role]&&(r.id||r.file||r.blob)).slice(0,5);
   async function create(angles){ if(PC.busy) return; if(PC.src||(uses().length&&!angles)) return shoot(); if(!compose(PC.card).replace(/\W/g,"")){ say("Tell me the photo first.",{err:true}); draw(); return; }
-    const b=apply(), n=angles?1:PC.n, got=[]; const t=watch(); S.quiet=true;
-    for(let i=0;i<n;i++){ PC.busy=angles?"Creating 4 angles…":n>1?`Creating image ${i+1} of ${n}…`:"Creating the image…"; draw();
-      try{ if(angles){ S.angles=ANGLES4; try{ await createAll(); } finally{ S.angles=null; } } else await createAll(); }catch(e){ log("✕","talking create",{message:e?.message}); }
-      const now=snap(genKeys()[0]); if(!now.some(u=>!got.includes(u))) break; for(const u of now) if(!got.includes(u)) got.push(u); }
+    const b=apply(), n=angles?1:PC.n, got=[]; const t=watch(); S.quiet=true; const cEl=$("count"), c0=cEl?.value;
+    PC.busy=angles?"Creating 4 angles…":n>1?`Creating ${n} images…`:"Creating the image…"; draw();
+    try{ if(angles){ S.angles=ANGLES4; try{ await createAll(); } finally{ S.angles=null; } } else { if(cEl) cEl.value=String(n); S.batch=true; await createAll(); } }catch(e){ log("✕","talking create",{message:e?.message}); } finally{ S.batch=false; if(cEl) cEl.value=c0; }
+    got.push(...snap(genKeys()[0]));
     S.quiet=false; clearInterval(t); PC.busy="";
     const k=genKeys()[0]; if(got.length) PC.msgs.push({r:"a",t:"",res:{imgs:got.slice(-Math.max(n,angles?4:1))},brief:b}); else say(cards[k]?.err||$("flowMsg")?.textContent||"The image didn't come back.",{err:true}); draw(); }
   /* a library image as a Magnific reference: linked library first, then a one-time upload that is remembered */
@@ -6071,16 +6094,15 @@ ${castT.length?`THE PEOPLE: ${castT.map(([n,t])=>`${n} is the person of ${t}: id
 ${roles.length?`REFERENCE ROLES (each must be said in the prompt: its tag, what is taken from it, what is NOT copied):\n${roles.map(r=>`${r.tag} — ${r.use}`).join("\n")}`:""}
 HOUSE STYLE for everything you write: candid, mid-action, nobody looks at the camera, Jordanian people and places, quiet uncluttered scene, the main subject in the centre with calm space on both sides, solid colours and fine fabrics, no logos, no text, no car badges or number plates${fit&&/staff/i.test(fit.name)?" except the bank's marks on the staff polo, exactly as on its sheet":""}. A product the scene names (a card, a phone and its screen, a car, keys) may be visible; any phone is a modern iPhone 18 with no logo. If an outfit sheet is given, the person wears exactly those pieces; never show the flat-lay or its board.
 Write the prompt in English, 110 to 190 words, in this order: ${s?`1. "Recreate @img1 as a new photograph." 2. LOCK: what stays identical to @img1. 3. REPLACE: each change, concrete, naming its reference.`:`1. The scene in two or three concrete sentences: who, doing what, where, the light${c.grade?", the colours":""}. 2. Each character, naming its sheet.`} ${roles.length?`Then "REFERENCE ROLES." and one sentence per designer reference: its tag, what to copy from it, what not to copy. `:""}End with: "Photorealistic, 2K, natural skin texture, no text, no logos, no watermark."
-Return ONLY JSON: {"prompt":"…","summary":"what this photo is, in 8 words or fewer"}`,{modelTier:"complex",cache:false,...(sampleImages?{images:refs.filter(r=>r.img).map(r=>r.img).slice(0,sampleImages.maxCount||4)}:{})});
+Return ONLY JSON: {"prompt":"…","summary":"what this photo is, in 8 words or fewer"}`,{...mdl(),modelTier:"complex",cache:false,...(sampleImages?{images:refs.filter(r=>r.img).map(r=>r.img).slice(0,sampleImages.maxCount||4)}:{})});
       const prompt=String(w?.prompt||"").trim(); if(!prompt) throw {code:"bad_answer",message:"The prompt came back empty. Nothing was spent."};
       const pf=$(MODELS[k].prompt); if(pf){ pf.value=prompt; pf.dispatchEvent(new Event("input",{bubbles:true})); }
-      let lastErr=null; for(let i=0;i<PC.n;i++){ PC.busy=`Rendering${PC.n>1?` ${i+1} of ${PC.n}`:""}: ${String(w.summary||"your photo").slice(0,60)}…`; draw();
-        try{ const out=await rlJob(()=>rlImage({prompt,aspect:aspectText(),refs:refs.map(r=>({id:r.id,tag:r.tag})),label:"talking"}));
-          const src=rlFull[out.id]||null, o={id:out.id,url:null,img:src,blob:null,long:2048,webUrl:out.web||null,pending:false,edit:s?"Remake":"From your pictures"}; if(src){ try{ const mm=src.match(/^data:([^;]+);base64,(.*)$/); if(mm) o.blob=b64Blob(mm[2],mm[1]); }catch{} }
-          try{ await completeFiles(o,{ids:[o.id],urls:[],links:[],images:[]}); }catch{} made.push(o); }
+      let lastErr=null; const mk=async id=>{ const src=rlFull[id]||null, o={id,url:null,img:src,blob:null,long:2048,webUrl:null,pending:false,edit:s?"Remake":"From your pictures"}; if(src){ try{ const mm=src.match(/^data:([^;]+);base64,(.*)$/); if(mm) o.blob=b64Blob(mm[2],mm[1]); }catch{} } try{ await completeFiles(o,{ids:[id],urls:[],links:[],images:[]}); }catch{} return o; };
+      for(let round=0;round<2&&made.length<PC.n;round++){ const need=PC.n-made.length; PC.busy=`Rendering ${PC.n>1?PC.n+" images":""}: ${String(w.summary||"your photo").slice(0,60)}…`; draw();
+        try{ const out=await rlJob(()=>rlImage({prompt,aspect:aspectText(),refs:refs.map(r=>({id:r.id,tag:r.tag})),label:"talking",count:need})); for(const x of (out.all||[{id:out.id,web:out.web}])){ const o=await mk(x.id); o.webUrl=x.web||out.web||null; made.push(o); } }
         catch(e){ lastErr=e; if(!made.length) throw e; break; } }
       cards[k]={busy:false,done:true,t0:Date.now(),steps:["ok","ok","ok","ok"],stepNote:[s?"remake of your photo":"built on your pictures","","",""],outs:made,sel:0,editMsg:"Change one thing, or keep talking."}; renderCard(k,cards[k]); try{ syncButtons(); }catch{} for(const o of made) if(o.url||o.img) addHistory(o,k);
-      PC.busy=""; const im=snap(k); if(im.length) PC.msgs.push({r:"a",t:lastErr?`I made ${made.length} of ${PC.n}. The next one didn't come back.`:"",res:{imgs:im},brief:b}); else say("Magnific finished but sent no picture. Open Recent under All tools in a minute.",{err:true});
+      PC.busy=""; const im=snap(k); if(im.length) PC.msgs.push({r:"a",t:made.length<PC.n?`I made ${made.length} of ${PC.n}. The others didn't come back.`:"",res:{imgs:im},brief:b}); else say("Magnific finished but sent no picture. Open Recent under All tools in a minute.",{err:true});
     }catch(e){ log("✕","talking shoot",{code:e?.code,message:e?.message}); PC.busy=""; say(e?.code==="refs_missing"?"Couldn't attach your pictures. Nothing was spent.":(e?.code==="x"||e?.code==="bad_answer"?e.message:(["not_granted","rate_limited","refused"].includes(e?.code)&&!e.server?sampleCopy(e):mcpCopy(e))),{err:true}); }
     draw(); }
   /* the picture placed inside the layout he dropped: Claude marks the picture area and the areas that must stay on top */
@@ -6105,7 +6127,8 @@ Return ONLY JSON: {"prompt":"…","summary":"what this photo is, in 8 words or f
   $("pcFile").addEventListener("change",e=>{ attach([...(e.target.files||[])]); e.target.value=""; });
   el.addEventListener("dragover",e=>{ if(e.dataTransfer?.types?.includes("Files")){ e.preventDefault(); el.classList.add("drag"); } }); el.addEventListener("dragleave",()=>el.classList.remove("drag"));
   el.addEventListener("drop",e=>{ el.classList.remove("drag"); const f=[...(e.dataTransfer?.files||[])].filter(x=>/^image\//.test(x.type)); if(f.length){ e.preventDefault(); e.stopPropagation(); attach(f); } });
-  el.addEventListener("change",e=>{ if(e.target.id==="pcAspect"){ PC.card.aspect=e.target.value; apply(); } const rs=e.target.closest?.("[data-pcrole]"); if(rs){ setRole(+rs.dataset.pcrole,rs.value); draw(); } });
+  { const ms=$("pcModel"); if(ms){ ms.value=PC.model; if(ms.value!==PC.model){ PC.model=""; ms.value=""; } } $("pcMod")?.addEventListener("toggle",e=>{ if(e.target.open&&!$("pcUsing").textContent) probe(); }); }
+  el.addEventListener("change",e=>{ if(e.target.id==="pcModel"){ PC.model=e.target.value; try{ localStorage.setItem("bae_talk_model",PC.model); }catch{} probe(); return; } if(e.target.id==="pcAspect"){ PC.card.aspect=e.target.value; apply(); } const rs=e.target.closest?.("[data-pcrole]"); if(rs){ setRole(+rs.dataset.pcrole,rs.value); draw(); } });
   el.addEventListener("click",async e=>{ const t=e.target, q=s=>t.closest(s); let b;
     if((b=q("[data-pcsay]"))){ if(!PC.busy) turn(b.dataset.pcsay); return; }
     if((b=q("[data-pcatt]"))){ PC.att.splice(+b.dataset.pcatt,1); draw(); return; }
@@ -6113,7 +6136,7 @@ Return ONLY JSON: {"prompt":"…","summary":"what this photo is, in 8 words or f
     if((b=q("[data-pcdel]"))){ const mine=b.dataset.pcdel===PC.id; clearTimeout(tkT); await tkDel(b.dataset.pcdel); if(mine){ PC.msgs=[]; PC.card={}; PC.src=null; PC.keep={}; PC.fix=null; PC.att=[]; PC.edit=null; PC.refs=[]; PC.layout=null; PC.n=1; draw(); } await tkRecent(true); return; }
     if((b=q("[data-pcrefx]"))){ if(!PC.busy){ dropRef(+b.dataset.pcrefx); draw(); } return; }
     if((b=q("[data-pcrefv]"))){ openLightbox(PC.refs[+b.dataset.pcrefv]?.url); return; }
-    if((b=q("[data-pcn]"))){ PC.n=Math.max(1,Math.min(4,PC.n+(+b.dataset.pcn))); draw(); return; }
+    if((b=q("[data-pcn]"))){ PC.n=NS[Math.max(0,Math.min(NS.length-1,NS.indexOf(nFit(PC.n))+(+b.dataset.pcn)))]; draw(); return; }
     if((b=q("[data-pcset]"))){ PC.card.setting=b.dataset.pcset; apply(); drawCard(); return; }
     if((b=q("[data-pckeep]"))){ const k=b.dataset.pckeep; PC.keep[k]=!PC.keep[k]; PC.edit=PC.keep[k]?null:k; drawCard(); return; }
     if((b=q("[data-pcedit]"))){ PC.edit=b.dataset.pcedit; drawCard(); return; }
@@ -6150,7 +6173,7 @@ Return ONLY JSON: {"prompt":"…","summary":"what this photo is, in 8 words or f
   const tkWhereText=()=>tkWhere==="account"?"Your chats are saved in your account.":tkWhere==="device"?"Your chats are saved on this device only.":tkWhere==="none"?"This chat could not be saved.":"";
   async function tkList(){ let list=lsGet(TK,[]).filter(x=>x&&x.id); try{ await rlStoreInit(); if(RLS.db&&RLS.uid){ const snap=await rlCol().where("kind","==","talk").get(), by=new Map(list.map(x=>[x.id,x])); for(const d of snap.docs){ const v=d.data(); if(v?.id&&(!by.has(v.id)||(by.get(v.id).updatedAt||0)<(v.updatedAt||0))) by.set(v.id,v); } list=[...by.values()]; if(!tkWhere) tkWhere="account"; } }catch{} if(!tkWhere&&list.length) tkWhere="device";
     return list.sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).slice(0,40); }
-  function tkLoad(c){ PC.id=c.id; PC.msgs=(c.msgs||[]).map(m=>({...m})); PC.card={...(c.card||{})}; PC.n=Math.max(1,Math.min(4,+c.n||1)); PC.att=[]; PC.edit=null; PC.layout=null; PC.busy="";
+  function tkLoad(c){ PC.id=c.id; PC.msgs=(c.msgs||[]).map(m=>({...m})); PC.card={...(c.card||{})}; PC.n=nFit(c.n); PC.att=[]; PC.edit=null; PC.layout=null; PC.busy="";
     PC.refs=(c.refs||[]).map(r=>({file:null,blob:null,url:r.url,role:r.role||"look",what:r.what||"",id:r.id||null,old:true}));
     const sr=PC.refs[c.srcI]; if(sr&&sr.id&&sr.role==="remake"){ PC.src={ref:sr,blob:null,file:null,url:sr.url,f:c.srcF||{},issues:c.srcIssues||[]}; PC.keep={...(c.keep||{})}; PC.fix=c.fix??null; } else { PC.src=null; PC.keep={}; PC.fix=null; PC.refs.forEach(r=>{ if(r.role==="remake"&&!r.id) r.role="look"; }); } }
   async function tkOpen(id){ if(PC.busy) return; await tkSave(); const c=(await tkList()).find(x=>x.id===id); if(!c) return; tkLoad(c); PC.recent=null; draw(); }

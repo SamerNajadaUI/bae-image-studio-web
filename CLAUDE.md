@@ -15,7 +15,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 167 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 168 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openResize`, `openBrand`):
 
@@ -345,3 +345,5 @@ Known limits: tiles appear in his Magnific history; a 2560×1440 source means th
 
 **v166.** A character named in the card is matched by ANY of its aliases as a whole word (`nameAt`, `charAliases`): Salma's sheet was dropped because her library name is "Salma / سلمى" and only the full string was matched; "oun" also matched inside "young" in the classic brief. A character written with @ that is not in the library stops `shoot()` before anything is spent.
 **v167: New chat / Recent.** Every talk is saved 0.9 s after it changes (`tkSave`): the words, the summary card, small JPEG copies of the pictures and results, and each picture's Magnific id once it was uploaded. Local list `bae_talk_chats` (20 chats) plus, when the account is there, one document `talk_<id>` in `data/users/<uid>` trimmed under 235 KB (same 256 KB limit as reels). `Recent` lists them (account and device merged, newest first), says where they are saved, opens or deletes one. Original files are NOT kept: a restored picture without a Magnific id shows "Add it again to use it" and is left out of `uses()`. A chat touched in the last 30 minutes is restored on load, so a new studio version does not wipe the talk he is in. Account saving is tested only with the device path (the test has no database).
+**v168: one call for N images, and the Claude model.** Talking's count is 1, 2, 4 or 8 (`NS`, `nFit`). N images are ONE `images_generate` call with its count set (`magCount`; never name a function `setCount`, the classic stepper owns that name). `rlImage({count})` returns `all:[{id,web}]`; `generate()` takes the batch branch only when `S.batch` is on (Talking sets it and puts `#count` back). If Magnific returns fewer creations than asked, the missing ones are asked for once more. Each id is waited for on its own (`waitFor([id])`), because `waitFor` returns as soon as any one is done. The classic page still makes one call per image.
+`Claude model` (under the chat): Auto, Fable 5.2, Opus 5.5, Sonnet 5.5, Haiku 5.5, kept in `bae_talk_model`, sent as `model` on the chat turn and on the prompt writer. The page can only ask: `probe()` makes a tiny `sample()` call and shows `modelApplied` ("Answering now: …", or "That model is not available here"). The shape of `modelApplied` is assumed (a string, or an object with model / name / id) and has never been seen for real.
