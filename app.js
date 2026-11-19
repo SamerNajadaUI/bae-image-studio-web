@@ -212,9 +212,11 @@ const charName=id=>((refById(id)?.lib?refById(id).defName:CHAR_NAMES[id]||refByI
 const charAliases=id=>charName(id).split("/").map(s=>s.trim()).filter(Boolean);
 const charLabel=id=>charAliases(id)[0]||id;
 const isChar=id=>/^ch_/.test(id);
+/* where a name stands in a text as a WHOLE word ("oun" is not inside "young"); -1 when it does not */
+const nameAt=(text,name)=>{ const t=String(text||"").toLowerCase(), n=String(name||"").toLowerCase().trim(); if(!n) return -1; const L=/[\p{L}\p{N}]/u; for(let k=t.indexOf(n);k>=0;k=t.indexOf(n,k+1)){ if(!(k>0&&L.test(t[k-1]))&&!(k+n.length<t.length&&L.test(t[k+n.length]))) return k; } return -1; };
 /* Characters named in the brief, in brief order */
 function castInBrief(){ const b=($("brief")?.value||"").toLowerCase();
-  return CHAR_REFS.map(r=>{ let at=-1; for(const n of charAliases(r.id)){ const k=b.indexOf(n.toLowerCase()); if(k>=0&&(at<0||k<at)) at=k; } return {id:r.id,at}; })
+  return CHAR_REFS.map(r=>{ let at=-1; for(const n of charAliases(r.id)){ const k=nameAt(b,n); if(k>=0&&(at<0||k<at)) at=k; } return {id:r.id,at}; })
     .filter(x=>x.at>=0).sort((x,y)=>x.at-y.at).map(x=>x.id); }
 /* Put named characters first in the references (they must reach the model), auto-removing ones the brief no longer names */
 function syncCast(){ if(S.mode==="icon") return;
@@ -5891,7 +5893,7 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
     if(c.setting){ const bt=document.querySelector(`.seg[data-key="setting"] button[data-v="${c.setting}"]`); if(bt&&bt.getAttribute("aria-pressed")!=="true") bt.click(); }
     const as=$("aspect"); if(as&&c.aspect&&as.value!==c.aspect&&[...as.options].some(o=>o.value===c.aspect)){ as.value=c.aspect; as.dispatchEvent(new Event("change",{bubbles:true})); } return b; }
   const cur=()=>{ const k=genKeys()[0], c=cards[k], o=c?.outs?.[c.sel||0]; return o?.id?{k,c,o}:null; };
-  const chars=txt=>{ const t=String(txt||"").toLowerCase(); return CHAR_REFS.filter(r=>{ const n=charName(r.id).toLowerCase(); return n&&t.includes("@"+n); }); };
+  const chars=txt=>CHAR_REFS.map(r=>({r,at:Math.min(...charAliases(r.id).map(n=>nameAt(txt,n)).filter(k=>k>=0),Infinity)})).filter(x=>x.at<Infinity).sort((a,b)=>a.at-b.at).map(x=>x.r);
   /* ----- drawing ----- */
   const say=(t,extra)=>{ PC.msgs.push({r:"a",t:String(t||""),...(extra||{})}); };
   function msgHTML(m,i){ const last=i===PC.msgs.length-1, live=m.res&&i===PC.msgs.map(x=>!!x.res).lastIndexOf(true);
@@ -5933,7 +5935,7 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
     if(role==="remake"){ PC.refs.forEach(x=>{ if(x!==R&&x.role==="remake"){ x.role="composition"; } });
       if(PC.src?.ref!==R){ PC.src={ref:R,blob:R.blob,file:R.file,url:R.url,f:{},issues:[]}; PC.keep={outfit:true,action:true,place:true,camera:true,light:true}; PC.fix=null; } } }
   function dropRef(i){ if(!PC.refs[i]) return; setRole(i,"look"); PC.refs.splice(i,1); }
-  function ask(text,fresh){ const lib=atChars().map(c=>"@"+c.name).slice(0,60).join(", ")||"(none yet)", c=cur(), tail=PC.msgs.slice(-13,-1).map(m=>`${m.r==="u"?"DESIGNER":"YOU"}: ${String(m.t||m.ask?.q||(m.res?"[you delivered an image]":"")).slice(0,400)}${m.r==="u"&&m.imgs?.length?` [with ${m.imgs.length} picture(s)]`:""}${m.dirs?" [you offered: "+m.dirs.map(d=>d.title).join(" / ")+"]":""}`).join("\n");
+  function ask(text,fresh){ const lib=atChars().map(c=>"@"+c.name.split("/")[0].trim()+(c.name.includes("/")?" (also written "+c.name.split("/").slice(1).map(x=>x.trim()).join(", ")+")":"")).slice(0,60).join(", ")||"(none yet)", c=cur(), tail=PC.msgs.slice(-13,-1).map(m=>`${m.r==="u"?"DESIGNER":"YOU"}: ${String(m.t||m.ask?.q||(m.res?"[you delivered an image]":"")).slice(0,400)}${m.r==="u"&&m.imgs?.length?` [with ${m.imgs.length} picture(s)]`:""}${m.dirs?" [you offered: "+m.dirs.map(d=>d.title).join(" / ")+"]":""}`).join("\n");
     const pics=PC.refs.map((r,i)=>`${i+1}. ${fresh.includes(i)?"NEW — attached to this message as image "+(fresh.indexOf(i)+1):"role: "+(r.role||"look")+(r.what?" — "+r.what:"")}`).join("\n");
     return `You are Claude, working as the art director inside BAE Studio, the image studio of Bank al Etihad (Jordan). The person talking to you is a designer or a marketing colleague. Some are not technical and some are in their forties or fifties. Talk like a helpful colleague in THEIR language (usually Jordanian Arabic, sometimes English): plain everyday words, short sentences, never formal, no jargon (say "الألوان", not "color grading", unless they said it first). You are free to think: give your opinion, suggest ideas, say why, answer any question about the picture or the campaign. The goal is ONE photograph they are happy with, in as few steps as possible. You keep a shot card; the studio writes the final image prompt from it, so you never write that prompt.
 
@@ -6047,6 +6049,7 @@ Return ONLY JSON:
   async function shoot(){ const c=PC.card, s=PC.src, k="nano"; if(PC.busy) return; const cast=chars(c.who).slice(0,3), U=uses();
     if(s&&s.f.who&&!cast.length){ say("",{ask:{q:"Which character replaces the person in the photo? Type @ and pick one.",options:atChars().slice(0,4).map(x=>"@"+x.name)}}); draw(); return; }
     if(!s&&!compose(c).replace(/\W/g,"")){ say("Tell me the photo first.",{err:true}); draw(); return; }
+    if(/@\S/.test(c.who||"")&&!cast.length){ say("I can't find that character in the library, so I stopped before spending anything. Type @ and pick the name from the list.",{err:true}); draw(); return; }
     if(S.mode==="icon") setMode("photo"); PC.busy="Sending your pictures to Magnific at full size…"; draw(); const b=apply(); let made=[];
     try{ if(!mcp||S.web) throw {code:"x",message:"Magnific isn't reachable in this view. Open the studio in claude.ai."}; if(!S.connected) await connect(true);
       const refs=[], give=async(R,name)=>{ if(!R.id){ const up=await rlUploadMag(R.file||R.blob,name); if(!up?.id) throw {code:"tool_error",message:"Magnific returned no identifier for one of your pictures."}; R.id=up.id; } return R.id; };
