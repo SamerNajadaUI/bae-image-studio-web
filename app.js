@@ -125,18 +125,56 @@ const BAE_REFS = [
  ["st_minimal_02","BAE STUDIO STYLE (master reference): man seated cross-legged on a light-oak chair, navy tailored suit over a cream crew-neck knit, burgundy socks, white-painted textured wall with soft raking sunlight, light oak floor, wide negative space",1]
 ].map(([id,d,st])=>({id,d,src:/^st_/.test(id)?`refs/${id}_t.jpg`:`refs/${id}.jpg`,set:"bae",studio:!!st,auto:/^st_/.test(id)}));
 const ALL_REFS=[...BAE_REFS,...REFS];
-/* BAE References library (see blSync) */
-const BL={list:[],loaded:0,busy:"",err:"",note:"",canEdit:false}; const BL_FOLDER="b43599ff-a42c-45b1-a469-21afde68b08d"; const blRefId=id=>"bl_"+id;
+/* BAE References (v173): the bank's own reference photos, made in Magnific from the house candid style. A small copy (512-640 px) ships with the studio so the
+   tab is always full; "mag" is the Magnific identifier of the 2K original, used directly when the studio OWNER renders (see BR_OWNER). Add a photo = add a row + refs/<id>.jpg. */
+const BREFS=[
+ ["br01", "O6EW5iqynm", "A father laughing with a latte in a café, his son behind him, over-the-shoulder with a blurred face in the foreground, warm daylight"],
+ ["br02", "aFGs2axfSh", "Three friends laughing in aircraft seats, one blurred in the foreground, low warm sun from the window"],
+ ["br03", "UPvzhyVwny", "Two women sharing a laptop and coffee on a café bench, high angle looking down, direct flash look"],
+ ["br04", "xSBiX70jfW", "Three colleagues talking at a café table seen from far through a sheer curtain, tulips in the foreground, low sun and long shadows"],
+ ["br05", "hu2jZKevqL", "Three people working with laptops and papers on a sofa and the floor of a lounge, high angle from above"],
+ ["br06", "If31ikutvE", "An old man laughing in the sun on a terrace, glasses in his raised hand, limestone wall, hard warm sunlight"],
+ ["br07", "VX7EwFGMMU", "A woman laughing with a coffee cup seen from outside through café window reflections"],
+ ["br08", "aFGsAJGfSh", "Two women laughing in a home kitchen, one lifting a bowl above her head, direct flash look"],
+ ["br09", "DoOQJsapcl", "Two women laughing at a small round café table with iced coffee and a croissant, bright daylight, green garden behind"],
+ ["br10", "1ldNBXKr4r", "A man relaxing on a sofa framed through a wooden frame in the foreground, burgundy wall, quiet side light"],
+ ["br11", "vQALzWea47", "Two children running in a garden seen from far through blurred leaves, evening light"],
+ ["br12", "DoOQPZxpcl", "A woman working at a laptop in a sunlit library, long lens from far, sun patches and deep shadows"],
+ ["br13", "SyhAH9XUb8", "Two men talking in profile at a café window bar on stools, street behind the glass, soft daylight"],
+ ["br14", "yiuc1WePW9", "A mother holding her laughing daughter who stands on a step stool in an oak kitchen, wide, soft daylight"],
+ ["br15", "jUo3IHELD0", "A woman with a laptop on her lap and a pencil in her mouth beside a busy desk, high angle from above"],
+ ["br16", "VX7EOWKMMU", "A woman on a video call at a desk at night with two monitors, warm lamp light, side view"],
+ ["br17", "9ZHM568NYZ", "A young man with headphones looking at his phone in a crowded train, low angle looking up"],
+ ["br18", "vQALnF1a47", "A man working at a laptop at a café table beside a large plant, wide, soft daylight"],
+ ["br19", "5jDPdgFKxe", "A woman preparing herbs at a kitchen island, frontal wide shot, warm wood kitchen"],
+ ["br20", "eIPH641dqL", "A woman pouring from a kettle in a home kitchen, profile, soft film look, flowers blurred in the foreground"],
+ ["br21", "1ldN8I1r4r", "A woman holding a cup at a dining table looking away, wide shot through a doorway, calm cream room"],
+ ["br22", "4RFV5xO9Aa", "A woman drinking and reading on a sofa at home, wide calm living room, soft window light"],
+ ["br23", "P3QTbs542C", "A woman drawing at a studio table with a man working behind her, low wide angle, big windows"],
+ ["br24", "hu2jnByvqL", "A woman drafting plans at a workshop table, low angle close to the table, warm curtain light"],
+ ["br25", "xSBit14jfW", "A mother and her laughing son who sits on the kitchen counter, mother cropped in the foreground, bright daylight"],
+ ["br26", "Xm9bRI2Bfo", "A boy kissing his mother on the cheek at the breakfast table, frontal, soft daylight"],
+ ["br27", "bxMyXLp5Y2", "Two women at a brunch table seen through blurred plants in the foreground, bright dining room"],
+ ["br28", "MBJuNlqDCm", "A woman talking on her phone in a kitchen with a paper grocery bag, sun rays through the window"],
+ ["br29", "rgX6mdtxtc", "A woman smiling at her phone on a terrace at dusk, string lights and hills behind"],
+ ["br30", "rgX6m8Yxtc", "First-person view: hands pulled along by a laughing woman running through a green field, motion blur"],
+ ["br31", "1ldNttkr4r", "A woman reading on a wooden chair on a hillside, long lens from far, dry sunny landscape"],
+ ["br32", "xSBihEWjfW", "Three friends at a picnic on the grass, very low wide angle, a woman eating a strawberry in the foreground, blue sky, hard sun"],
+ ["br33", "Lw8RabdswO", "A woman sitting on a picnic blanket shading her eyes, small in a wide green park, hard sun"],
+ ["br34", "hu2jW8yvqL", "A barista pouring coffee over glass drippers seen from outside through window reflections"]
+];
+BREFS.forEach(([id,mag,d])=>ALL_REFS.push({id,d:"BAE reference: "+d,src:`refs/${id}.jpg`,set:"bae",studio:false,bl:true,mag}));
+let BR_OWNER=false;
 AT_OUTFITS.forEach(o=>ALL_REFS.push({id:o.id,d:"Outfit sheet: "+o.name+" — "+o.d,src:o.src,set:"of",studio:false,auto:true,outfit:o.name}));
 const refById=id=>ALL_REFS.find(r=>r.id===id);
 const isOutfit=id=>/^of_\d/.test(String(id||""));
 const PICK_STUDIO=["st_minimal_01","st_minimal_02"];
-const PICK_LOCATION=[]; /* filled from BAE References when the library loads (blSync) */
+const PICK_LOCATION=["br13","br14","br22","br32"];
 /* Youth campaign references sent by the client (style, wardrobe and camera only) */
 const YOUTH_REFS = [];
 ALL_REFS.push(...YOUTH_REFS);
 /* Bold defaults lean on the BAE guideline frames (clean, refined) with one youth frame for camera energy only */
-const PICK_BOLD=[];
+const PICK_BOLD=["br13","br14","br22","br32"];
 const PICK_BOLD_STUDIO=["st_minimal_01","st_minimal_02"];
 /* BAE illustration set (guidelines p.101, light mode), used as style direction for the Icons mode */
 const ICON_REFS=[
@@ -634,9 +672,6 @@ function renderRefs(){
       box.appendChild(w); return; }
     b.onclick=()=>{ const j=S.picked.indexOf(r.id); if(j>=0) S.picked.splice(j,1); else if(S.picked.length<MAX_REFS) S.picked.push(r.id); renderRefs(); };
     box.appendChild(b); });
-  if(S.refTab==="bae"){ const head=document.createElement("div"); head.className="cl-head";
-    head.innerHTML=(BL.canEdit?`<div class="cl-mag"><button type="button" class="btn small" data-blsync ${BL.busy?"disabled":""}>Sync from Magnific</button><span class="t12 muted">${BL.list.length} photos from your “bae reference” folder${BL.note?" · "+esc(BL.note):""}</span></div>`:"")+(BL.busy?`<p class="t12" role="status">${esc(BL.busy)}</p>`:"")+(BL.err?`<p class="t12 bad" role="alert">${esc(BL.err)}</p>`:"")+(!BL.list.length&&BL.loaded&&!BL.busy?`<p class="muted cl-empty">${BL.canEdit?"No photos yet. Press Sync from Magnific to bring in the folder.":"No photos yet. The studio owner adds them."}</p>`:"");
-    const sy=head.querySelector("[data-blsync]"); if(sy) sy.onclick=()=>blImport(); box.prepend(head); }
   if(S.refTab==="ch"){
     if(!CL.loaded&&!CL._loading){ CL._loading=true; clLoad().then(()=>{ CL._loading=false; renderRefs(); clMigrateLocal(); }); }
     const head=document.createElement("div"); head.className="cl-head"; head.innerHTML=clTabsHTML()+(CL.canEdit&&CL.list.length?`<div class="cl-mag"><button type="button" class="btn small" data-clmag ${CL.busy?"disabled":""}>Send all to Magnific</button><span class="t12 muted">${clMagCount()} of ${CL.list.length} are on your Magnific</span></div>`:"")+(CL.busy?`<p class="t12" role="status">${esc(CL.busy)}</p>`:"")+(CL.err?`<p class="t12 bad" role="alert">${esc(CL.err)}</p>`:"");
@@ -1547,37 +1582,10 @@ async function clStoreImage(id,blob){
   try{ const u=JSON.parse(localStorage.getItem("bae_user_magids")||"{}"); delete u[clRefId(id)]; localStorage.setItem("bae_user_magids",JSON.stringify(u)); }catch{}
   rlUploadMag(blob,"character-"+id).then(up=>{ if(!up?.id) return; try{ const u=JSON.parse(localStorage.getItem("bae_user_magids")||"{}"); u[clRefId(id)]=up.id; localStorage.setItem("bae_user_magids",JSON.stringify(u)); }catch{} const c=CL.list.find(x=>x.id===id); if(c){ c._mag=true; if(S.refTab==="ch") renderRefs(); } }).catch(e=>log("·","original not sent to Magnific yet",{code:e?.code,message:e?.message}));
   return {full,fields:{thumb,asset,mime:blob.type||"image/jpeg",px:dims,orig:!!asset}}; }
-/* BAE References (v170): the team's own reference photos. The owner keeps them in ONE Magnific folder; "Sync from Magnific" copies every image
-   at full size into the page's file store (so the whole team has it), writes a one-line description for auto-pick, and removes what left the folder.
-   Docs: brefs/<id> {d, thumb, asset, mime, px, mag, at}. In ALL_REFS they sit in set "bae" with bl:true. */
-function blSync(){ for(let i=ALL_REFS.length-1;i>=0;i--) if(ALL_REFS[i].bl) ALL_REFS.splice(i,1);
-  for(const c of BL.list) ALL_REFS.push({id:blRefId(c.id),docId:c.id,d:c.d||"Bank al Etihad reference photo",src:c.thumb||"",asset:c.asset||null,mime:c.mime||"image/png",blob:null,set:"bae",studio:false,bl:true});
-  const four=BL.list.slice(0,4).map(c=>blRefId(c.id)); PICK_LOCATION.splice(0,PICK_LOCATION.length,...four); PICK_BOLD.splice(0,PICK_BOLD.length,...four);
-  S.picked=S.picked.filter(id=>refById(id)); if(S.mode!=="icon"&&S.setting!=="Studio"&&!S.picked.some(id=>!isChar(id))) S.picked=[...S.picked,...four]; refCache=null; }
-async function blLoad(){ try{ await rlStoreInit(); if(!RLS.db) return; const sn=await RLS.db.collection("brefs").get(); BL.list=sn.docs.map(d=>({id:d.id,...JSON.parse(JSON.stringify(d.data()))})).sort((a,b)=>(a.at||0)-(b.at||0)); BL.loaded=Date.now(); }
-  catch(e){ BL.loaded=Date.now(); log("✕","BAE references",{code:e?.code,message:e?.message}); }
-  try{ const u=await window.claude?.use?.("user"); BL.canEdit=!!u?.canEdit?.(); }catch{} blSync(); }
-async function blBlob(r){ if(r.blob) return r.blob; const x=await fetch("/_blob/"+r.asset); if(!x.ok) throw {code:"not_found",message:"This reference photo is missing from the library."}; const b=await x.blob(); return r.blob=b.type?b:new Blob([b],{type:r.mime||"image/png"}); }
-async function blThumb(blob){ let t=""; for(const [px,q] of [[560,.8],[480,.76],[400,.72],[320,.7]]){ const bmp=await createImageBitmap(blob); const k=Math.min(1,px/Math.max(bmp.width,bmp.height)); const c=document.createElement("canvas"); c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k); c.getContext("2d").drawImage(bmp,0,0,c.width,c.height); t=c.toDataURL("image/jpeg",q); if(t.length<=60000) break; } return t; }
-async function blDescribe(blob){ try{ if(!sample) throw 0; const small=await toJpeg(blob,1024); const o=await sample.json(`Describe this Bank al Etihad reference photo in ONE line of at most 30 words, for a catalog used to pick style references: how many people and who (e.g. a mother and a girl), what they do, the place, the camera angle and distance, the light. No names, no brands. Reply with only JSON: {"d":""}`,{images:[small],modelTier:"default",cache:false}); const d=String(o?.d||"").replace(/\s+/g," ").trim().slice(0,240); if(d) return "BAE reference: "+d; }catch{} return "Bank al Etihad reference photo"; }
-async function blImport(){ if(BL.busy) return; BL.err=""; BL.note=""; let added=0, gone=0, bad=0;
-  try{ if(!mcp||S.web) throw {message:"Magnific isn't reachable in this view. Open the studio in claude.ai."};
-    BL.busy="Reading the folder on Magnific…"; renderRefs(); if(!S.connected) await connect(true); await rlStoreInit();
-    const A=await window.claude?.use?.("assets"); if(!A||!RLS.db) throw {message:"Only the studio's editors can bring photos in."};
-    const ids=[]; let whole=false; for(let page=1;page<=8;page++){ const r=await callMag("creations_search",{from:"project-root",reference:BL_FOLDER,fileType:"image",perPage:50,page}); const got=[...new Set(collectIds(r.payload??r.content))].filter(x=>!ids.includes(x)); ids.push(...got); if(got.length<50){ whole=true; break; } }
-    if(!ids.length) throw {message:"Magnific returned no images for the folder. Nothing was changed."};
-    const have=new Set(BL.list.map(c=>c.mag)); const todo=ids.filter(x=>!have.has(x)); let n=0;
-    for(const id of todo){ n++; BL.busy=`Bringing in ${n} of ${todo.length}…`; renderRefs();
-      try{ const blob=await rlFullImage(id); if(!blob||blob.size<5000||!/^image\//.test(blob.type||"image/png")) throw {message:"no image"};
-        const bm=await createImageBitmap(blob); const [d,thumb]=[await blDescribe(blob),await blThumb(blob)]; const up=await A.upload(blob); if(!up?.id) throw {message:"not stored"};
-        const docId="b"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); const doc={d,thumb,asset:up.id,mime:blob.type||"image/png",px:[bm.width,bm.height],mag:id,at:Date.now()};
-        await RLS.db.collection("brefs").doc(docId).set(doc); BL.list.push({id:docId,...doc}); const U=clMagMap(); U[blRefId(docId)]=id; localStorage.setItem("bae_user_magids",JSON.stringify(U)); added++; blSync(); }
-      catch(e){ bad++; log("✕","reference not brought in",{id,code:e?.code,message:e?.message}); } }
-    if(whole){ for(const c of BL.list.filter(c=>c.mag&&!ids.includes(c.mag))){ try{ await RLS.db.collection("brefs").doc(c.id).delete(); if(c.asset) await A.delete(c.asset).catch(()=>{}); BL.list.splice(BL.list.indexOf(c),1); gone++; }catch(e){ log("✕","reference not removed",{code:e?.code,message:e?.message}); } } }
-    BL.note=added||gone?`${added} added${gone?`, ${gone} removed`:""}`:"already up to date"; if(bad) BL.err=`${bad} could not be brought in. Press the button again.`; }
-  catch(e){ BL.err="Couldn't sync with Magnific: "+String(e?.message||e?.code||e).slice(0,160); }
-  BL.busy=""; blSync(); { const other=S.picked.filter(id=>!isChar(id)&&!refById(id)?.bl); if(!other.length&&S.mode!=="icon"&&S.setting!=="Studio") S.picked=[...S.picked.filter(isChar),...BL.list.slice(0,4).map(c=>blRefId(c.id))]; } renderRefs(); }
-setTimeout(()=>{ if(S.web) return; blLoad().then(()=>{ try{ renderRefs(); }catch{} }); },700);
+/* a BAE reference photo as a file (the small copy that ships with the studio) */
+async function blBlob(r){ if(r.blob) return r.blob; const x=await fetch(r.src); if(!x.ok) throw {code:"not_found",message:"This reference photo is missing."}; return r.blob=await x.blob(); }
+/* the owner's Magnific holds the 2K originals: link them so the owner's renders never use the small copy */
+setTimeout(async()=>{ try{ if(S.web) return; const u=await window.claude?.use?.("user"); BR_OWNER=!!(await u?.isOwner?.()); if(BR_OWNER){ S.magIds=S.magIds||{}; for(const r of ALL_REFS) if(r.bl&&r.mag) S.magIds[r.id]=r.mag; } }catch{} },600);
 /* Magnific copies of the library: every character sheet goes to the owner's Magnific once, at full size, named after the character,
    and the list (character -> Magnific identifier) is kept in the account, so the sheets can be used in work done outside the studio */
 function clMagMap(){ try{ return JSON.parse(localStorage.getItem("bae_user_magids")||"{}"); }catch{ return {}; } }
@@ -4527,6 +4535,7 @@ async function rlBible(){
 
 /* ================= New look + features (v84) ================= */
 /*UXDICT*/const UX_AR={
+"Tap the clothes for each person":"اكبس على لبس كل شخص",
 "Choose":"اختار","Take from a photo":"خذ من صورة","Pick up to 3 people":"اختار لحد 3 أشخاص","Use these people":"استعمل هدول","Pick the clothes for each person":"اختار لبس كل شخص","Keep as it is":"خلّيه زي ما هو","Use these clothes":"استعمل هاللبس","Choose the people first, then their clothes.":"اختار الأشخاص أول، بعدين لبسهم.","Camera and light":"الكاميرا والإضاءة","Camera angle only":"زاوية الكاميرا بس","Light only":"الإضاءة بس","Tap the photo to take it from":"اكبس على الصورة اللي بدك تاخذ منها","Tap the photo whose colours you want":"اكبس على الصورة اللي بدك ألوانها","On location":"تصوير خارجي","There are no BAE reference photos yet. Open All tools, then BAE References, and press Sync from Magnific.":"ما في صور مراجع للبنك لسا. افتح All tools، بعدين BAE References، واكبس Sync from Magnific.",
 "Sync from Magnific":"حدّث من Magnific","BAE References":"مراجع البنك","Reading the folder on Magnific…":"عم بقرأ الملف على Magnific…",
 "Send all to Magnific":"ابعث الكل على Magnific","Connecting to Magnific…":"عم بتصل بـ Magnific…","Saving the list…":"عم بحفظ القائمة…",
@@ -5925,11 +5934,13 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
   const say=(t,extra)=>{ PC.msgs.push({r:"a",t:String(t||""),...(extra||{})}); };
   /* the summary is a control panel: people, clothes, camera/light, colours and style are chosen by tapping; each choice is sent to Claude as one sentence so the whole card stays coherent */
   const RK=[null,"who","outfit",null,"cam","grade","style"], tr=(en,ar)=>UX.lang==="ar"?ar:en;
+  /* the outfit sheets that suit one character: men's for men, women's for women, children's for children; staff polos for adults */
+  const ofFor=r=>{ const c=r.cat||"", m=/\(men\)/i, w=/\(women\)/i; const L=AT_OUTFITS.filter(o=>c==="men"?(o.cat==="Men"||(o.cat==="Staff"&&m.test(o.name))):c==="women"?(o.cat==="Women"||(o.cat==="Staff"&&w.test(o.name))):c==="kids"?(o.cat==="Boys"||o.cat==="Girls"):c==="elderly"?(o.cat==="Men"||o.cat==="Women"):true); return L.length?L:AT_OUTFITS; };
   function pickHTML(){ const P=PC.pick, lib=ALL_REFS.filter(r=>r.bl), cast=chars(PC.card.who||"").slice(0,3);
-    const grid=()=>lib.length?`<div class="pc-pgrid wide">${lib.map(r=>`<button type="button" class="pc-pc" data-pcbl="${esc(r.id)}" title="${esc(r.d)}"><img src="${r.src}" alt="" loading="lazy"></button>`).join("")}</div>`:`<p class="t12 muted">There are no BAE reference photos yet. Open All tools, then BAE References, and press Sync from Magnific.</p>`;
+    const grid=()=>lib.length?`<div class="pc-pgrid wide">${lib.map(r=>`<button type="button" class="pc-pc" data-pcbl="${esc(r.id)}" title="${esc(r.d)}"><img src="${r.src}" alt="" loading="lazy"></button>`).join("")}</div>`:"";
     let b="";
     if(P.kind==="who") b=`<p class="t12 muted">Pick up to 3 people</p><div class="pc-pgrid">${CHAR_REFS.map(r=>`<button type="button" class="pc-pc" data-pcchar="${esc(r.id)}" aria-pressed="${P.sel.includes(r.id)}"><img src="${r.src||""}" alt="" loading="lazy"><span dir="auto" data-noi18n>${esc(charAliases(r.id)[0]||"")}</span></button>`).join("")}</div><div class="pc-chips strong"><button type="button" class="go" data-pcok="who" ${P.sel.length?"":"disabled"}>Use these people</button><button type="button" data-pcpick="">Cancel</button></div>`;
-    else if(P.kind==="outfit") b=cast.length?`<p class="t12 muted">Pick the clothes for each person</p>${cast.map(r=>`<label class="pc-of"><span dir="auto" data-noi18n>${esc(charAliases(r.id)[0]||"")}</span><select class="pc-sel" data-pcof="${esc(r.id)}"><option value="">Keep as it is</option>${AT_OUTFITS.map(o=>`<option value="${esc(o.id)}" ${P.of[r.id]===o.id?"selected":""}>${esc(o.name)} · ${esc(o.cat||"")}</option>`).join("")}</select></label>`).join("")}<div class="pc-ofs">${cast.map(r=>{ const o=AT_OUTFITS.find(x=>x.id===P.of[r.id]); return o?`<img src="${o.src}" alt="">`:""; }).join("")}</div><div class="pc-chips strong"><button type="button" class="go" data-pcok="outfit" ${Object.values(P.of).some(Boolean)?"":"disabled"}>Use these clothes</button><button type="button" data-pcpick="">Cancel</button></div>`:`<p class="t12 muted">Choose the people first, then their clothes.</p>`;
+    else if(P.kind==="outfit") b=cast.length?`<p class="t12 muted">Tap the clothes for each person</p>${cast.map(r=>`<div class="pc-ofp"><b dir="auto" data-noi18n>${esc(charAliases(r.id)[0]||"")}</b><div class="pc-pgrid wide">${ofFor(r).map(o=>`<button type="button" class="pc-pc" data-pcofp="${esc(r.id)}|${esc(o.id)}" aria-pressed="${P.of[r.id]===o.id}" title="${esc(o.name)}"><img src="${o.src}" alt="" loading="lazy"><span>${esc(o.name)}</span></button>`).join("")}</div></div>`).join("")}<div class="pc-chips strong"><button type="button" class="go" data-pcok="outfit" ${Object.values(P.of).some(Boolean)?"":"disabled"}>Use these clothes</button><button type="button" data-pcpick="">Cancel</button></div>`:`<p class="t12 muted">Choose the people first, then their clothes.</p>`;
     else if(P.kind==="cam") b=`<span class="a-seg" role="group" aria-label="What to take">${[["both","Camera and light"],["angle","Camera angle only"],["light","Light only"]].map(([v,l])=>`<button type="button" data-pcwhat="${v}" aria-pressed="${P.what===v}">${l}</button>`).join("")}</span><p class="t12 muted">Tap the photo to take it from</p>${grid()}<div class="pc-chips"><button type="button" data-pcpick="">Cancel</button></div>`;
     else if(P.kind==="grade") b=`<p class="t12 muted">Tap the photo whose colours you want</p>${grid()}<div class="pc-chips"><button type="button" data-pcpick="">Cancel</button></div>`;
     else if(P.kind==="style") b=`<div class="pc-chips strong">${[["On-location","On location"],["Studio","Studio"]].map(([v,l])=>`<button type="button" data-pcstyle="${v}" aria-pressed="${(PC.card.setting||S.setting)===v}">${l}</button>`).join("")}<button type="button" data-pcpick="">Cancel</button></div>`;
@@ -5937,7 +5948,7 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
   async function pickPhoto(id){ const r=refById(id), P=PC.pick; if(!r||!P||PC.busy) return; let blob=null; try{ blob=await blBlob(r); }catch{} if(!blob){ say("I couldn't open that reference photo. Try another one.",{err:true}); PC.pick=null; draw(); return; }
     const txt=P.kind==="grade"?tr("Take only the colours (the colour grading) from this picture. Keep everything else.","خذ الألوان بس (color grading) من هاي الصورة. خلّي الباقي زي ما هو."):P.what==="angle"?tr("Take only the camera angle and framing from this picture. Keep everything else.","خذ زاوية الكاميرا والكادر بس من هاي الصورة. خلّي الباقي زي ما هو."):P.what==="light"?tr("Take only the light from this picture. Keep everything else.","خذ الإضاءة بس من هاي الصورة. خلّي الباقي زي ما هو."):tr("Take the camera angle and the light from this picture. Keep everything else.","خذ زاوية الكاميرا والإضاءة من هاي الصورة. خلّي الباقي زي ما هو.");
     const f=new File([blob],"bae-reference."+(/png/.test(blob.type)?"png":"jpg"),{type:blob.type||"image/jpeg"}); PC.pick=null; PC.att=[{url:r.src}]; const n0=PC.refs.length;
-    await turn(txt,[f]); const R=PC.refs[n0]; if(R&&R.file===f){ const m=clMagMap()[r.id]; if(m) R.id=m; R.lib=r.id; } }
+    await turn(txt,[f]); const R=PC.refs[n0]; if(R&&R.file===f){ if(BR_OWNER&&r.mag) R.id=r.mag; R.lib=r.id; } }
   function msgHTML(m,i){ const last=i===PC.msgs.length-1, live=m.res&&i===PC.msgs.map(x=>!!x.res).lastIndexOf(true);
     if(m.r==="u") return `<div class="pc-m u" dir="auto" data-noi18n>${m.imgs?.length?`<span class="pc-imgs">${m.imgs.map(u=>`<img src="${u}" alt="">`).join("")}</span>`:""}${esc(m.t)}</div>`;
     let h=`<div class="pc-m a${m.err?" err":""}">${m.t?`<p dir="auto" data-noi18n>${esc(m.t)}</p>`:""}`;
@@ -6157,8 +6168,9 @@ Return ONLY JSON: {"prompt":"…","summary":"what this photo is, in 8 words or f
     if((b=q("[data-pcdel]"))){ const mine=b.dataset.pcdel===PC.id; clearTimeout(tkT); await tkDel(b.dataset.pcdel); if(mine){ PC.msgs=[]; PC.card={}; PC.src=null; PC.keep={}; PC.fix=null; PC.att=[]; PC.edit=null; PC.refs=[]; PC.layout=null; PC.n=1; draw(); } await tkRecent(true); return; }
     if((b=q("[data-pcrefx]"))){ if(!PC.busy){ dropRef(+b.dataset.pcrefx); draw(); } return; }
     if((b=q("[data-pcrefv]"))){ openLightbox(PC.refs[+b.dataset.pcrefv]?.url); return; }
-    if((b=q("[data-pcpick]"))){ const k=b.dataset.pcpick; PC.pick=!k||PC.pick?.kind===k?null:{kind:k,sel:chars(PC.card.who||"").slice(0,3).map(r=>r.id),of:{},what:"both"}; if(PC.pick?.kind==="cam"||PC.pick?.kind==="grade"){ try{ if(!BL.loaded) await blLoad(); }catch{} } draw(); $("pcPick")?.scrollIntoView({block:"nearest"}); return; }
+    if((b=q("[data-pcpick]"))){ const k=b.dataset.pcpick; PC.pick=!k||PC.pick?.kind===k?null:{kind:k,sel:chars(PC.card.who||"").slice(0,3).map(r=>r.id),of:{},what:"both"}; draw(); $("pcPick")?.scrollIntoView({block:"nearest"}); return; }
     if((b=q("[data-pcchar]"))&&PC.pick){ const id=b.dataset.pcchar, L=PC.pick.sel, i=L.indexOf(id); if(i>=0) L.splice(i,1); else if(L.length<3) L.push(id); draw(); return; }
+    if((b=q("[data-pcofp]"))&&PC.pick){ const [cid,oid]=b.dataset.pcofp.split("|"); PC.pick.of[cid]=PC.pick.of[cid]===oid?"":oid; draw(); return; }
     if((b=q("[data-pcwhat]"))&&PC.pick){ PC.pick.what=b.dataset.pcwhat; draw(); return; }
     if((b=q("[data-pcbl]"))&&PC.pick){ await pickPhoto(b.dataset.pcbl); return; }
     if((b=q("[data-pcstyle]"))){ const v=b.dataset.pcstyle; PC.pick=null; await turn(v==="Studio"?tr("Make it a studio photo. Keep everything else.","خلّيها صورة استوديو. خلّي الباقي زي ما هو."):tr("Make it an on-location photo. Keep everything else.","خلّيها تصوير خارجي (on location). خلّي الباقي زي ما هو.")); return; }

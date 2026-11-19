@@ -15,7 +15,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 172 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 173 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openResize`, `openBrand`):
 
@@ -353,3 +353,10 @@ Known limits: tiles appear in his Magnific history; a 2560×1440 source means th
 **v170: BAE References replace the three old sets.** The Mari Juliano (`r0xx`), Youth campaign (`yt0x`) and guideline (`bae_b*`) photos are gone from the code and from `refs/`; only the two studio masters (`st_minimal_01/02`) stay in set `bae`. The tab "BAE References" (still `data-tab="bae"`) shows the team's own photos: module `BL` (`blLoad`, `blSync`, `blImport`, `blBlob`, `blDescribe`), docs `brefs/<id>` `{d, thumb, asset, mime, px, mag, at}` (rule: read view, write admin), refs `bl_<id>` with `bl:true`. Editors press "Sync from Magnific": it lists the Magnific folder `BL_FOLDER` ("bae reference"), brings in what is new, removes what left the folder, and never deletes on an empty answer. LIMIT: the page can only read an image from Magnific through `creations_read`, so the stored team copy is about 1024 px; the owner's renders use the 2K original because the Magnific identifier is kept in `bae_user_magids`. `PICK_LOCATION`/`PICK_BOLD` are filled with the first four library photos; auto-pick chooses from the library by description. Test: `dev/blib-test.js` (15 checks).
 
 **v172: the Talking summary is a control panel.** In the last ready message the recap rows are tappable (`RK` maps row order to a kind; needs the 7 rows in the prompt's order): people and clothes and style say "Choose", camera/light and colours say "Take from a photo"; Size is a list (`#pcAsp2`, mirrors `#aspect`) and How many is 1-2-4-8 (`data-pcnn`). `PC.pick={kind,sel,of,what}`, `pickHTML()`, `pickPhoto(id)`. Every choice is sent to Claude as ONE sentence through `turn()` so card and recap stay coherent; a BAE Reference photo goes in as a picture of the chat (`PC.refs`) with its role, and for the owner its Magnific identifier is set on the ref so it is not uploaded again. Test: `dev/recap-test.js` (16 checks). v171 was only the `brefs` rule.
+
+
+## v173: BAE References are baked in
+- The 34 BAE reference photos ship with the studio as small files `refs/br01.jpg`..`br34.jpg` (list `BREFS` in app.js: id, Magnific id of the 2K original, description). No Sync button, no `brefs` collection in use any more.
+- When the studio OWNER renders, the Magnific id of the 2K original is used (`BR_OWNER`, seeded into `S.magIds`). Teammates upload the small copy. To add a photo: add a row to `BREFS` and the file.
+- Talking clothes picker shows outfit pictures per person (`ofFor(r)` filters by category), not a name list.
+- `refs/br*.jpg` stay out of the public repo.
