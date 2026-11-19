@@ -7037,13 +7037,14 @@ Return JSON: {"image": <number of the picture, 1-based> or null, "box": {"x","y"
   function liveStop(){ clearTimeout(T.lv.timer); T.lv.pid=null; draw(); }
   async function livePoll(){ clearTimeout(T.lv.timer); const p=T.cur; if(!p||!liveOn(p)||P.hidden) return;
     try{ const st=await BO().bcall("booth_status"); if(BO().B) BO().B.st=st; const mac=(st.devices||[]).find(d=>d.id===T.lv.dev); const lv=mac?.live;
+      const was=T.lv.off; let changed=false;
       if(!lv?.on){ T.lv.off=true; }
       else { T.lv.off=false;
         if(!T.lv.busy&&lv.rev!=null&&lv.rev!==T.lv.rev&&lv.spec&&lv.title===(p.name||"Booth")){
           const fresh=(lv.changes||[]).filter(c=>c.rev>(T.lv.rev??-1)); const names=[...new Set(fresh.flatMap(c=>c.names))];
           if(!validSpec(lv.spec)){ p.spec=fromLive(lv.spec); T.lv.rev=lv.rev; p.liveRev=lv.rev; if(names.length){ T.lv.news.unshift({at:Date.now(),names}); T.lv.news=T.lv.news.slice(0,6); (p.planChat=p.planChat||[]).push({role:"ai",text:`In Blender you changed: ${names.join(", ")}. The plan follows.`}); }
-            await save(p); draw(); if(names.length) liveCall(p,"snapshot").then(draw).catch(()=>{}); } } }
-      draw(); }
+            await save(p); changed=true; if(names.length) liveCall(p,"snapshot").then(draw).catch(()=>{}); } } }
+      if(changed||was!==T.lv.off||T.lv.err){ T.lv.err=""; draw(); } }
     catch(e){ T.lv.err=e?.message||String(e?.code||e); draw(); }
     T.lv.timer=setTimeout(livePoll,3000); }
   function liveHTML(p){ const mac=liveMac(), on=liveOn(p);
@@ -7065,10 +7066,15 @@ Return JSON: {"image": <number of the picture, 1-based> or null, "box": {"x","y"
         <div class="bow-start"><button class="bow-choice" type="button" data-w="new" data-m="plan"><b>I have a floor plan</b><span>Upload the plan and the designs</span></button><button class="bow-choice" type="button" data-w="new" data-m="space"><b>I only have a space</b><span>Size, place and occasion: the designer proposes the booth</span></button></div>
         ${T.list.length?`<div class="bow-proj">${T.list.map(x=>`<button class="bo-row" type="button" data-w="open" data-id="${esc(x.id)}"><span dir="auto">${esc(x.name||"Booth")}</span><span class="muted">${esc(STEPS[stepIdx(x.step)]?.[1]||"")} · ${new Date(x.updated||x.created).toLocaleDateString()}</span></button>`).join("")}</div>`:""}</section>`; return; }
     const p=T.cur;
+    // what the designer is typing survives every redraw (Live redraws while Blender changes things)
+    const keep=["bowText","bowName"].map(id=>{ const el=$(id); return el?{id,v:el.value,f:document.activeElement===el,a:el.selectionStart,b:el.selectionEnd}:null; }).filter(Boolean);
+    const ch0=$("bowChat"), atEnd=!ch0||ch0.scrollHeight-ch0.scrollTop-ch0.clientHeight<40, top0=ch0?.scrollTop||0;
     W.innerHTML=`<section class="bow-head"><button class="g-back" type="button" data-w="home"><i aria-hidden="true">←</i>Booths</button><input class="bow-name" id="bowName" value="${esc(p.name||"")}" aria-label="Booth name" dir="auto"><button class="btn small" type="button" data-w="del">Delete</button></section>
       ${stepper(p)}${p.spec&&p.step!=="talk"?liveHTML(p):""}${p.step==="talk"?talkHTML(p):p.step==="plan"&&p.spec?planHTML(p):p.step==="designs"&&p.spec?designsHTML(p):p.step==="build"&&p.spec?buildHTML(p):talkHTML(p)}
       ${T.err?`<p class="bo-err" dir="auto">${esc(T.err)}</p>`:""}`;
-    const ch=$("bowChat"); if(ch) ch.scrollTop=ch.scrollHeight; }
+    const same=T.drawn===p.id+"/"+p.step; T.drawn=p.id+"/"+p.step;
+    for(const k of keep){ const el=$(k.id); if(!el||(!same&&k.id==="bowText")) continue; if(k.id==="bowText"||k.f) el.value=k.v; if(k.f){ el.focus({preventScroll:true}); try{ el.setSelectionRange(k.a,k.b); }catch{} } }
+    const ch=$("bowChat"); if(ch) ch.scrollTop=atEnd?ch.scrollHeight:top0; }
 
   /* ---------- actions ---------- */
   const say=(p,role,text,extra)=>{ (p.chat=p.chat||[]).push({role,text,t:Date.now(),...extra}); };
