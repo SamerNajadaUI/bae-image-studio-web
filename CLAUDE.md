@@ -15,7 +15,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 175 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 176 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openResize`, `openBrand`):
 
@@ -367,3 +367,7 @@ Known limits: tiles appear in his Magnific history; a 2560×1440 source means th
 ## v175: Photography / Talking is responsive
 - One mobile-first block at the end of the main `<style>` ("v175"), breakpoints 480 / 600 / 768 / 1024. Picker tiles are `.pc-pc > .pc-th > img` (4:3 photos, 1:1 people, 16:9 outfits) with a check badge; the recap button class is `.pc-rb` (`.pc-rc` belongs to the Recent list).
 - `node dev/resp-test.js` measures 320–1920 px: sideways scroll, elements outside the screen, stretched or thin images, squeezed text, overlapping buttons, tap targets under 44 px on phones. Run it before every publish that touches layout.
+
+## v176: the image on screen belongs to one chat
+- Bug: after "New chat" a change request edited the previous chat's image, because `cur()` read the studio's global result card. Now `stale()` records the images that exist when a chat starts (New chat, delete, opening a Recent chat) and `cur()` ignores them. Test: `node dev/newchat-test.js`.
+- Known limit: opening an older chat from Recent cannot continue editing its old image; the next request builds a new photo.

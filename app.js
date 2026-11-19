@@ -5929,7 +5929,9 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
   function apply(){ const c=PC.card, b=compose(c); brief.value=b; brief.dispatchEvent(new Event("input",{bubbles:true}));
     if(c.setting){ const bt=document.querySelector(`.seg[data-key="setting"] button[data-v="${c.setting}"]`); if(bt&&bt.getAttribute("aria-pressed")!=="true") bt.click(); }
     const as=$("aspect"); if(as&&c.aspect&&as.value!==c.aspect&&[...as.options].some(o=>o.value===c.aspect)){ as.value=c.aspect; as.dispatchEvent(new Event("change",{bubbles:true})); } return b; }
-  const cur=()=>{ const k=genKeys()[0], c=cards[k], o=c?.outs?.[c.sel||0]; return o?.id?{k,c,o}:null; };
+  /* v176: the "image on screen" belongs to ONE chat. Images that were already in the studio when a chat started (new chat, or an older chat opened again) are not this chat's image, so Claude is told "no image yet" and can never edit them */
+  const stale=()=>{ PC.stale=new Set(); for(const k of Object.keys(cards||{})) for(const o of cards[k]?.outs||[]) if(o?.id) PC.stale.add(o.id); };
+  const cur=()=>{ const k=genKeys()[0], c=cards[k], o=c?.outs?.[c.sel||0]; return o?.id&&!PC.stale?.has(o.id)?{k,c,o}:null; };
   const chars=txt=>CHAR_REFS.map(r=>({r,at:Math.min(...charAliases(r.id).map(n=>nameAt(txt,n)).filter(k=>k>=0),Infinity)})).filter(x=>x.at<Infinity).sort((a,b)=>a.at-b.at).map(x=>x.r);
   /* ----- drawing ----- */
   const say=(t,extra)=>{ PC.msgs.push({r:"a",t:String(t||""),...(extra||{})}); };
@@ -6169,7 +6171,7 @@ Return ONLY JSON: {"prompt":"…","summary":"what this photo is, in 8 words or f
       for(const q of (Array.isArray(r?.keep)?r.keep:[]).slice(0,6)){ const qx=pc(q.x), qy=pc(q.y), qw=pc(q.w), qh=pc(q.h); if(qw>0&&qh>0&&qw*qh<.5) g.drawImage(lb,qx*lb.width,qy*lb.height,qw*lb.width,qh*lb.height,qx*W,qy*H,qw*W,qh*H); }
       PC.busy=""; PC.msgs.push({r:"a",t:"",lay:cv.toDataURL("image/jpeg",.9)}); }
     catch(e){ PC.busy=""; say("I couldn't build the layout preview in this browser.",{err:true}); } draw(); }
-  function compare(){ const x=cur(); if(!x||x.c.outs.length<2) return; let a=Math.max(0,(x.c.sel||0)-1), b=x.c.sel||0; if(a===b) b=a+1; const d=document.createElement("div"); d.className="pc-cmp"; d.setAttribute("role","dialog"); d.setAttribute("aria-label","Compare two images");
+  function compare(){ const x=cur(); if(!x||x.c.outs.length<2) return; let a=Math.max(0,(x.c.sel||0)-1), b=x.c.sel||0; if(a===b) b=a+1; if(PC.stale?.has(x.c.outs[a]?.id)||PC.stale?.has(x.c.outs[b]?.id)) return; const d=document.createElement("div"); d.className="pc-cmp"; d.setAttribute("role","dialog"); d.setAttribute("aria-label","Compare two images");
     const paint=()=>{ d.innerHTML=`<div class="pc-cmp-in"><div class="pc-cmp-h"><b class="t18">Compare</b><button type="button" class="btn small" data-x>Close</button></div><div class="pc-cmp-g">${[a,b].map((i,s)=>{ const o=x.c.outs[i]; return `<figure><img src="${o.img||o.url}" alt=""><figcaption><select data-side="${s}" aria-label="Image">${x.c.outs.map((q,n)=>`<option value="${n}" ${n===i?"selected":""}>${n+1}${q.edit?" · "+esc(String(q.edit).slice(0,30)):q.angle?" · "+esc(q.angle):""}</option>`).join("")}</select><button type="button" class="btn small primary" data-use="${i}">Use this one</button></figcaption></figure>`; }).join("")}</div></div>`; };
     paint(); document.body.appendChild(d); d.addEventListener("click",e=>{ const u=e.target.closest("[data-use]"); if(u){ x.c.sel=+u.dataset.use; renderCard(x.k,x.c); d.remove(); draw(); } else if(e.target.closest("[data-x]")||e.target===d) d.remove(); });
     d.addEventListener("change",e=>{ const s=e.target.closest("[data-side]"); if(s){ if(s.dataset.side==="0") a=+s.value; else b=+s.value; paint(); } }); d.addEventListener("keydown",e=>{ if(e.key==="Escape") d.remove(); }); d.tabIndex=-1; d.focus(); }
@@ -6188,7 +6190,7 @@ Return ONLY JSON: {"prompt":"…","summary":"what this photo is, in 8 words or f
     if((b=q("[data-pcsay]"))){ if(!PC.busy) turn(b.dataset.pcsay); return; }
     if((b=q("[data-pcatt]"))){ PC.att.splice(+b.dataset.pcatt,1); draw(); return; }
     if((b=q("[data-pcopen]"))){ tkOpen(b.dataset.pcopen); return; }
-    if((b=q("[data-pcdel]"))){ const mine=b.dataset.pcdel===PC.id; clearTimeout(tkT); await tkDel(b.dataset.pcdel); if(mine){ PC.msgs=[]; PC.pend=null; PC.card={}; PC.src=null; PC.keep={}; PC.fix=null; PC.att=[]; PC.edit=null; PC.refs=[]; PC.layout=null; PC.n=1; draw(); } await tkRecent(true); return; }
+    if((b=q("[data-pcdel]"))){ const mine=b.dataset.pcdel===PC.id; clearTimeout(tkT); await tkDel(b.dataset.pcdel); if(mine){ stale(); PC.msgs=[]; PC.pend=null; PC.card={}; PC.src=null; PC.keep={}; PC.fix=null; PC.att=[]; PC.edit=null; PC.refs=[]; PC.layout=null; PC.n=1; draw(); } await tkRecent(true); return; }
     if((b=q("[data-pcrefx]"))){ if(!PC.busy){ dropRef(+b.dataset.pcrefx); draw(); } return; }
     if((b=q("[data-pcrefv]"))){ openLightbox(PC.refs[+b.dataset.pcrefv]?.url); return; }
     if((b=q("[data-pcpick]"))){ const k=b.dataset.pcpick; PC.pick=!k||PC.pick?.kind===k?null:{kind:k,sel:castNow().map(r=>r.id),of:{...(PC.pend?.of||{})},what:PC.pend?.cam?.what||"both"}; draw(); $("pcPick")?.scrollIntoView({block:"nearest"}); return; }
@@ -6220,7 +6222,7 @@ Return ONLY JSON: {"prompt":"…","summary":"what this photo is, in 8 words or f
     else if(k==="open"){ const x=cur(); document.body.classList.add("talk-res"); $(MODELS[x?.k||"nano"].el)?.scrollIntoView({behavior:"smooth",block:"center"}); }
     else if(k==="more"){ const on=document.body.classList.toggle("talk-more"); b.setAttribute("aria-expanded",String(on)); b.textContent=on?"Hide the tools":"All tools"; if(typeof uxT==="function") uxT(el); if(on) $("optCard")?.scrollIntoView({behavior:"smooth",block:"start"}); }
     else if(k==="recent"){ await tkRecent(!PC.recent); }
-    else if(k==="new"){ if(PC.busy) return; clearTimeout(tkT); await tkSave().catch(()=>{}); PC.id=tkNew(); PC.recent=null; drawRecent(); PC.msgs=[]; PC.pend=null; PC.card={}; PC.src=null; PC.keep={}; PC.fix=null; PC.att=[]; PC.edit=null; PC.refs=[]; PC.layout=null; PC.n=1; draw(); inp.focus(); } });
+    else if(k==="new"){ if(PC.busy) return; clearTimeout(tkT); await tkSave().catch(()=>{}); PC.id=tkNew(); PC.recent=null; drawRecent(); stale(); PC.msgs=[]; PC.pend=null; PC.card={}; PC.src=null; PC.keep={}; PC.fix=null; PC.att=[]; PC.edit=null; PC.refs=[]; PC.layout=null; PC.n=1; draw(); inp.focus(); } });
   /* ----- chats (v167): every talk is kept. "New chat" starts a clean one, "Recent" opens an old one.
      Kept: the words, the summary, small copies of the pictures, and each picture's Magnific id once it was sent. The original files are not kept:
      a picture that never reached Magnific must be added again before it can be used. Saved in this browser and, when the account is there, in it. ----- */
@@ -6241,7 +6243,7 @@ Return ONLY JSON: {"prompt":"…","summary":"what this photo is, in 8 words or f
   const tkWhereText=()=>tkWhere==="account"?"Your chats are saved in your account.":tkWhere==="device"?"Your chats are saved on this device only.":tkWhere==="none"?"This chat could not be saved.":"";
   async function tkList(){ let list=lsGet(TK,[]).filter(x=>x&&x.id); try{ await rlStoreInit(); if(RLS.db&&RLS.uid){ const snap=await rlCol().where("kind","==","talk").get(), by=new Map(list.map(x=>[x.id,x])); for(const d of snap.docs){ const v=d.data(); if(v?.id&&(!by.has(v.id)||(by.get(v.id).updatedAt||0)<(v.updatedAt||0))) by.set(v.id,v); } list=[...by.values()]; if(!tkWhere) tkWhere="account"; } }catch{} if(!tkWhere&&list.length) tkWhere="device";
     return list.sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).slice(0,40); }
-  function tkLoad(c){ PC.id=c.id; PC.msgs=(c.msgs||[]).map(m=>({...m})); PC.card={...(c.card||{})}; PC.n=nFit(c.n); PC.att=[]; PC.edit=null; PC.layout=null; PC.busy="";
+  function tkLoad(c){ stale(); PC.pend=null; PC.pick=null; PC.id=c.id; PC.msgs=(c.msgs||[]).map(m=>({...m})); PC.card={...(c.card||{})}; PC.n=nFit(c.n); PC.att=[]; PC.edit=null; PC.layout=null; PC.busy="";
     PC.refs=(c.refs||[]).map(r=>({file:null,blob:null,url:r.url,role:r.role||"look",what:r.what||"",id:r.id||null,old:true}));
     const sr=PC.refs[c.srcI]; if(sr&&sr.id&&sr.role==="remake"){ PC.src={ref:sr,blob:null,file:null,url:sr.url,f:c.srcF||{},issues:c.srcIssues||[]}; PC.keep={...(c.keep||{})}; PC.fix=c.fix??null; } else { PC.src=null; PC.keep={}; PC.fix=null; PC.refs.forEach(r=>{ if(r.role==="remake"&&!r.id) r.role="look"; }); } }
   async function tkOpen(id){ if(PC.busy) return; await tkSave(); const c=(await tkList()).find(x=>x.id===id); if(!c) return; tkLoad(c); PC.recent=null; draw(); }
