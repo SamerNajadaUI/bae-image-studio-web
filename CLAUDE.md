@@ -15,7 +15,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 177 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 178 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openResize`, `openBrand`):
 
@@ -379,3 +379,9 @@ Known limits: tiles appear in his Magnific history; a 2560×1440 source means th
 - Brand rules (chat prompt + both image writers): "خليك حاضر / be present" = show the lived moment, never the product or the transaction (product only when asked in words); the place is always modern, premium, minimal, tidy and the Jordanian character comes from the people; default medium long shot, people in the middle third, calm left and right thirds for a headline, people 3–4 m in front of a plain background; default 16:9 2K; garments never carry a logo even if the outfit sheet shows one.
 - Real tests (Seedream 5.5, 3 images, 240 credits, seen at 1024 px): centring, medium distance, clean sides and a modern room work. Visible background blur only appears when there are objects behind the people; with a plain wall there is nothing to blur. The small emblem on the of_20 half-zip still appears: the sheet itself must be replaced with a clean one.
 - Phones and tablets (`max-width:1023px` or no hover): one scroll only (the page); the message box sticks to the bottom (`body.talk .hero{overflow:clip}` makes that possible). Under 768 px pickers open as a full-screen sheet with their own scroll (`html.pc-sheet` locks the page). `dev/resp-test.js` checks all of this; `dev/newchat-test.js` checks chat independence.
+
+## v178: a change request waits, colours and light travel as words, compact phone message box
+- `do:"edit"` no longer renders by itself. Claude returns the updated card + recap (the summary changes) and the message shows "Change this image" (`m.editAsk`, `data-pcedit`); or he changes the summary and creates again. Samer asked for this: he wanted the text and scene changed, not a surprise image.
+- A reference chosen for COLOURS or LIGHT is not sent to Magnific. `refWords(R)` has Claude describe only the colour grading / light (no objects, people or places) and `shoot()` puts those words in the writer prompt ("MATCH THESE, GIVEN AS WORDS"). A photo that also gives camera angle or scene is still sent, named for those only. If Claude cannot read the image the old route (photo sent with its role) is used. Real test (50 credits, seen at 512 px): the grade and hard low sun of br06 moved to a kitchen scene with nothing of the terrace or the man.
+- Chat rule: exactly the people asked for; never add a person.
+- Phones: the message box is one row ([+] [text] [round send]); suggestion chips are full-width (`.pc-chips.sug`), result buttons are back in rows.

@@ -1825,8 +1825,8 @@ body.talk .pc-msgs{max-height:min(72vh,640px)}
 /* suggestion cards: full width on mobile */
 .pc .pc-chips{gap:8px}
 .pc .pc-chips button{min-height:44px}
-.pc-m>.pc-chips:not(.strong),.pc-empty .pc-chips{flex-direction:column;align-items:stretch}
-.pc-m>.pc-chips:not(.strong) button,.pc-empty .pc-chips button{border-radius:14px;padding:12px 16px;line-height:1.4;text-align:start;max-width:65ch}
+.pc-chips.sug{flex-direction:column;align-items:stretch}
+.pc-chips.sug button{border-radius:14px;padding:12px 16px;line-height:1.4;text-align:start;max-width:65ch}
 .pc-dirs{grid-template-columns:1fr}
 .pc-go .pc-chips button{flex:1 1 auto;justify-content:center}
 /* settings rows: label above value on mobile, two columns from 600 */
@@ -1900,6 +1900,21 @@ body.talk .hero{overflow:clip} /* clip keeps the rounded gradient but, unlike hi
   .pc-compose{position:sticky;bottom:0;z-index:6;box-shadow:0 -8px 16px -8px rgba(54,46,38,.18);padding-bottom:max(8px,env(safe-area-inset-bottom))}
 }
 @media (max-width:767px){
+  /* v178: the message box is one compact row on phones: [+] [text] [mic] [Send]; it sticks to the bottom without covering half the screen */
+  .pc-compose{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:end;gap:6px;padding:6px;border-radius:26px;padding-bottom:max(6px,calc(env(safe-area-inset-bottom) - 14px))}
+  .pc-compose>*{order:2;min-width:0}
+  .pc-compose .pc-row{display:contents}
+  .pc-compose .pc-add{order:1;width:44px;min-height:44px;padding:0;justify-content:center;font-size:20px}
+  .pc-compose .pc-add>span:last-child{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .pc-compose .pc-ic{order:3}
+  .pc-compose .pc-send{order:4;width:44px;min-width:44px;min-height:44px;padding:0;font-size:0;border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
+  .pc-compose .pc-send::before{content:"↑";font-size:22px;line-height:1}
+  body.talk .page{padding-inline:8px}
+  body.talk .brief-card{padding:12px}
+  .pc-compose .pc-hint{display:none}
+  .pc-compose .at-field{min-height:44px;max-height:120px;padding:10px 6px;line-height:1.5}
+  .pc-compose .at-field:empty::before{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pc-compose textarea{min-height:44px;max-height:120px}
   /* pickers open as a full-screen sheet with their own scroll; the page behind does not move */
   html.pc-sheet,html.pc-sheet body{overflow:hidden}
   .pc-pick{position:fixed;inset:0;z-index:1000;margin:0;padding:0;border-radius:0;box-shadow:none;height:100vh;height:100dvh;gap:0;background:var(--white)}
@@ -1914,8 +1929,8 @@ body.talk .hero{overflow:clip} /* clip keeps the rounded gradient but, unlike hi
 @media (max-width:479px){ .pc-hint{display:none} .pc-row .pc-send{margin-inline-start:auto} .pc-set{margin-inline-start:0;width:100%} }
 @media (min-width:480px){
   .pc-pgrid{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-  .pc-m>.pc-chips:not(.strong),.pc-empty .pc-chips{flex-direction:row;flex-wrap:wrap;align-items:center}
-  .pc-m>.pc-chips:not(.strong) button,.pc-empty .pc-chips button{border-radius:20px;padding:10px 16px}
+  .pc-chips.sug{flex-direction:row;flex-wrap:wrap;align-items:center}
+  .pc-chips.sug button{border-radius:20px;padding:10px 16px}
   .pc-save>span{flex:1 1 180px}.pc-save button{flex:0 0 auto}
   .pc-nseg{display:inline-flex;width:auto}.pc-nseg button{min-width:56px}
   .pc-szrow .pc-sel{flex:0 1 auto}
