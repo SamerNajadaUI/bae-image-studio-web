@@ -15,7 +15,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 173 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 174 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openResize`, `openBrand`):
 
@@ -360,3 +360,6 @@ Known limits: tiles appear in his Magnific history; a 2560×1440 source means th
 - When the studio OWNER renders, the Magnific id of the 2K original is used (`BR_OWNER`, seeded into `S.magIds`). Teammates upload the small copy. To add a photo: add a row to `BREFS` and the file.
 - Talking clothes picker shows outfit pictures per person (`ofFor(r)` filters by category), not a name list.
 - `refs/br*.jpg` stay out of the public repo.
+
+## v174: Talking choices wait, one "Save and send"
+- Choices from the summary rows (people, clothes, camera/light photo, colours photo, style) are stored in `PC.pend` and shown in the row; nothing goes to Claude until "Save and send" (`pendSend()`), which sends ONE message (plus up to two reference photos). While choices wait, the Create buttons are hidden. "Discard" drops them.
