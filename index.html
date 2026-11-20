@@ -1808,7 +1808,8 @@ body.talk .pc{min-width:0}
   .status .btn.small{flex:1 1 0;min-height:44px;padding:8px 10px;white-space:nowrap}
   .status #btnConnect{margin-inline-start:0}
 }
-@media (min-width:768px){ .top .inner{flex-wrap:nowrap} .status{flex-wrap:nowrap;margin-inline-start:auto} .status .btn.small{white-space:nowrap} }
+@media (min-width:768px){ .status{margin-inline-start:auto;justify-content:flex-end} .status .btn.small{white-space:nowrap} }
+@media (min-width:1024px){ .top .inner{flex-wrap:nowrap} .status{flex-wrap:nowrap} }
 /* Talking head: stacked on mobile, one row from 768 */
 .pc-head{flex-wrap:wrap;gap:12px}
 .pc-ttl{flex:1 1 calc(100% - 48px);min-width:0}
@@ -1926,6 +1927,101 @@ body.talk .hero{overflow:clip} /* clip keeps the rounded gradient but, unlike hi
   .pc-pkbar button{flex:1 1 0;justify-content:center;text-align:center}
   .pc-sum{padding:12px}
 }
+/* ===== v180 motion: the chat feels alive. Only transform and opacity; nothing moves for people who ask for reduced motion ===== */
+.pc button,.pc-rb,.pc-pc,.pc-takes button,.pc-save button{transition:transform .12s ease-out,box-shadow .18s ease-out,background-color .18s ease-out,color .18s ease-out}
+.pc-im{background:linear-gradient(100deg,var(--stone-light) 30%,#fff 50%,var(--stone-light) 70%);background-size:220% 100%}
+.pc-im img{transition:opacity .5s ease-out,transform .7s cubic-bezier(.2,.8,.2,1)}
+.pc-recap>li.pend .pc-new{transition:background-color .3s}
+@media (prefers-reduced-motion:no-preference){
+  .pc button:active,.pc-rb:active,.pc-pc:active,.pc-takes button:active,.pc-save button:active{transform:scale(.96)}
+  @keyframes pcUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  @keyframes pcSide{from{opacity:0;transform:translateX(14px) scale(.98)}to{opacity:1;transform:none}}
+  @keyframes pcPop{0%{transform:scale(.6)}60%{transform:scale(1.12)}100%{transform:none}}
+  @keyframes pcFlash{0%{background-color:rgba(250,100,40,.22)}100%{background-color:transparent}}
+  @keyframes pcSheet{from{transform:translateY(100%)}to{transform:none}}
+  @keyframes pcFade{from{opacity:0}to{opacity:1}}
+  @keyframes pcShim{from{background-position:120% 0}to{background-position:-120% 0}}
+  @keyframes pcGlow{0%,100%{box-shadow:0 0 0 0 rgba(193,58,35,0)}50%{box-shadow:0 0 0 6px rgba(193,58,35,.12)}}
+  .pc-m.pc-in{animation:pcUp .34s cubic-bezier(.2,.8,.2,1) backwards}
+  .pc-m.u.pc-in{animation-name:pcSide;animation-duration:.26s}
+  [dir="rtl"] .pc-m.u.pc-in{animation-name:pcUp}
+  .pc-m.pc-in .pc-chips button,.pc-m.pc-in .pc-dir{animation:pcUp .32s cubic-bezier(.2,.8,.2,1) backwards}
+  .pc-m.pc-in .pc-chips button:nth-child(1),.pc-m.pc-in .pc-dir:nth-child(1){animation-delay:.12s}
+  .pc-m.pc-in .pc-chips button:nth-child(2),.pc-m.pc-in .pc-dir:nth-child(2){animation-delay:.18s}
+  .pc-m.pc-in .pc-chips button:nth-child(3),.pc-m.pc-in .pc-dir:nth-child(3){animation-delay:.24s}
+  .pc-m.pc-in .pc-chips button:nth-child(n+4){animation-delay:.3s}
+  .pc-m.busy .rl-typing{animation:pcGlow 1.8s ease-in-out infinite;border-radius:999px}
+  .pc-im:has(img:not(.ld)){animation:pcShim 1.4s linear infinite}
+  .pc-im img:not(.ld){opacity:0;transform:scale(1.04)}
+  .pc-im img.no{transition:none}
+  .pc-sum.pc-in{animation:pcUp .4s cubic-bezier(.2,.8,.2,1) backwards} /* never "forwards": a filling transform would trap the full-screen picker inside the panel */
+  .pc-recap>li.chg>span,.pc-recap>li.chg{animation:pcFlash 1.2s ease-out}
+  .pc-pick.pc-open{animation:pcUp .28s cubic-bezier(.2,.8,.2,1) backwards}
+  .pc-pc.pc-pop .pc-ck,.pc-takes button.pc-pop,.pc-nseg button.pc-pop{animation:pcPop .28s cubic-bezier(.3,1.4,.5,1)}
+  .pc-pc.pc-pop .pc-th{animation:pcPop .22s ease-out}
+  .pc-save.pc-in{animation:pcUp .3s cubic-bezier(.2,.8,.2,1) backwards}
+  .pc-empty{animation:pcFade .5s ease-out both}
+}
+@media (prefers-reduced-motion:no-preference) and (max-width:767px){ .pc-pick.pc-open{animation:pcSheet .34s cubic-bezier(.2,.9,.2,1) backwards} }
+
+/* ===== v180 home: one clear first action, the rest are tools ===== */
+.l-mark{justify-content:space-between;flex-wrap:wrap}
+.l-mark>svg+*{margin-inline-end:auto}
+.l-seg{display:inline-flex;gap:2px;padding:3px;border-radius:999px;background:color-mix(in srgb,var(--white) 80%,transparent);box-shadow:inset 0 0 0 1px var(--stone)}
+.l-seg button{all:unset;box-sizing:border-box;cursor:pointer;min-height:38px;padding:6px 14px;border-radius:999px;font-size:14px;color:var(--ink-med);display:inline-flex;align-items:center;justify-content:center;transition:background-color .2s,color .2s,transform .12s}
+.l-seg button[aria-pressed="true"]{background:var(--ink);color:var(--white)}
+.l-seg button:focus-visible{outline:2px solid var(--orange-dark);outline-offset:2px}
+.l-mid{gap:20px}
+.l-mid h1{font-size:clamp(32px,5vw,56px)}
+.l-choice.l-lead{max-width:616px;gap:12px;padding:28px;background:var(--white);box-shadow:0 18px 50px -18px rgba(193,58,35,.45),var(--shadow)}
+.l-choice.l-lead b{font-size:clamp(26px,3.4vw,34px)}
+.l-choice.l-lead small{font-size:15px;line-height:1.45;color:var(--ink-med);max-width:44ch}
+.l-choice.l-lead .l-arrow{width:52px;height:52px;font-size:22px}
+.l-level{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;font-size:14px;color:var(--ink-med)}
+.l-moreh{margin:14px 0 -6px;font-size:13px;color:var(--ink-light);letter-spacing:.02em}
+.l-choices{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;max-width:1100px}
+.l-choices .l-choice{gap:10px;padding:16px;border-radius:18px}
+.l-choices .l-choice b{font-size:17px}
+.l-choices .l-arrow{width:28px;height:28px;font-size:13px;background:var(--stone);color:var(--ink)}
+.l-choices .l-choice:hover .l-arrow{background:var(--orange-dark);color:var(--white)}
+.l-foot{display:flex;justify-content:space-between;gap:12px}
+.l-verw{display:inline-flex;gap:12px;align-items:center}.l-health{all:unset;cursor:pointer;text-decoration:underline;text-underline-offset:3px;color:var(--ink-light)}.l-health:focus-visible{outline:2px solid var(--orange-dark);outline-offset:2px}
+[dir="rtl"] .l-arrow{transform:scaleX(-1)}
+[dir="rtl"] .l-choice:hover .l-arrow{transform:scaleX(-1) translateX(3px)}
+.landing[dir="rtl"] .grad{transform:scaleX(-1)}
+.top-lang button{min-height:44px;min-width:44px;padding:4px 10px;font-size:13px}
+@media (min-width:1024px){.top-lang button{min-height:32px;min-width:0;font-size:12px}}
+@media (max-width:1100px){.l-choices{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:1300px){.l-choices{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media (max-width:980px){.l-choices{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:767px){ .top-lang{order:9} .l-in{gap:24px;padding:20px 5%} .l-choice.l-lead{padding:20px} .l-level .l-seg{width:100%}.l-level .l-seg button{flex:1 1 0;text-align:center;padding:6px 8px;font-size:13px} }
+@media (prefers-reduced-motion:no-preference){ .l-choice:active{transform:scale(.98)} .l-choice.l-lead .l-arrow{animation:pcGlow 2.4s ease-in-out infinite} }
+/* level: a first-time person sees only what they need */
+body[data-level="simple"] .pc .pc-mod,body[data-level="simple"] .pc #pcCard,body[data-level="simple"] .pc .pc-more{display:none}
+.pc-lv{display:inline-flex}
+.pc-lv button{min-height:44px;padding:6px 14px;font-size:13px}
+@media (min-width:768px){.pc-lv button{min-height:32px;padding:4px 12px;font-size:12px}}
+/* v180: the after-render check */
+.pc-im{position:relative}
+.pc-qb{position:absolute;top:8px;inset-inline-start:8px;min-width:26px;height:26px;padding:0 8px;border-radius:999px;background:rgba(25,24,30,.72);color:#fff;font-style:normal;font-size:12px;line-height:26px;text-align:center}
+.pc-qb.use{background:#2F7D4F}.pc-qb.fix,.pc-qb.redo{background:var(--orange-dark)}
+.pc-qc{margin-top:12px;padding:12px 16px;border-radius:14px;display:flex;flex-direction:column;gap:6px;font-size:14px;line-height:1.45;background:rgba(47,125,79,.08);box-shadow:inset 0 0 0 1px rgba(47,125,79,.25)}
+.pc-qc.warn{background:rgba(193,58,35,.07);box-shadow:inset 0 0 0 1px rgba(193,58,35,.28)}
+.pc-qc>b{font-weight:500}.pc-qc p{margin:0;unicode-bidi:plaintext;text-align:start}.pc-qc ul{margin:0;padding-inline-start:18px}
+@media (prefers-reduced-motion:no-preference){ .pc-m.pc-in .pc-qc,.pc-qc.pc-in{animation:pcUp .4s cubic-bezier(.2,.8,.2,1) backwards} }
+/* v180: where the pictures will arrive, while they are made */
+.pc-m.busy:has(.pc-sks){flex-wrap:wrap}
+.pc-sks{flex:1 1 100%;display:grid;gap:6px;grid-template-columns:repeat(2,minmax(0,1fr));margin-top:8px;max-width:520px}
+.pc-sks.n1{grid-template-columns:minmax(0,1fr);max-width:380px}
+.pc-sk{display:block;position:relative;overflow:hidden;border-radius:12px;background:var(--stone-light);aspect-ratio:var(--ar,16/9);max-height:300px}
+.pc-sk::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.75) 50%,transparent 70%);transform:translateX(-100%)}
+@media (prefers-reduced-motion:no-preference){ @keyframes pcSweep{from{transform:translateX(-100%)}to{transform:translateX(100%)}} .pc-sk::after{animation:pcSweep 1.5s ease-in-out infinite} .pc-sk:nth-child(2)::after{animation-delay:.15s}.pc-sk:nth-child(3)::after{animation-delay:.3s}.pc-sk:nth-child(4)::after{animation-delay:.45s}
+  /* home to app: the page settles in instead of cutting */
+  .hero-in{transition:transform .5s cubic-bezier(.2,.8,.2,1) .05s,opacity .4s ease .05s} body.landing-on .hero-in{transform:translateY(18px);opacity:0}
+  .landing .l-in{transition:transform .45s cubic-bezier(.3,.7,.2,1)} .landing.out .l-in{transform:scale(1.03)} }
+@media (prefers-reduced-motion:reduce){ .pc-msgs{scroll-behavior:auto} .pc-m.busy .rl-typing i{animation:none;opacity:.7} }
+/* the full-screen picker is above everything, the app header included */
+@media (max-width:767px){ html.pc-sheet header.top{visibility:hidden} .pc-v,.pc-mod>summary,#pcModel,#pcCard summary{min-height:44px} #pcCard summary{display:flex;align-items:center} }
 @media (max-width:479px){ .pc-hint{display:none} .pc-row .pc-send{margin-inline-start:auto} .pc-set{margin-inline-start:0;width:100%} }
 @media (min-width:480px){
   .pc-pgrid{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
@@ -1966,22 +2062,24 @@ body.talk .hero{overflow:clip} /* clip keeps the rounded gradient but, unlike hi
 <section class="landing" id="landing" aria-label="Bank al Etihad Studio">
   <div class="grad" aria-hidden="true"><i class="g1"></i><i class="g2"></i><i class="g3"></i><i class="g4"></i><i class="veil"></i></div>
   <div class="l-in">
-    <div class="l-mark"><svg class="l-emblem" viewBox="0 0 84.53 82.12" aria-hidden="true"><path fill-rule="nonzero" d="M38.66 27.30C40.80 28.18 42.45 28.19 43.68 27.49C44.94 26.78 45.89 25.48 46.48 24.01C41.22 25.01 40.02 20.74 36.37 21.08C35.25 21.19 33.42 21.99 32.89 24.04C32.45 25.69 32.76 27.54 33.30 28.84C34.53 27.04 36.67 26.47 38.66 27.29"/><path fill-rule="nonzero" d="M37.97 11.05C35.57 10.99 33.41 12.69 32.43 15.23C31.59 17.39 31.48 19.70 31.46 20.54C33.57 17.07 37.75 17.05 40.73 19.40C42.29 20.63 44.36 21.67 46.58 21.31C48.83 20.94 50.39 19.39 51.64 18.02C47.71 17.88 45.34 16.32 43.09 13.84C41.69 12.31 40.22 11.09 37.97 11.04"/><path fill-rule="nonzero" d="M45.28 11.59C47.73 14.57 50.36 15.65 53.52 15.26C55.76 14.98 57.59 14.18 58.85 13.36C56.03 12.54 53.52 10.83 51.74 8.40L48.73 4.31C45.56 0.00 39.60 0.16 36.07 3.94C34.23 5.93 33.39 7.89 32.96 9.97C36.81 6.56 41.99 7.59 45.28 11.59"/><path fill-rule="nonzero" d="M28.12 35.91C30.15 34.80 31.19 33.52 31.40 32.13C31.63 30.70 31.19 29.16 30.41 27.79C27.92 32.50 23.81 30.77 21.81 33.81C21.19 34.75 20.68 36.67 21.96 38.36C22.99 39.73 24.64 40.65 26.00 41.04C25.34 38.96 26.24 36.94 28.12 35.91"/><path fill-rule="nonzero" d="M14.90 26.32C13.37 28.15 13.36 30.88 14.74 33.23C15.92 35.22 17.66 36.75 18.31 37.29C16.90 33.49 19.49 30.23 23.20 29.38C25.14 28.94 27.25 27.98 28.34 26.03C29.46 24.05 29.22 21.87 28.92 20.05C26.35 23.01 23.65 23.88 20.29 24.09C18.22 24.21 16.34 24.59 14.90 26.32"/><path fill-rule="nonzero" d="M19.89 20.97C23.76 20.93 26.25 19.56 27.91 16.86C29.09 14.95 29.60 13.03 29.74 11.53C27.34 13.21 24.42 14.10 21.41 13.97L16.31 13.76C10.94 13.53 7.35 18.26 8.13 23.36C8.54 26.03 9.56 27.90 10.92 29.53C10.64 24.41 14.69 21.03 19.89 20.97"/><path fill-rule="nonzero" d="M28.33 49.47C28.72 47.20 28.36 45.60 27.40 44.56C26.42 43.50 24.93 42.87 23.36 42.62C25.51 47.50 21.59 49.61 22.74 53.07C23.09 54.13 24.28 55.72 26.42 55.79C28.13 55.84 29.88 55.13 31.04 54.32C29.00 53.53 27.96 51.57 28.33 49.47"/><path fill-rule="nonzero" d="M12.53 53.76C13.02 56.09 15.16 57.81 17.87 58.19C20.18 58.52 22.47 58.12 23.30 57.95C19.43 56.68 18.48 52.63 20.12 49.22C20.98 47.44 21.54 45.20 20.69 43.13C19.83 41.03 17.96 39.87 16.34 38.96C17.07 42.80 16.08 45.44 14.15 48.18C12.96 49.87 12.08 51.57 12.54 53.76"/><path fill-rule="nonzero" d="M11.44 46.55C13.81 43.52 14.29 40.73 13.20 37.75C12.44 35.64 11.24 34.05 10.16 33.01C9.98 35.92 8.85 38.74 6.87 41.00L3.52 44.83C0.00 48.85 1.48 54.59 5.98 57.17C8.34 58.52 10.44 58.89 12.58 58.85C8.38 55.87 8.24 50.62 11.43 46.55"/><path fill-rule="nonzero" d="M39.12 57.76C37.58 56.04 36.09 55.33 34.68 55.42C33.23 55.52 31.82 56.29 30.64 57.35C35.82 58.72 35.04 63.08 38.47 64.35C39.52 64.74 41.53 64.81 42.90 63.19C44.01 61.89 44.55 60.09 44.63 58.68C42.73 59.78 40.55 59.36 39.12 57.76"/><path fill-rule="nonzero" d="M32.65 72.71C34.79 73.78 37.47 73.19 39.46 71.33C41.16 69.74 42.28 67.71 42.66 66.96C39.24 69.17 35.47 67.39 33.81 63.98C32.94 62.20 31.53 60.37 29.37 59.74C27.19 59.11 25.10 59.82 23.38 60.52C26.86 62.34 28.31 64.77 29.26 67.97C29.85 69.95 30.64 71.69 32.65 72.70"/><path fill-rule="nonzero" d="M26.29 69.06C25.39 65.33 23.49 63.22 20.47 62.20C18.34 61.49 16.34 61.43 14.84 61.61C17.02 63.57 18.54 66.20 19.09 69.15L20.01 74.14C20.99 79.38 26.42 81.81 31.26 79.92C33.79 78.93 35.39 77.53 36.69 75.84C31.73 77.25 27.51 74.09 26.30 69.06"/><path fill-rule="nonzero" d="M52.38 54.55C50.06 54.67 48.57 55.38 47.77 56.53C46.94 57.72 46.66 59.30 46.76 60.88C51.07 57.71 54.01 61.04 57.15 59.16C58.11 58.58 59.42 57.07 59.00 54.99C58.67 53.32 57.59 51.78 56.53 50.84C56.21 52.99 54.52 54.43 52.38 54.54"/><path fill-rule="nonzero" d="M60.10 68.89C62.28 67.90 63.49 65.44 63.26 62.74C63.07 60.43 62.17 58.30 61.82 57.53C61.43 61.57 57.67 63.39 53.96 62.55C52.02 62.12 49.70 62.07 47.86 63.36C45.99 64.66 45.26 66.73 44.73 68.50C48.34 66.94 51.15 67.31 54.26 68.58C56.18 69.36 58.05 69.83 60.10 68.89"/><path fill-rule="nonzero" d="M53.27 71.56C49.77 69.93 46.92 70.09 44.25 71.80C42.35 73.02 41.05 74.53 40.27 75.81C43.17 75.33 46.19 75.80 48.85 77.21L53.35 79.60C58.08 82.12 63.38 79.41 64.90 74.47C65.71 71.89 65.60 69.76 65.09 67.70C63.10 72.44 57.98 73.74 53.27 71.55"/><path fill-rule="nonzero" d="M58.11 42.24C56.77 44.12 56.39 45.72 56.80 47.07C57.22 48.45 58.29 49.65 59.59 50.55C59.79 45.23 64.24 45.02 64.72 41.41C64.86 40.30 64.49 38.35 62.60 37.37C61.07 36.59 59.19 36.47 57.79 36.70C59.29 38.29 59.36 40.50 58.12 42.24"/><path fill-rule="nonzero" d="M74.21 45.19C74.80 42.88 73.61 40.41 71.34 38.89C69.40 37.60 67.17 36.97 66.34 36.77C69.27 39.59 68.37 43.64 65.39 46.01C63.84 47.24 62.36 49.02 62.22 51.24C62.08 53.51 63.25 55.37 64.32 56.88C65.34 53.10 67.39 51.15 70.32 49.52C72.13 48.51 73.66 47.36 74.21 45.19"/><path fill-rule="nonzero" d="M72.05 52.15C68.59 53.86 66.94 56.17 66.62 59.32C66.39 61.55 66.77 63.50 67.29 64.91C68.72 62.36 70.97 60.30 73.74 59.12L78.43 57.11C83.36 55.01 84.53 49.20 81.60 44.94C80.07 42.71 78.33 41.46 76.39 40.58C78.88 45.07 76.71 49.87 72.05 52.16"/><path fill-rule="nonzero" d="M52.01 30.12C52.65 32.34 53.67 33.62 54.98 34.14C56.33 34.67 57.95 34.59 59.47 34.15C55.40 30.68 58.01 27.09 55.47 24.47C54.69 23.67 52.91 22.74 50.97 23.60C49.40 24.30 48.13 25.69 47.44 26.92C49.63 26.74 51.42 28.06 52.01 30.12"/><path fill-rule="nonzero" d="M64.36 19.44C62.91 17.55 60.22 16.93 57.62 17.75C55.39 18.45 53.51 19.80 52.84 20.31C56.88 19.79 59.50 23.02 59.51 26.81C59.51 28.78 59.99 31.04 61.66 32.54C63.35 34.06 65.54 34.31 67.40 34.42C65.06 31.28 64.81 28.47 65.36 25.17C65.69 23.13 65.74 21.23 64.37 19.45"/><path fill-rule="nonzero" d="M68.49 25.46C67.68 29.22 68.47 31.94 70.75 34.15C72.36 35.72 74.13 36.64 75.56 37.11C74.45 34.41 74.23 31.39 75.02 28.49L76.37 23.60C77.79 18.45 73.95 13.92 68.77 13.54C66.06 13.34 63.99 13.92 62.09 14.88C67.17 15.75 69.59 20.42 68.49 25.46"/></svg><span class="t24">Studio</span></div>
+    <div class="l-mark"><svg class="l-emblem" viewBox="0 0 84.53 82.12" aria-hidden="true"><path fill-rule="nonzero" d="M38.66 27.30C40.80 28.18 42.45 28.19 43.68 27.49C44.94 26.78 45.89 25.48 46.48 24.01C41.22 25.01 40.02 20.74 36.37 21.08C35.25 21.19 33.42 21.99 32.89 24.04C32.45 25.69 32.76 27.54 33.30 28.84C34.53 27.04 36.67 26.47 38.66 27.29"/><path fill-rule="nonzero" d="M37.97 11.05C35.57 10.99 33.41 12.69 32.43 15.23C31.59 17.39 31.48 19.70 31.46 20.54C33.57 17.07 37.75 17.05 40.73 19.40C42.29 20.63 44.36 21.67 46.58 21.31C48.83 20.94 50.39 19.39 51.64 18.02C47.71 17.88 45.34 16.32 43.09 13.84C41.69 12.31 40.22 11.09 37.97 11.04"/><path fill-rule="nonzero" d="M45.28 11.59C47.73 14.57 50.36 15.65 53.52 15.26C55.76 14.98 57.59 14.18 58.85 13.36C56.03 12.54 53.52 10.83 51.74 8.40L48.73 4.31C45.56 0.00 39.60 0.16 36.07 3.94C34.23 5.93 33.39 7.89 32.96 9.97C36.81 6.56 41.99 7.59 45.28 11.59"/><path fill-rule="nonzero" d="M28.12 35.91C30.15 34.80 31.19 33.52 31.40 32.13C31.63 30.70 31.19 29.16 30.41 27.79C27.92 32.50 23.81 30.77 21.81 33.81C21.19 34.75 20.68 36.67 21.96 38.36C22.99 39.73 24.64 40.65 26.00 41.04C25.34 38.96 26.24 36.94 28.12 35.91"/><path fill-rule="nonzero" d="M14.90 26.32C13.37 28.15 13.36 30.88 14.74 33.23C15.92 35.22 17.66 36.75 18.31 37.29C16.90 33.49 19.49 30.23 23.20 29.38C25.14 28.94 27.25 27.98 28.34 26.03C29.46 24.05 29.22 21.87 28.92 20.05C26.35 23.01 23.65 23.88 20.29 24.09C18.22 24.21 16.34 24.59 14.90 26.32"/><path fill-rule="nonzero" d="M19.89 20.97C23.76 20.93 26.25 19.56 27.91 16.86C29.09 14.95 29.60 13.03 29.74 11.53C27.34 13.21 24.42 14.10 21.41 13.97L16.31 13.76C10.94 13.53 7.35 18.26 8.13 23.36C8.54 26.03 9.56 27.90 10.92 29.53C10.64 24.41 14.69 21.03 19.89 20.97"/><path fill-rule="nonzero" d="M28.33 49.47C28.72 47.20 28.36 45.60 27.40 44.56C26.42 43.50 24.93 42.87 23.36 42.62C25.51 47.50 21.59 49.61 22.74 53.07C23.09 54.13 24.28 55.72 26.42 55.79C28.13 55.84 29.88 55.13 31.04 54.32C29.00 53.53 27.96 51.57 28.33 49.47"/><path fill-rule="nonzero" d="M12.53 53.76C13.02 56.09 15.16 57.81 17.87 58.19C20.18 58.52 22.47 58.12 23.30 57.95C19.43 56.68 18.48 52.63 20.12 49.22C20.98 47.44 21.54 45.20 20.69 43.13C19.83 41.03 17.96 39.87 16.34 38.96C17.07 42.80 16.08 45.44 14.15 48.18C12.96 49.87 12.08 51.57 12.54 53.76"/><path fill-rule="nonzero" d="M11.44 46.55C13.81 43.52 14.29 40.73 13.20 37.75C12.44 35.64 11.24 34.05 10.16 33.01C9.98 35.92 8.85 38.74 6.87 41.00L3.52 44.83C0.00 48.85 1.48 54.59 5.98 57.17C8.34 58.52 10.44 58.89 12.58 58.85C8.38 55.87 8.24 50.62 11.43 46.55"/><path fill-rule="nonzero" d="M39.12 57.76C37.58 56.04 36.09 55.33 34.68 55.42C33.23 55.52 31.82 56.29 30.64 57.35C35.82 58.72 35.04 63.08 38.47 64.35C39.52 64.74 41.53 64.81 42.90 63.19C44.01 61.89 44.55 60.09 44.63 58.68C42.73 59.78 40.55 59.36 39.12 57.76"/><path fill-rule="nonzero" d="M32.65 72.71C34.79 73.78 37.47 73.19 39.46 71.33C41.16 69.74 42.28 67.71 42.66 66.96C39.24 69.17 35.47 67.39 33.81 63.98C32.94 62.20 31.53 60.37 29.37 59.74C27.19 59.11 25.10 59.82 23.38 60.52C26.86 62.34 28.31 64.77 29.26 67.97C29.85 69.95 30.64 71.69 32.65 72.70"/><path fill-rule="nonzero" d="M26.29 69.06C25.39 65.33 23.49 63.22 20.47 62.20C18.34 61.49 16.34 61.43 14.84 61.61C17.02 63.57 18.54 66.20 19.09 69.15L20.01 74.14C20.99 79.38 26.42 81.81 31.26 79.92C33.79 78.93 35.39 77.53 36.69 75.84C31.73 77.25 27.51 74.09 26.30 69.06"/><path fill-rule="nonzero" d="M52.38 54.55C50.06 54.67 48.57 55.38 47.77 56.53C46.94 57.72 46.66 59.30 46.76 60.88C51.07 57.71 54.01 61.04 57.15 59.16C58.11 58.58 59.42 57.07 59.00 54.99C58.67 53.32 57.59 51.78 56.53 50.84C56.21 52.99 54.52 54.43 52.38 54.54"/><path fill-rule="nonzero" d="M60.10 68.89C62.28 67.90 63.49 65.44 63.26 62.74C63.07 60.43 62.17 58.30 61.82 57.53C61.43 61.57 57.67 63.39 53.96 62.55C52.02 62.12 49.70 62.07 47.86 63.36C45.99 64.66 45.26 66.73 44.73 68.50C48.34 66.94 51.15 67.31 54.26 68.58C56.18 69.36 58.05 69.83 60.10 68.89"/><path fill-rule="nonzero" d="M53.27 71.56C49.77 69.93 46.92 70.09 44.25 71.80C42.35 73.02 41.05 74.53 40.27 75.81C43.17 75.33 46.19 75.80 48.85 77.21L53.35 79.60C58.08 82.12 63.38 79.41 64.90 74.47C65.71 71.89 65.60 69.76 65.09 67.70C63.10 72.44 57.98 73.74 53.27 71.55"/><path fill-rule="nonzero" d="M58.11 42.24C56.77 44.12 56.39 45.72 56.80 47.07C57.22 48.45 58.29 49.65 59.59 50.55C59.79 45.23 64.24 45.02 64.72 41.41C64.86 40.30 64.49 38.35 62.60 37.37C61.07 36.59 59.19 36.47 57.79 36.70C59.29 38.29 59.36 40.50 58.12 42.24"/><path fill-rule="nonzero" d="M74.21 45.19C74.80 42.88 73.61 40.41 71.34 38.89C69.40 37.60 67.17 36.97 66.34 36.77C69.27 39.59 68.37 43.64 65.39 46.01C63.84 47.24 62.36 49.02 62.22 51.24C62.08 53.51 63.25 55.37 64.32 56.88C65.34 53.10 67.39 51.15 70.32 49.52C72.13 48.51 73.66 47.36 74.21 45.19"/><path fill-rule="nonzero" d="M72.05 52.15C68.59 53.86 66.94 56.17 66.62 59.32C66.39 61.55 66.77 63.50 67.29 64.91C68.72 62.36 70.97 60.30 73.74 59.12L78.43 57.11C83.36 55.01 84.53 49.20 81.60 44.94C80.07 42.71 78.33 41.46 76.39 40.58C78.88 45.07 76.71 49.87 72.05 52.16"/><path fill-rule="nonzero" d="M52.01 30.12C52.65 32.34 53.67 33.62 54.98 34.14C56.33 34.67 57.95 34.59 59.47 34.15C55.40 30.68 58.01 27.09 55.47 24.47C54.69 23.67 52.91 22.74 50.97 23.60C49.40 24.30 48.13 25.69 47.44 26.92C49.63 26.74 51.42 28.06 52.01 30.12"/><path fill-rule="nonzero" d="M64.36 19.44C62.91 17.55 60.22 16.93 57.62 17.75C55.39 18.45 53.51 19.80 52.84 20.31C56.88 19.79 59.50 23.02 59.51 26.81C59.51 28.78 59.99 31.04 61.66 32.54C63.35 34.06 65.54 34.31 67.40 34.42C65.06 31.28 64.81 28.47 65.36 25.17C65.69 23.13 65.74 21.23 64.37 19.45"/><path fill-rule="nonzero" d="M68.49 25.46C67.68 29.22 68.47 31.94 70.75 34.15C72.36 35.72 74.13 36.64 75.56 37.11C74.45 34.41 74.23 31.39 75.02 28.49L76.37 23.60C77.79 18.45 73.95 13.92 68.77 13.54C66.06 13.34 63.99 13.92 62.09 14.88C67.17 15.75 69.59 20.42 68.49 25.46"/></svg><span class="t24">Studio</span><span class="l-lang l-seg" role="group" aria-label="Language"><button type="button" data-uxlang="ar" aria-pressed="false" data-noi18n>العربية</button><button type="button" data-uxlang="en" aria-pressed="true" data-noi18n>English</button></span></div>
     <div class="l-mid">
-      <h1>On-brand images,<br><span>in minutes.</span></h1>
+      <h1>Pictures that look like the bank.<br><span>Made with care.</span></h1>
+      <button class="l-choice l-lead" type="button" data-enter="photo"><span class="row"><b>Make a picture</b><span class="l-arrow" aria-hidden="true">→</span></span><small>Tell me what you need, in your own words. I ask, you choose, I make it.</small></button>
+      <div class="l-level" role="group" aria-label="How should I work with you?"><span class="l-levelq">How should I work with you?</span><span class="l-seg"><button type="button" data-uxlevel="simple" aria-pressed="true">Guide me step by step</button><button type="button" data-uxlevel="pro" aria-pressed="false">I know my work</button></span></div>
+      <p class="l-moreh">More tools</p>
       <div class="l-choices">
-        <button class="l-choice" type="button" data-enter="photo"><span class="row"><b>Photography</b><span class="l-arrow" aria-hidden="true">→</span></span><small>2K · Seedream 5.5</small></button>
-        <button class="l-choice" type="button" data-enter="icon"><span class="row"><b>Icons</b><span class="l-arrow" aria-hidden="true">→</span></span><small>Glassmorphism · GPT 2.5</small></button>
-        <button class="l-choice" type="button" id="openReels"><span class="row"><b>Reels production</b><span class="l-arrow" aria-hidden="true">→</span></span><small>Idea to film · Seedance 2.5</small></button>
-        <button class="l-choice" type="button" id="openGallery"><span class="row"><b>Gradient elements</b><span class="l-arrow" aria-hidden="true">→</span></span><small>6 shapes · high-res PNG</small></button>
-        <button class="l-choice" type="button" id="openAnim"><span class="row"><b>Animation direction</b><span class="l-arrow" aria-hidden="true">→</span></span><small>After Effects templates · EN + AR</small></button>
-        <button class="l-choice" type="button" id="openUpscale"><span class="row"><b>BAE Upscale</b><span class="l-arrow" aria-hidden="true">→</span></span><small>Our own upscaler · up to 16× · free · compare · check</small></button>
-        <button class="l-choice" type="button" id="openResize"><span class="row"><b>BAE Resize</b><span class="l-arrow" aria-hidden="true">→</span></span><small>One picture · every screen size · the original stays untouched</small></button>
-        <button class="l-choice" type="button" id="openBooth"><span class="row"><b>BAE 3D Booth</b><span class="l-arrow" aria-hidden="true">→</span></span><small>Floor plan to a full booth in Blender · on the render Mac</small></button>
-        <button class="l-choice" type="button" id="openBrand"><span class="row"><b>Brand identity</b><span class="l-arrow" aria-hidden="true">→</span></span><small>Colours · logo · type · assets to download</small></button>
+        <button class="l-choice" type="button" data-enter="icon"><span class="row"><b>Icons</b><span class="l-arrow" aria-hidden="true">→</span></span><small>3D icons in the bank's style</small></button>
+        <button class="l-choice" type="button" id="openReels"><span class="row"><b>Reels production</b><span class="l-arrow" aria-hidden="true">→</span></span><small>From an idea to a finished film</small></button>
+        <button class="l-choice" type="button" id="openResize"><span class="row"><b>BAE Resize</b><span class="l-arrow" aria-hidden="true">→</span></span><small>One picture, every screen size</small></button>
+        <button class="l-choice" type="button" id="openBrand"><span class="row"><b>Brand identity</b><span class="l-arrow" aria-hidden="true">→</span></span><small>Colours, logo, type and files to download</small></button>
+        <button class="l-choice" type="button" id="openGallery"><span class="row"><b>Gradient elements</b><span class="l-arrow" aria-hidden="true">→</span></span><small>The six official shapes, ready to download</small></button>
+        <button class="l-choice" type="button" id="openAnim"><span class="row"><b>Animation direction</b><span class="l-arrow" aria-hidden="true">→</span></span><small>After Effects templates, English and Arabic</small></button>
+        <button class="l-choice" type="button" id="openBooth"><span class="row"><b>BAE 3D Booth</b><span class="l-arrow" aria-hidden="true">→</span></span><small>A booth from a floor plan. Needs Blender on a Mac</small></button>
+        <button class="l-choice" type="button" id="openUpscale"><span class="row"><b>BAE Upscale</b><span class="l-arrow" aria-hidden="true">→</span></span><small>Make a picture larger. Still being improved</small></button>
       </div>
     </div>
-    <div class="l-foot">Bank al Etihad · Creative Studio</div>
+    <div class="l-foot"><span>Bank al Etihad · Creative Studio</span><span class="l-verw"><button type="button" class="l-health" id="btnHealth">Copy health report</button><span class="l-ver" id="appVer" data-noi18n></span></span></div>
   </div>
 </section>
 <section class="gallery reels" id="reels" hidden aria-label="Reels production" data-mode="lib">
@@ -2110,6 +2208,7 @@ body.talk .hero{overflow:clip} /* clip keeps the rounded gradient but, unlike hi
       <span class="chip"><i class="dot" id="dotClaude"></i><span id="stClaude">Claude: checking</span></span>
       <span class="chip"><i class="dot" id="dotMag"></i><span id="stMag">Magnific: not connected</span></span>
       <button class="btn small" id="btnConnect" type="button">Connect Magnific</button>
+      <span class="top-lang l-seg" role="group" aria-label="Language"><button type="button" data-uxlang="ar" aria-pressed="false" data-noi18n>ع</button><button type="button" data-uxlang="en" aria-pressed="true" data-noi18n>EN</button></span>
       <button class="btn small tour-btn" id="btnTour" type="button"><span aria-hidden="true">?</span> Tutorial</button>
     </div>
   </div>
@@ -2117,7 +2216,7 @@ body.talk .hero{overflow:clip} /* clip keeps the rounded gradient but, unlike hi
 
 <!-- one-time setup, shown only while something is missing -->
 <section class="setup" id="setup" hidden aria-label="Setup">
-  <div class="setup-h"><b class="t18">Before your first image</b><span class="t12 muted">Two quick steps, once.</span></div>
+  <div class="setup-h"><b class="t18">Before your first image</b><span class="t12 muted">One quick step, once.</span></div>
   <ol class="setup-steps">
     <li id="setupMag"><span class="sn">1</span><div><b>Connect Magnific</b><span class="t12 muted">So the studio can render your images.</span></div><button class="btn small primary" type="button" id="setupMagBtn">Connect</button></li>
     <li id="setupLib"><span class="sn">2</span><div><b>Link your references</b><span class="t12 muted">So the BAE photos guide the camera and style.</span></div><button class="btn small" type="button" id="setupLibBtn">Set up</button></li>

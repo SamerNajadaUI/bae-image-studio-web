@@ -356,8 +356,8 @@ const COMPOSITION_LINE = "Composition lock: the person (or the group, as one cen
 const COMPOSITION_NEG = "off-centre subject, subject on the left, subject on the right, rule-of-thirds placement, subject cropped at the edge";
 /* Setting lock — Studio overrides any location in the brief */
 /* A scene must tell its whole story: whoever the action involves is in the frame */
-const STORY_RULE = `STORY LOCK: show everything the action needs so the moment reads instantly. Paying or buying → a cashier or sales associate across the counter (facing the customer, softly in focus, dressed in the same refined style) and the shop's products displayed neatly and minimally behind (folded garments, boxed goods on light-oak shelves). Ordering → a barista or waiter. Meeting or advice → the other person. Never an empty counter, empty shop or missing counterpart. The main subject stays centred; secondary people are smaller or softer.`;
-const STORY_LINE = "Story lock: every person the action needs is in the frame (e.g. a cashier or sales associate across the counter when paying, with neatly displayed products), never an empty counter or empty shop; the main subject stays centred.";
+const STORY_RULE = `PEOPLE AND MOMENT LOCK (v180): draw exactly the people the brief names, no more and no fewer. Never add a cashier, a waiter, a colleague, a friend, a partner, a child, a passer-by, a reflection or another person's hands unless the brief names them. Show the lived moment ("be present"): the person living their life because the bank carries the worry in the background. Never the bank product or the transaction: no counter, branch, contract, key handover, cash, bank card, payment machine or phone screen unless the brief names it in words. The main subject stays centred.`;
+const STORY_LINE = "People and moment lock: exactly the people the brief names, nobody added (no cashier, waiter, colleague, friend or passer-by); the lived moment, never the bank product or the transaction unless the brief names it; the main subject stays centred.";
 const STUDIO_RULE = `SETTING LOCK — STUDIO, MINIMAL AND CLEAN (overrides any location named in the brief or seen in other references; overrides the look's camera and grade). Match the two BAE STUDIO STYLE master references exactly in style, never in face or identity:
 - SET: one plain wall and nothing else — a seamless warm cream / light-stone wall (#ECE8DF to warm beige), smooth plaster or white-painted board-textured, optionally a light oak plank floor. Empty, calm, architectural. No decor, no plants, no shelves, no screens, no signage.
 - PROPS: at most ONE piece of light-oak or walnut furniture (a chair, a stool or a small table) plus at most two small objects that tell the brief's story (a phone, a card, a microphone, an amber glass). A place named in the brief becomes these one or two props, never a built set. Every person the action needs is present, nobody extra.
@@ -383,7 +383,14 @@ let mcp=null, sample=null, downloads=null, sampleImages=null;
 /* ---------------- logging ---------------- */
 const logLines=[];
 function scrub(v){ try{ return JSON.parse(JSON.stringify(v,(k,x)=>{ if(x&&typeof x==="object"&&x.$file) return "[file "+(x.$file.name||"")+"]"; if(typeof x==="string"&&x.length>600) return x.slice(0,600)+"…("+x.length+" chars)"; return x; })); }catch{ return String(v); } }
-function log(kind,title,obj){
+/* v180 health log: the last 200 problems, kept in this browser so they survive a reload and can be copied for the team.
+   Only the time, the version, where it happened, an error code and a short message. Never a prompt, a name, an id or a picture */
+const APP_VER="180"; /* shown on the home screen; dev/preflight.sh checks it against the commit */
+const HEALTH_KEY="bae_health";
+function health(where,code,msg){ try{ const L=JSON.parse(localStorage.getItem(HEALTH_KEY)||"[]"); L.push({t:new Date().toISOString().slice(0,19),v:typeof APP_VER==="string"?APP_VER:"?",w:String(where||"").slice(0,40),c:String(code||"").slice(0,30),m:String(msg||"").replace(/https?:\/\/\S+/g,"[link]").replace(/[\w.+-]+@[\w-]+\.[\w.]+/g,"[email]").slice(0,140)}); localStorage.setItem(HEALTH_KEY,JSON.stringify(L.slice(-200))); }catch{} }
+try{ addEventListener("error",e=>health("page","error",e?.message)); addEventListener("unhandledrejection",e=>health("page",e?.reason?.code||"rejection",e?.reason?.message||String(e?.reason||""))); }catch{}
+function healthText(){ let L=[]; try{ L=JSON.parse(localStorage.getItem(HEALTH_KEY)||"[]"); }catch{} return `BAE Studio health report · v${typeof APP_VER==="string"?APP_VER:"?"} · ${new Date().toISOString().slice(0,16)} · ${navigator.userAgent.replace(/\(.*?\)/,"").slice(0,60)}\n`+(L.length?L.map(x=>`${x.t} v${x.v} ${x.w} [${x.c}] ${x.m}`).join("\n"):"No problems recorded."); }
+function log(kind,title,obj){ if(kind==="✕") health(title,obj?.code,obj?.message);
   const t=new Date().toLocaleTimeString();
   let body=""; try{ body = obj===undefined?"":(typeof obj==="string"?obj:JSON.stringify(scrub(obj),null,1)); }catch{ body=String(obj); }
   if(body.length>4000) body=body.slice(0,4000)+"\n…";
@@ -848,7 +855,7 @@ function enforce(p){
   t+="\n\n"+CLIENT_LINE+"\n"+lookLine();
   if(!/Composition lock:/.test(t)) t+="\n"+COMPOSITION_LINE;
   t=t.replace(/\n*Setting lock:[^\n]*/g,"")+"\n"+(S.setting==="Studio"?STUDIO_LINE:LOCATION_LINE);
-  t=t.replace(/\n*Story lock:[^\n]*/g,"")+"\n"+STORY_LINE;
+  t=t.replace(/\n*(Story lock|People and moment lock):[^\n]*/g,"")+"\n"+STORY_LINE;
   return t;
 }
 
@@ -953,7 +960,7 @@ function syncSetup(){ const box=$("setup"); if(!box) return;
   $("setupMag").classList.toggle("done",magOk); $("setupLib").classList.toggle("done",libOk);
   $("setupMagBtn").textContent=magOk?"Connected":"Connect"; $("setupMagBtn").disabled=magOk;
   $("setupLibBtn").textContent=libOk?"Linked":"Set up"; $("setupLibBtn").disabled=libOk;
-  box.hidden=magOk&&libOk; }
+  $("setupLib").hidden=true; box.hidden=magOk; }
 function libSummary(){ const n=Object.keys(S.magIds||{}).length; const total=ALL_REFS.filter(r=>r.set!=="user"&&!r.auto).length; return n?`${n} of ${total} references linked from your Magnific library.`:"Not linked yet. Upload the reference pack to a Magnific folder named “BAE References”, then press Link library."; }
 /* Names in the pack: bae_b114_1, yt04, r025 (Magnific may drop the .jpg) */
 /* Magnific can rewrite upload names ("bae b114 1", "Bae-B114-1", "bae_b114_1 (1)"), so each known
@@ -1361,8 +1368,9 @@ async function createAll(){
   const b=$("btnCreate"); b.disabled=true; b.textContent="Creating…";
   try{
     if(!S.quiet) $("s3").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"});
+    const pWas=$("pNano").value; $("pNano").value=""; /* v180: if the writing step fails, the old prompt must not be rendered (it spent credits on the previous scene) */
     await describe();
-    if(!$("pNano").value.trim()) return;
+    if(!$("pNano").value.trim()){ $("pNano").value=pWas; return; }
     if(!mcp){ flash($("s3state"),"Magnific isn't reachable in this view. Open the page in claude.ai.",true); return; }
     await generate(genKeys());
   }finally{ b.disabled=false; b.textContent="Create image"; }
@@ -1818,7 +1826,8 @@ function setMode(m,init){
 }
 /* Intro: emblem petals bloom, "Studio" rises, then the landing fades in. Click to skip. Runs on every visit. */
 (function(){ const I=$("intro"); if(!I) return;
-  if(matchMedia("(prefers-reduced-motion: reduce)").matches){ I.remove(); return; }
+  let seenIntro=false; try{ seenIntro=!!sessionStorage.getItem("bae_intro"); sessionStorage.setItem("bae_intro","1"); }catch{}
+  if(seenIntro||matchMedia("(prefers-reduced-motion: reduce)").matches){ I.remove(); return; }
   document.body.classList.add("intro-on");
   const done=()=>{ I.remove(); setTimeout(()=>document.body.classList.remove("intro-on"),1400); };
   I.addEventListener("animationend",e=>{ if(e.target===I&&e.animationName==="introOut") done(); });
@@ -1842,10 +1851,18 @@ function setMode(m,init){
     {el:()=>$("s3"), t:"Download it", p:()=>icon()?"Your icon appears here. Download the 16:9 PNG or the square S, M, L and XL sizes.":"Your image appears here. Download the 2K PNG, open it in Magnific, or create another."},
     {el:()=>$("advWrap"), t:"Go deeper, if you like", p:()=>"Edit the prompt, rebuild from a photo, or read the locked rules. You never need this for a good result.", last:true},
   ];
-  let i=0, raf=0;
+  /* v180: in Talking the tour shows the three things a first-time person needs, and nothing of the hidden form */
+  const stepsTalk=[
+    {t:"Welcome", p:()=>"Tell me the picture you need, the way you would tell a colleague. I ask what I need, show you a summary, and make it when you say so.", hero:true},
+    {el:()=>document.querySelector(".pc-compose"), t:"Write or talk here", p:()=>"Write in Arabic or English. Press + to add a picture: your design, a photo you like, colours you like."},
+    {el:()=>$("pcSum")&&!$("pcSum").hidden?$("pcSum"):$("pcMsgs"), t:"You decide before anything is made", p:()=>"Before a picture is made you see its summary. Change any line, then press Create. Nothing is spent without your press."},
+    {el:()=>document.querySelector(".pc-head"), t:"Your chats are kept", p:()=>"Recent brings back an older chat with its pictures. New chat starts a clean one.", last:true},
+  ];
+  const stepsOld=steps, talkOn=()=>document.body.classList.contains("talk")&&!!$("pc")&&!$("pc").hidden;
+  let i=0, raf=0, L=stepsOld;
   const val=(v)=>typeof v==="function"?v():v;
   function place(){
-    const s=steps[i], el=s.el?s.el():null, vw=innerWidth, vh=innerHeight, cw=card.offsetWidth, ch=card.offsetHeight, pad=10, mobile=vw<=620;
+    const s=L[i], el=s.el?s.el():null, vw=innerWidth, vh=innerHeight, cw=card.offsetWidth, ch=card.offsetHeight, pad=10, mobile=vw<=620;
     if(!el){ spot.classList.add("center"); card.style.left=(vw-cw)/2+"px"; card.style.top=Math.max(16,(vh-ch)/2)+"px"; return; }
     spot.classList.remove("center");
     const r=el.getBoundingClientRect(), x=Math.max(8,r.left-pad), y=Math.max(8,r.top-pad), w=Math.min(vw-16,r.width+pad*2), h=Math.min(vh-16,r.bottom+pad-y);
@@ -1857,25 +1874,26 @@ function setMode(m,init){
     card.style.left=left+"px"; card.style.top=top+"px";
   }
   function show(n){
-    i=Math.max(0,Math.min(steps.length-1,n)); const s=steps[i];
+    i=Math.max(0,Math.min(L.length-1,n)); const s=L[i];
     card.classList.add("swap");
     const el=s.el?s.el():null;
     if(el){ const r=el.getBoundingClientRect(); if(r.top<80||r.bottom>innerHeight-(innerWidth<=620?260:40)) el.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:innerWidth<=620?"start":"center"}); }
     setTimeout(()=>{
-      $("tourN").textContent=(i+1)+" / "+steps.length;
+      $("tourN").textContent=(i+1)+" / "+L.length;
       $("tourTtl").textContent=val(s.t); $("tourTxt").textContent=val(s.p);
       card.querySelector(".tour-hero")?.remove();
       if(s.hero) $("tourTtl").insertAdjacentHTML("beforebegin",`<div class="tour-hero">${EMB}</div>`);
-      $("tourDots").innerHTML=steps.map((_,k)=>`<i class="${k===i?"on":""}"></i>`).join("");
+      $("tourDots").innerHTML=L.map((_,k)=>`<i class="${k===i?"on":""}"></i>`).join("");
       $("tourBack").hidden=i===0;
       $("tourNext").textContent=i===0?"Start tour":s.last?(icon()?"Start creating":"Start creating"):"Next";
+      if(typeof uxT==="function") uxT(card); card.dir=UX.lang==="ar"?"rtl":"ltr";
       place(); card.classList.remove("swap"); $("tourNext").focus({preventScroll:true});
     }, el?380:60);
   }
-  function open(){ T.hidden=false; document.body.style.overflow="hidden"; show(0); addEventListener("resize",onMove); addEventListener("scroll",onMove,true); }
+  function open(){ L=talkOn()?stepsTalk:stepsOld; T.hidden=false; document.body.style.overflow="hidden"; show(0); addEventListener("resize",onMove); addEventListener("scroll",onMove,true); }
   function close(){ T.hidden=true; document.body.style.overflow=""; try{ localStorage.setItem(KEY,"1"); }catch{} removeEventListener("resize",onMove); removeEventListener("scroll",onMove,true); setTimeout(()=>$("brief").focus({preventScroll:true}),50); }
   const onMove=()=>{ cancelAnimationFrame(raf); raf=requestAnimationFrame(place); };
-  $("tourNext").onclick=()=>{ if(steps[i].last){ close(); window.scrollTo({top:0,behavior:"smooth"}); } else show(i+1); };
+  $("tourNext").onclick=()=>{ if(L[i].last){ close(); window.scrollTo({top:0,behavior:"smooth"}); } else show(i+1); };
   $("tourBack").onclick=()=>show(i-1);
   $("tourSkip").onclick=close;
   $("btnTour").onclick=open;
@@ -4538,6 +4556,10 @@ async function rlBible(){
 
 /* ================= New look + features (v84) ================= */
 /*UXDICT*/const UX_AR={
+"I could not check:":"ما قدرت أتأكد من:",
+"Copy health report":"انسخ تقرير الأعطال","Copied":"انتسخ","Copy this text":"انسخ هذا النص",
+"I looked at it: something to know":"شفتها: في إشي لازم تعرفه","I looked at it: it follows the house rules":"شفتها: ماشية على قواعد البنك","I checked a smaller copy. Look at it at full size before you use it.":"أنا فحصت نسخة مصغّرة. شوفها بحجمها الكامل قبل ما تستعملها.","Fix this":"صلّحها","That picture is no longer in the studio. Create it again.":"هاي الصورة ما عادت بالاستوديو. اعملها من جديد.",
+"Pictures that look like the bank.":"صور بتشبه البنك.","Made with care.":"معمولة بعناية.","Make a picture":"اعمل صورة","Tell me what you need, in your own words. I ask, you choose, I make it.":"احكيلي شو بدك بكلامك. أنا بسأل، إنت بتختار، وأنا بعملها.","How should I work with you?":"كيف بتحب أشتغل معك؟","Guide me step by step":"امشي معي خطوة خطوة","I know my work":"بعرف شغلي","Guided":"خطوة خطوة","Expert":"محترف","More tools":"أدوات ثانية","Icons":"أيقونات","3D icons in the bank's style":"أيقونات 3D بستايل البنك","Reels production":"إنتاج الريلز","From an idea to a finished film":"من فكرة لفيلم جاهز","BAE Resize":"BAE Resize","One picture, every screen size":"صورة وحدة، لكل مقاسات الشاشات","Brand identity":"هوية البراند","Colours, logo, type and files to download":"الألوان، الشعار، الخط، وملفات للتحميل","Gradient elements":"عناصر الجريدينت","The six official shapes, ready to download":"الأشكال الستة الرسمية، جاهزة للتحميل","Animation direction":"اتجاه الأنيميشن","After Effects templates, English and Arabic":"قوالب After Effects، عربي وإنجليزي","BAE 3D Booth":"BAE 3D Booth","A booth from a floor plan. Needs Blender on a Mac":"بوث كامل من المخطط. بده Blender على ماك","BAE Upscale":"BAE Upscale","Make a picture larger. Still being improved":"تكبير الصورة. لسا عم نطوّره","Bank al Etihad · Creative Studio":"بنك الاتحاد · الاستوديو الإبداعي","Language":"اللغة","Claude: checking":"Claude: عم يفحص","Claude: ready":"Claude: جاهز","Claude: unavailable here":"Claude: مش متوفر هون","Magnific: connected":"Magnific: متصل","Magnific: not connected":"Magnific: مش متصل","Magnific: connecting…":"Magnific: عم يتصل…","Magnific: unavailable here":"Magnific: مش متوفر هون","Connect Magnific":"اتصل بـ Magnific","Reconnect":"اتصل من جديد","Tutorial":"شرح سريع","Photography":"تصوير","Before your first image":"قبل أول صورة","One quick step, once.":"خطوة وحدة سريعة، مرة وحدة.","So the studio can render your images.":"عشان الاستوديو يقدر يرسم صورك.","Connect":"اتصل","Connected":"متصل","Change this image":"عدّل هاي الصورة","Or change the summary below and create a new one.":"أو غيّر الملخّص تحت واعمل صورة جديدة.","From the side":"من الجنب","Closer":"أقرب","Wider":"أبعد","Compare A / B":"قارن A / B","See it in the layout":"شوفها جوّا التصميم","Open the result":"افتح النتيجة","Thinking…":"عم بفكّر…","Looking at your pictures…":"عم بشوف صورك…","Creating the image…":"عم بعمل الصورة…","Creating 4 angles…":"عم بعمل 4 زوايا…","Changing it…":"عم بعدّلها…","Getting the photos…":"عم بجيب الصور…","Placing it in the layout…":"عم بحطها جوّا التصميم…","Reading the colours and the light of your photo…":"عم بقرأ ألوان وإضاءة صورتك…","Sending your pictures to Magnific at full size…":"عم ببعث صورك لـ Magnific بحجمها الكامل…","Writing the photo…":"عم بكتب الصورة…","Checking the picture against the house rules…":"عم براجع الصورة على قواعد البنك…","Next":"التالي","Back":"رجوع","Start tour":"يلا نبدأ","Start creating":"يلا نشتغل","Welcome":"أهلاً فيك","Tell me the picture you need, the way you would tell a colleague. I ask what I need, show you a summary, and make it when you say so.":"احكيلي الصورة يلي بدك ياها زي ما بتحكي لزميلك. بسألك يلي بلزمني، بفرجيك ملخّص، وبعملها لما تقلّي.","Write or talk here":"اكتب أو احكي هون","Write in Arabic or English. Press + to add a picture: your design, a photo you like, colours you like.":"اكتب عربي أو إنجليزي. اكبس + لتضيف صورة: تصميمك، صورة عاجبتك، ألوان عاجبتك.","You decide before anything is made":"إنت بتقرر قبل ما ينعمل إشي","Before a picture is made you see its summary. Change any line, then press Create. Nothing is spent without your press.":"قبل ما تنعمل الصورة بتشوف ملخّصها. غيّر أي سطر، وبعدين اكبس Create. ما بينصرف إشي بدون كبستك.","Your chats are kept":"شاتاتك محفوظة","Recent brings back an older chat with its pictures. New chat starts a clean one.":"Recent بيرجّعلك شات قديم مع صوره. New chat بيفتح شات نظيف.",
 "Your photo":"صورتك","Change anything here, then create.":"غيّر أي إشي من هون، وبعدين اعمل الصورة.","Change anything here, then create again.":"غيّر أي إشي من هون، وبعدين اعمل الصورة مرة ثانية.","Create again":"اعمل الصورة مرة ثانية","Edit":"عدّل","The scene":"المشهد","Camera angle":"زاوية الكاميرا","Light":"الإضاءة","Colours":"الألوان","The people":"الأشخاص","The clothes":"اللبس","The place":"المكان","The style":"الستايل","Take from a photo":"خذ من صورة","Tap the photo":"اكبس على الصورة","What do you want from the photo? You can pick more than one.":"شو بدك من الصورة؟ بتقدر تختار أكثر من إشي.","Write it the way you want it.":"اكتبه زي ما بدك.","Close":"سكّر",
 "Your choices are not sent yet":"اختياراتك لسا ما انبعثت","Save and send":"احفظ وابعث","Discard":"الغِ الاختيارات","Done":"تم","Camera and light from this photo":"الكاميرا والإضاءة من هاي الصورة","Camera angle from this photo":"زاوية الكاميرا من هاي الصورة","Light from this photo":"الإضاءة من هاي الصورة","Colours from this photo":"الألوان من هاي الصورة",
 "Tap the clothes for each person":"اكبس على لبس كل شخص",
@@ -4586,7 +4608,19 @@ const UX_AR_RE=[
 ];
 /*END*/
 const UX={lang:"en",level:"simple",dict:null,costV:new Map(),costP:new Map(),autoN:0};
-try{ UX.lang=localStorage.getItem("bae_ui_lang2")||"en"; UX.level=localStorage.getItem("bae_ui_level")||"simple"; }catch{}
+try{ UX.lang=localStorage.getItem("bae_ui_lang2")||(/^ar\b/i.test(navigator.language||"")?"ar":"en"); UX.level=localStorage.getItem("bae_ui_level")||"simple"; }catch{}
+/* v180: the language and the level are choices of the whole studio, shown on the home screen and in the header */
+function uxShell(){ const ar=UX.lang==="ar"; const av=$("appVer"); if(av) av.textContent="v"+APP_VER; document.documentElement.lang=ar?"ar":"en"; document.body.dataset.ui=UX.lang; document.body.dataset.level=UX.level;
+  for(const x of [$("landing"),document.querySelector("header.top"),$("setup"),$("pc"),$("tour")]){ if(!x) continue; x.dir=ar?"rtl":"ltr"; try{ uxT(x); }catch{} }
+  try{ uxT($("modeSeg")); }catch{}
+  document.querySelectorAll("#pc .at-field[data-ph]").forEach(f=>{ if(!f.dataset.ph0) f.dataset.ph0=f.dataset.ph; f.dataset.ph=ar?(uxTr(f.dataset.ph0)??f.dataset.ph0):f.dataset.ph0; });
+  document.querySelectorAll("[data-uxlang]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.uxlang===UX.lang)));
+  document.querySelectorAll("[data-uxlevel]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.uxlevel===UX.level)));
+  if(!uxShell.obs&&window.MutationObserver){ uxShell.obs=1; let t=0; const run=()=>{ t=0; if(UX.lang==="ar") for(const x of [document.querySelector("header.top"),$("setup")]) if(x) try{ uxT(x); }catch{} }; for(const x of [document.querySelector("header.top"),$("setup")]) if(x) new MutationObserver(()=>{ if(!t) t=requestAnimationFrame(run); }).observe(x,{childList:true,subtree:true,characterData:true}); } }
+document.addEventListener("click",e=>{ const a=e.target.closest?.("[data-uxlang]"), b=e.target.closest?.("[data-uxlevel]");
+  if(e.target.closest?.("#btnHealth")){ const bt=$("btnHealth"), txt=healthText(); (navigator.clipboard?.writeText?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>{ bt.textContent=uxL("Copied"); }).catch(()=>{ try{ window.prompt(uxL("Copy this text"),txt); }catch{} }).finally(()=>setTimeout(()=>{ bt.textContent=uxL("Copy health report"); },1800)); return; }
+  if(a){ UX.lang=a.dataset.uxlang; try{ localStorage.setItem("bae_ui_lang2",UX.lang); }catch{} try{ uxApply(); }catch{} uxShell(); document.dispatchEvent(new CustomEvent("bae:ui")); }
+  if(b){ UX.level=b.dataset.uxlevel; try{ localStorage.setItem("bae_ui_level",UX.level); }catch{} try{ uxApply(); }catch{} uxShell(); document.dispatchEvent(new CustomEvent("bae:ui")); } });
 const UX_GROUPS=[["story","Story",["idea","script"]],["images","Images",["characters","locations"]],["scenes","Scenes",["directing"]],["video","Video",["render"]]];
 const UX_SUB={idea:"Idea",script:"Script",characters:"Cast",locations:"Places & props"};
 function uxApply(){
@@ -4925,7 +4959,7 @@ function uxPGWire(w){
 function uxInit(){
   const R=$("reels"); if(!R) return;
   document.querySelectorAll("[data-uxlevel]").forEach(b=>b.onclick=()=>{ UX.level=b.dataset.uxlevel; try{ localStorage.setItem("bae_ui_level",UX.level); }catch{} uxApply(); });
-  const sel=$("uxLang"); if(sel) sel.onchange=()=>{ UX.lang=sel.value; try{ localStorage.setItem("bae_ui_lang2",UX.lang); }catch{} uxApply(); if(RL) rlRender(); };
+  const sel=$("uxLang"); if(sel) sel.onchange=()=>{ UX.lang=sel.value; try{ localStorage.setItem("bae_ui_lang2",UX.lang); }catch{} uxApply(); uxShell(); document.dispatchEvent(new CustomEvent("bae:ui")); if(RL) rlRender(); };
   R.addEventListener("change",e=>{ if(e.target.id==="uxAuto"&&RL){ RL.auto=e.target.checked; UX.autoN=0; rlSave(); uxRenderNext(); if(RL.auto) uxAutoStep(); } });
   R.addEventListener("click",e=>{ const b=e.target.closest("[data-ux]"); if(!b||!RL) return; const a=b.dataset.ux;
     if(a==="next"){ UX.autoN=0; uxDoNext(uxNextStep(),false); }
@@ -4948,7 +4982,7 @@ function uxInit(){
     try{ const up=await rlUploadMag(f,"storyboard-sheet-"+(i+1)); if(!up?.id) throw {message:"Magnific returned no identifier"}; RL_SBBIG.add(up.id); Object.assign(b,{id:up.id,web:up.web||null,status:"ok",sheet:true,fromUser:true,moment:"your image",at:Date.now()}); rlEvent(`The user replaced storyboard sheet ${i+1} with their own image.`); }
     catch(err){ b.status=b.id?"ok":"err"; b.err="Couldn't upload: "+String(err?.message||err?.code||err).slice(0,140); }
     finally{ delete b._live; rlSave(); rlBoard(); } });
-  uxApply(); uxObserve(); uxMicInit(); briefMicInit();
+  uxApply(); uxShell(); setTimeout(uxShell,400); setTimeout(uxShell,1800); uxObserve(); uxMicInit(); briefMicInit();
 }
 
 /* ---------- wiring ---------- */
@@ -5913,16 +5947,24 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
     <div class="pc-att" id="pcAtt"></div>
     <div class="pc-compose"><textarea id="pcInput" dir="auto" rows="1" aria-label="Your message" placeholder="Write here, or press the microphone and talk."></textarea>
       <div class="pc-row"><label class="pc-add" title="Add pictures: a design, a photo you like, colours you like"><input type="file" accept="image/*" multiple id="pcFile" class="sr"><span aria-hidden="true">＋</span><span>Pictures</span></label><button type="button" class="pc-ic" id="pcMic" hidden aria-pressed="false" aria-label="Speak instead of typing"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button><span class="t12 light pc-hint">Enter sends</span><button type="button" class="btn primary pc-send" data-pc="send">Send</button></div></div>
-    <div class="pc-foot"><button type="button" class="pc-more" data-pc="more" aria-expanded="false">All tools</button><details class="pc-mod" id="pcMod"><summary>Claude model</summary><div class="pc-modin"><select id="pcModel" aria-label="Claude model for this chat">${[["","Auto (the studio picks)"],["claude-fable-5-2","Claude Fable 5.2"],["claude-opus-5-5","Claude Opus 5.5"],["claude-sonnet-5-5","Claude Sonnet 5.5"],["claude-haiku-5-5","Claude Haiku 5.5"]].map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select><span class="t12 muted" id="pcUsing" aria-live="polite"></span></div></details></div>`;
+    <div class="pc-foot"><span class="pc-lv l-seg" role="group" aria-label="How should I work with you?"><button type="button" data-uxlevel="simple" aria-pressed="true">Guided</button><button type="button" data-uxlevel="pro" aria-pressed="false">Expert</button></span><button type="button" class="pc-more" data-pc="more" aria-expanded="false">All tools</button><details class="pc-mod" id="pcMod"><summary>Claude model</summary><div class="pc-modin"><select id="pcModel" aria-label="Claude model for this chat">${[["","Auto (the studio picks)"],["claude-fable-5-2","Claude Fable 5.2"],["claude-opus-5-5","Claude Opus 5.5"],["claude-sonnet-5-5","Claude Sonnet 5.5"],["claude-haiku-5-5","Claude Haiku 5.5"]].map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select><span class="t12 muted" id="pcUsing" aria-live="polite"></span></div></details></div>`;
   const cls=document.createElement("details"); cls.className="pc-classic"; cls.innerHTML=`<summary><b>The written brief</b><span class="t12 muted">What the studio will use. You can still write it yourself.</span></summary>`;
   const inner=document.createElement("div"); inner.className="pc-classic-in"; cls.appendChild(inner);
   for(const n of [host.querySelector(".brief-meta"),brief,$("presets"),$("lvDrop"),host.querySelector(".create-row")]) if(n) inner.appendChild(n);
   host.prepend(cls); host.prepend(el); el.after(cls); atMake("pcInput",true); const inp=$("pcInput");
+  document.addEventListener("bae:ui",()=>{ try{ draw(); }catch{} });
   /* v179: a chat can be about a 3D ICON. Then the studio is in Icons mode (its own rules and image model) and the chat stays on screen */
   const isIcon=()=>PC.card?.kind==="icon";
   const modeFor=()=>{ const want=isIcon()?"icon":"photo"; if(!S.web&&S.mode!==want&&(isIcon()||PC._wasIcon)){ try{ setMode(want); }catch{} } PC._wasIcon=isIcon(); sync(); };
-  const sync=()=>{ const icon=(S.mode==="icon"&&!isIcon())||!!S.web; el.hidden=icon; if(icon) cls.open=true; document.body.classList.toggle("talk",!icon); };
-  $("modeSeg")?.addEventListener("click",()=>setTimeout(sync,0)); document.querySelectorAll("#landing [data-enter]").forEach(b=>b.addEventListener("click",()=>setTimeout(sync,60))); setTimeout(sync,0); setTimeout(sync,1500);
+  /* v180: who am I talking to, and what do I know about the bank */
+  const LEVEL=()=>UX.level==="pro"?`WHO YOU ARE TALKING TO NOW: a PROFESSIONAL designer (they chose "Expert"). No hand-holding and no question the card can answer: when they give who + action + place, go to "ready" in the same turn. Speak in their trade terms (shot size, lens feel, light, grade) and state the decisions you made and the one trade-off. When a wish weakens the picture or breaks a house rule, say so once, with the reason, then do what they decide.`
+    :`WHO YOU ARE TALKING TO NOW: someone who may be using this for the FIRST time (they chose "Guide me"). Everyday words only; never a term they did not use first (no "prompt", "reference", "aspect ratio", "grade"). Lead with a proposal ("I would show …, because …"), then at most ONE question per turn, with 2 to 4 "chips" that are small pictures in words. Never two questions in one turn. Up to three such turns before "ready": the moment, the person, the place. When a house rule changes their wish, say why in one short phrase. If they write like a professional (names a shot, a lens, a grade, types @ by hand), answer them as a professional in that turn.
+The house rules and the quality of the picture are the same for everyone. Only the words and the number of questions change.`;
+  const BANK=`THE BANK (never invent anything beyond this): Bank al Etihad, Jordan. Brand idea: Deep Clarity. Two pillars: Intelligence (precise, clear) and Warmth (present, familiar). The promise "خليك حاضر" (be present): the bank carries the worry in the background so the person can live the moment. You do NOT know the bank's products, prices, rates, terms or offers: never state one; if the designer needs one, say you do not have it and ask.
+FROM A BANKING SUBJECT TO AN IDEA: 1) name the subject in the designer's words; 2) name the worry it removes (if you are not sure, ask one question); 3) the people: exactly those the designer asked for, and if they named nobody propose ONE person and say so; 4) the moment after the worry is gone: an ordinary hour, one physical action, a time of day, one place; 5) the test: cover the headline: is anything of the bank, the product or the transaction in the frame? would this moment happen with no bank in the room? If the first is yes or the second is no, start again. Three ideas differ in the MOMENT, never only in the camera or the light.`;
+  const sync=()=>{ const icon=(S.mode==="icon"&&!isIcon())||!!S.web; el.hidden=icon; if(icon){ PC.pick=null; document.documentElement.classList.remove("pc-sheet"); } if(icon) cls.open=true; document.body.classList.toggle("talk",!icon); };
+  $("modeSeg")?.addEventListener("click",e=>{ const m=e.target.closest?.("[data-mode]")?.dataset.mode; if(m==="photo"&&isIcon()){ PC.card.kind="photo"; PC._wasIcon=false; } if(m==="icon") PC.pick=null; setTimeout(()=>{ sync(); try{ draw(); }catch{} },0); });
+  addEventListener("resize",()=>{ const k=$("pcPick"); if(!k||!k.getClientRects().length||el.hidden) document.documentElement.classList.remove("pc-sheet"); else document.documentElement.classList.add("pc-sheet"); /* the lock itself only applies under 768 px (CSS) */ }); document.querySelectorAll("#landing [data-enter]").forEach(b=>b.addEventListener("click",()=>setTimeout(sync,60))); setTimeout(sync,0); setTimeout(sync,1500);
   try{ const T=$("tour"); let byTour=false; if(T) new MutationObserver(()=>{ if(!T.hidden){ document.body.classList.add("talk-tour"); if(!cls.open){ cls.open=true; byTour=true; } } else { document.body.classList.remove("talk-tour"); if(byTour){ cls.open=false; byTour=false; } } }).observe(T,{attributes:true,attributeFilter:["hidden","class"]}); }catch{}
   /* ----- taste memory: what he liked, what he rejected and why ----- */
   const PCT_KEY="bae_pc_taste"; let PCT=(()=>{ try{ const v=JSON.parse(localStorage.getItem(PCT_KEY)||"[]"); return Array.isArray(v)?v:[]; }catch{ return []; } })();
@@ -5945,7 +5987,8 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
   /* ----- drawing ----- */
   const say=(t,extra)=>{ PC.msgs.push({r:"a",t:String(t||""),...(extra||{})}); };
   /* the summary is a control panel: people, clothes, camera/light, colours and style are chosen by tapping; each choice is sent to Claude as one sentence so the whole card stays coherent */
-  const RK=["scene","who","outfit","place","cam","grade","style"], tr=(en,ar)=>UX.lang==="ar"?ar:en;
+  const RKS=["scene","who","outfit","place","cam","grade","style"], rkOf=(M,j)=>{ const x=M?.recap?.[j]; if(!x) return null; if(x.id) return x.id; return M.recap.some(y=>y.id)?null:(M.recap.length>=7?RKS[j]||null:null); }, rowOf=(M,kind)=>(M?.recap||[]).find((x,j)=>rkOf(M,j)===kind)||null,
+  RK=RKS, tr=(en,ar)=>UX.lang==="ar"?ar:en;
   /* the outfit sheets that suit one character: men's for men, women's for women, children's for children; staff polos for adults */
   const ofFor=r=>{ const c=r.cat||"", m=/\(men\)/i, w=/\(women\)/i; const L=AT_OUTFITS.filter(o=>c==="men"?(o.cat==="Men"||(o.cat==="Staff"&&m.test(o.name))):c==="women"?(o.cat==="Women"||(o.cat==="Staff"&&w.test(o.name))):c==="kids"?(o.cat==="Boys"||o.cat==="Girls"):c==="elderly"?(o.cat==="Men"||o.cat==="Women"):true); return L.length?L:AT_OUTFITS; };
   /* v174: choices wait in PC.pend and go to Claude together, in ONE message, when the person presses "Save and send".
@@ -5974,21 +6017,22 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
     ph.forEach((x,i)=>{ const what=x.takes.map(t=>TAKE_SAY[t][ar?1:0]).join(ar?" و":" and "); T.push(ph.length===1?tr(`From this picture take ONLY ${what}, nothing else.`,`من هاي الصورة خذ بس ${what}، ولا إشي غيرهم.`):tr(`From the ${ORD[i]} picture take ONLY ${what}, nothing else.`,`من الصورة ${ORDA[i]} خذ بس ${what}، ولا إشي غيرهم.`)); });
     if(!T.length){ PC.busy=""; PC.pend=null; draw(); return; }
     T.push(tr("Keep everything else.","خلّي الباقي زي ما هو."));
-    PC.busy=""; PC.pend=null; PC.pick=null; if(files.length) PC.att=libs.map(r=>({url:r.src}));
+    const keepQ=JSON.parse(JSON.stringify(Q)), n0=PC.msgs.length; PC.busy=""; PC.pend=null; PC.pick=null; if(files.length) PC.att=libs.map(r=>({url:r.src}));
     await turn(T.join(" "),files.length?files:undefined);
+    { const fresh=PC.msgs.slice(n0).filter(m=>m.r==="a"); if(!fresh.length||fresh.every(m=>m.err)){ PC.pend=keepQ; draw(); return; } } /* the answer failed: the choices wait for another try */
     files.forEach((f,i)=>{ const j=PC.refs.findIndex(x=>x.file===f), r=libs[i], t=ph[i].takes; if(j<0) return; const R=PC.refs[j]; if(BR_OWNER&&r.mag) R.id=r.mag; R.lib=r.id; setRole(j,t[0],t.slice(1)); R.lock=true; }); if(files.length) draw(); }
   function pickHTML(){ const P=PC.pick, lib=ALL_REFS.filter(r=>r.bl), cast=castNow();
     const grid=()=>lib.length?`<div class="pc-pgrid">${lib.map(r=>`<button type="button" class="pc-pc" data-pcbl="${esc(r.id)}" title="${esc(r.d)}" aria-pressed="${P.id===r.id}"><span class="pc-th"><img src="${r.src}" alt="" loading="lazy" decoding="async"></span><i class="pc-ck" aria-hidden="true">✓</i></button>`).join("")}</div>`:"";
     let b="", ttl="Choose";
-    if(P.kind==="who"){ ttl="The people"; b=`<p class="t12 muted">Pick up to 3 people</p><div class="pc-pgrid people">${CHAR_REFS.map(r=>`<button type="button" class="pc-pc" data-pcchar="${esc(r.id)}" aria-pressed="${P.sel.includes(r.id)}"><span class="pc-th"><img src="${r.src||""}" alt="" loading="lazy" decoding="async"></span><i class="pc-ck" aria-hidden="true">✓</i><span class="pc-nm" dir="auto" data-noi18n>${esc(charAliases(r.id)[0]||"")}</span></button>`).join("")}</div><div class="pc-chips strong"><button type="button" class="go" data-pcok="who" ${P.sel.length?"":"disabled"}>Done</button><button type="button" data-pcpick="">Cancel</button></div>`; }
-    else if(P.kind==="outfit"){ ttl="The clothes"; b=cast.length?`<p class="t12 muted">Tap the clothes for each person</p>${cast.map(r=>`<div class="pc-ofp"><b dir="auto" data-noi18n>${esc(charAliases(r.id)[0]||"")}</b><div class="pc-pgrid outfits">${ofFor(r).map(o=>`<button type="button" class="pc-pc" data-pcofp="${esc(r.id)}|${esc(o.id)}" aria-pressed="${P.of[r.id]===o.id}" title="${esc(o.name)}"><span class="pc-th"><img src="${o.src}" alt="" loading="lazy" decoding="async"></span><i class="pc-ck" aria-hidden="true">✓</i><span class="pc-nm">${esc(o.name)}</span></button>`).join("")}</div></div>`).join("")}<div class="pc-chips strong"><button type="button" class="go" data-pcok="outfit" ${Object.values(P.of).some(Boolean)?"":"disabled"}>Done</button><button type="button" data-pcpick="">Cancel</button></div>`:`<p class="t12 muted">Choose the people first, then their clothes.</p>`; }
+    if(P.kind==="who"){ ttl="The people"; b=`<p class="t12 muted">Pick up to 3 people</p><div class="pc-pgrid people">${CHAR_REFS.map(r=>`<button type="button" class="pc-pc" data-pcchar="${esc(r.id)}" aria-pressed="${P.sel.includes(r.id)}"><span class="pc-th"><img src="${r.src||""}" alt="" loading="lazy" decoding="async"></span><i class="pc-ck" aria-hidden="true">✓</i><span class="pc-nm" dir="auto" data-noi18n>${esc(charAliases(r.id)[0]||"")}</span></button>`).join("")}</div><div class="pc-chips strong pc-pkbar"><button type="button" class="go" data-pcok="who" ${P.sel.length?"":"disabled"}>Done</button><button type="button" data-pcpick="">Cancel</button></div>`; }
+    else if(P.kind==="outfit"){ ttl="The clothes"; b=cast.length?`<p class="t12 muted">Tap the clothes for each person</p>${cast.map(r=>`<div class="pc-ofp"><b dir="auto" data-noi18n>${esc(charAliases(r.id)[0]||"")}</b><div class="pc-pgrid outfits">${ofFor(r).map(o=>`<button type="button" class="pc-pc" data-pcofp="${esc(r.id)}|${esc(o.id)}" aria-pressed="${P.of[r.id]===o.id}" title="${esc(o.name)}"><span class="pc-th"><img src="${o.src}" alt="" loading="lazy" decoding="async"></span><i class="pc-ck" aria-hidden="true">✓</i><span class="pc-nm">${esc(o.name)}</span></button>`).join("")}</div></div>`).join("")}<div class="pc-chips strong pc-pkbar"><button type="button" class="go" data-pcok="outfit" ${Object.values(P.of).some(Boolean)?"":"disabled"}>Done</button><button type="button" data-pcpick="">Cancel</button></div>`:`<p class="t12 muted">Choose the people first, then their clothes.</p>`; }
     else if(P.kind==="cam"||P.kind==="grade"){ ttl="Take from a photo"; b=`<p class="t13"><b>1.</b> What do you want from the photo? You can pick more than one.</p><div class="pc-takes" role="group" aria-label="What to take">${TAKES.map(([v,l])=>`<button type="button" data-pctake="${v}" aria-pressed="${P.takes.includes(v)}">${l}</button>`).join("")}</div><p class="t13"><b>2.</b> Tap the photo</p>${grid()}<div class="pc-chips strong pc-pkbar"><button type="button" class="go" data-pcok="photo" ${P.id&&P.takes.length?"":"disabled"}>Done</button><button type="button" data-pcpick="">Cancel</button></div>`; }
-    else if(P.kind==="scene"||P.kind==="place"){ ttl=P.kind==="scene"?"The scene":"The place"; const M=sumMsg(), cur=PC.pend?.txt?.[P.kind]||M?.recap?.[RK.indexOf(P.kind)]?.v||""; b=`<p class="t13">Write it the way you want it.</p><textarea id="pcTxt" class="pc-txt" dir="auto" rows="3" aria-label="${esc(uxL(ttl))}" data-noi18n>${esc(cur)}</textarea><div class="pc-chips strong pc-pkbar"><button type="button" class="go" data-pcok="txt">Done</button><button type="button" data-pcpick="">Cancel</button></div>`; }
+    else if(P.kind==="scene"||P.kind==="place"){ ttl=P.kind==="scene"?"The scene":"The place"; const M=sumMsg(), cur=PC.pend?.txt?.[P.kind]||rowOf(M,P.kind)?.v||""; b=`<p class="t13">Write it the way you want it.</p><textarea id="pcTxt" class="pc-txt" dir="auto" rows="3" aria-label="${esc(uxL(ttl))}" data-noi18n>${esc(cur)}</textarea><div class="pc-chips strong pc-pkbar"><button type="button" class="go" data-pcok="txt">Done</button><button type="button" data-pcpick="">Cancel</button></div>`; }
     else if(P.kind==="style"){ ttl="The style"; b=`<div class="pc-chips strong">${[["On-location","On location"],["Studio","Studio"]].map(([v,l])=>`<button type="button" data-pcstyle="${v}" aria-pressed="${(PC.pend?.style||PC.card.setting||S.setting)===v}">${l}</button>`).join("")}<button type="button" data-pcpick="">Cancel</button></div>`; }
     return `<div class="pc-pick" id="pcPick" role="dialog" aria-label="${esc(uxL(ttl))}"><div class="pc-pkh"><b>${esc(uxL(ttl))}</b><button type="button" class="pc-pkx" data-pcpick="" aria-label="Close">×</button></div><div class="pc-pkb">${b}</div></div>`; }
   /* the summary: one fixed panel under the chat. It stays after the images come back, so anything can be changed and the photo created again */
-  function sumHTML(){ const M=sumMsg(); if(!M) return ""; const ed=!PC.busy, asp=PC.card.aspect||$("aspect")?.value||"", pk=ed&&M.recap.length>=7, made=PC.msgs.some(m=>m.res), lab=k=>k==="cam"||k==="grade"?"Take from a photo":k==="scene"||k==="place"?"Edit":"Choose";
-    let h=`<div class="pc-sumh"><b>Your photo</b><span class="t12 muted">Change anything here, then create${made?" again":""}.</span></div><ul class="pc-recap" dir="auto" data-noi18n>${M.recap.map((x,j)=>`<li${pk&&RK[j]&&pendHTML(RK[j])?' class="pend"':""}><b>${esc(x.k)}</b><span>${pk&&RK[j]&&pendHTML(RK[j])?`<span class="pc-new">${pendHTML(RK[j])}</span>`:esc(x.v)}${pk&&RK[j]?` <button type="button" class="pc-rb" data-pcpick="${RK[j]}" aria-expanded="${PC.pick?.kind===RK[j]}">${esc(uxL(lab(RK[j])))}</button>`:""}</span></li>`).join("")}<li><b>${esc(uxL("Size"))}</b><span class="pc-szrow">${ed&&$("aspect")?`<select id="pcAsp2" class="pc-sel" aria-label="${esc(uxL("Size"))}">${[...$("aspect").options].map(o=>`<option value="${esc(o.value)}" ${o.value===asp?"selected":""}>${esc(o.textContent)}</option>`).join("")}</select>`:esc(asp)} · 2K</span></li><li><b>${esc(uxL("How many"))}</b><span>${ed?`<span class="a-seg pc-nseg" role="group" aria-label="${esc(uxL("How many"))}">${NS.map(v=>`<button type="button" data-pcnn="${v}" aria-pressed="${PC.n===v}">${v}</button>`).join("")}</span>`:PC.n}</span></li></ul>`;
+  function sumHTML(){ const M=sumMsg(); if(!M) return ""; const ed=!PC.busy, asp=PC.card.aspect||$("aspect")?.value||"", pk=ed, made=PC.msgs.some(m=>m.res), lab=k=>k==="cam"||k==="grade"?"Take from a photo":k==="scene"||k==="place"?"Edit":"Choose";
+    let h=`<div class="pc-sumh"><b>Your photo</b><span class="t12 muted">Change anything here, then create${made?" again":""}.</span></div><ul class="pc-recap" dir="auto" data-noi18n>${M.recap.map((x,j)=>`<li data-v="${esc(x.v)}"${pk&&rkOf(M,j)&&pendHTML(rkOf(M,j))?' class="pend"':""}><b>${esc(x.k)}</b><span>${pk&&rkOf(M,j)&&pendHTML(rkOf(M,j))?`<span class="pc-new">${pendHTML(rkOf(M,j))}</span>`:esc(x.v)}${pk&&rkOf(M,j)?` <button type="button" class="pc-rb" data-pcpick="${rkOf(M,j)}" aria-expanded="${PC.pick?.kind===rkOf(M,j)}">${esc(uxL(lab(rkOf(M,j))))}</button>`:""}</span></li>`).join("")}<li><b>${esc(uxL("Size"))}</b><span class="pc-szrow">${ed&&$("aspect")?`<select id="pcAsp2" class="pc-sel" aria-label="${esc(uxL("Size"))}">${[...$("aspect").options].map(o=>`<option value="${esc(o.value)}" ${o.value===asp?"selected":""}>${esc(o.textContent)}</option>`).join("")}</select>`:esc(asp)} · 2K</span></li><li><b>${esc(uxL("How many"))}</b><span>${ed?`<span class="a-seg pc-nseg" role="group" aria-label="${esc(uxL("How many"))}">${NS.map(v=>`<button type="button" data-pcnn="${v}" aria-pressed="${PC.n===v}">${v}</button>`).join("")}</span>`:PC.n}</span></li></ul>`;
     if(ed&&PC.pick) h+=pickHTML();
     if(ed&&pendN()) h+=`<div class="pc-save" id="pcSave"><span class="t13">Your choices are not sent yet</span><button type="button" class="go" data-pcsave>Save and send</button><button type="button" data-pcdiscard>Discard</button></div>`;
     else if(ed) h+=goHTML(made);
@@ -6003,8 +6047,11 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
     if(m.fixq&&last) h+=`<div class="pc-chips"><button type="button" data-pcfix="1">Fix it to the BAE rules</button><button type="button" data-pcfix="0">Keep it like the original</button></div>`;
     if(m.check&&m.check.some(c=>!c.ok||c.fix)) h+=`<ul class="pc-check">${m.check.filter(c=>!c.ok||c.fix).map(c=>`<li class="${c.ok?"ok":"no"}"><i aria-hidden="true">${c.ok?"✓":"!"}</i><span>${esc(c.rule)}${c.fix?`<small dir="auto" data-noi18n>${esc(c.fix)}</small>`:""}</span></li>`).join("")}</ul>`;
     if(m.ready&&last&&!sumMsg()&&!PC.busy) h+=goHTML(false);
-    if(m.editAsk&&last&&!PC.busy) h+=`<div class="pc-chips strong"><button type="button" class="go" data-pcedit="${i}">Change this image</button></div><p class="t12 muted">Or change the summary below and create a new one.</p>`;
-    if(m.res){ h+=`<div class="pc-res n${Math.min(4,m.res.imgs.length)}">${m.res.imgs.map((u,k)=>`<button type="button" class="pc-im" data-pclb="${i}:${k}" aria-label="View larger"><img src="${u}" alt=""></button>`).join("")}</div>`;
+    if(m.editAsk&&last&&!PC.busy) h+=`<div class="pc-chips strong"><button type="button" class="go" data-pcchg="${i}">Change this image</button></div><p class="t12 muted">Or change the summary below and create a new one.</p>`;
+    if(m.res){ const Q=m.qc, many=m.res.imgs.length>1;
+      h+=`<div class="pc-res n${Math.min(4,m.res.imgs.length)}">${m.res.imgs.map((u,k)=>`<button type="button" class="pc-im" data-pclb="${i}:${k}" aria-label="View larger"><img src="${u}" alt="">${Q?.items?.[k]?`<i class="pc-qb ${Q.items[k].v}" aria-hidden="true">${many?k+1:""}${Q.items[k].v==="use"?" ✓":" !"}</i>`:many?`<i class="pc-qb" aria-hidden="true">${k+1}</i>`:""}</button>`).join("")}</div>`;
+      if(Q){ const bad=Q.items.map((x,k)=>({...x,k})).filter(x=>x.v!=="use"), fx=bad.filter(x=>x.v==="fix"&&x.fix&&m.res.ids?.[x.k]);
+        h+=`<div class="pc-qc ${bad.length?"warn":"ok"}"><b>${bad.length?"I looked at it: something to know":"I looked at it: it follows the house rules"}</b>${Q.tell?`<p dir="auto" data-noi18n>${esc(Q.tell)}</p>`:""}${bad.length?`<ul data-noi18n>${bad.map(x=>`<li dir="auto">${many?`<b>${x.k+1}.</b> `:""}${esc(x.p.join(" · ")||(x.v==="redo"?"better made again":"one thing to fix"))}</li>`).join("")}</ul>`:""}${Q.unsure?.length?`<p class="t12 muted" dir="auto" data-noi18n>${esc(uxL("I could not check:"))} ${esc(Q.unsure.join(" · "))}</p>`:""}<p class="t12 muted">I checked a smaller copy. Look at it at full size before you use it.</p>${last&&!PC.busy&&fx.length?`<div class="pc-chips strong">${fx.slice(0,2).map(x=>`<button type="button" data-pcqfix="${i}:${x.k}" ${many?"data-noi18n":""}>${many?(UX.lang==="ar"?`صلّح الصورة ${x.k+1}`:`Fix picture ${x.k+1}`):"Fix this"}</button>`).join("")}</div>`:""}</div>`; }
       if(live) h+=`<div class="pc-chips"><button type="button" data-pcrate="like" aria-pressed="${m.rate==="like"}" aria-label="I like it">👍</button><button type="button" data-pcrate="dislike" aria-pressed="${m.rate==="dislike"}" aria-label="Not right">👎</button><button type="button" data-pcsay="The same moment, from the side">From the side</button><button type="button" data-pcsay="A little closer">Closer</button><button type="button" data-pcsay="A little wider">Wider</button>${(cur()?.c?.outs?.length||0)>1?`<button type="button" data-pc="cmp">Compare A / B</button>`:""}${PC.layout||LV.thumb?`<button type="button" data-pc="lay">See it in the layout</button>`:""}<button type="button" data-pc="open">Open the result</button></div>`;
       if(live&&m.rate==="dislike"&&!m.why) h+=`<div class="pc-chips why"><span class="t12 muted">What is wrong?</span>${["Too posed","Looks at the camera","Wrong light","Wrong outfit","Not centred","Busy background","Face is off"].map(w=>`<button type="button" data-pcwhy="${w}">${w}</button>`).join("")}</div>`; }
     if(m.lay) h+=`<button type="button" class="pc-im wide" data-pclay="${i}"><img src="${m.lay}" alt="Rough preview inside the layout"></button><span class="t12 muted">Rough preview: your image placed in the layout's picture area.</span>`;
@@ -6016,9 +6063,29 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
     box.querySelector(".pc-det")?.addEventListener("toggle",e=>{ PC.cardOpen=e.target.open; });
     if(PC.edit&&$("pcEd")){ atMake("pcEd",true); const e=$("pcEd"), k=PC.edit; e.focus(); atEnd(e); const done=()=>{ if(PC.edit!==k) return; const v=e.value.trim(); if(v) PC.card[k]=v; else delete PC.card[k]; PC.edit=null; drawCard(); };
       e.addEventListener("keydown",ev=>{ if(ev.key==="Enter"&&!ev.shiftKey&&!ev.isComposing){ ev.preventDefault(); done(); } else if(ev.key==="Escape"){ PC.edit=null; drawCard(); } }); e.addEventListener("blur",()=>setTimeout(()=>{ if(document.activeElement!==e&&!AT.menu?.matches(":hover")&&!AT.open) done(); },220)); } }
-  function draw(){ const box=$("pcMsgs"); box.innerHTML=(PC.msgs.length?"":`<div class="pc-empty"><p class="t16" dir="auto">Say what you need, in your own words. You can add pictures too: your design, a photo you like, colours you like.</p><p class="t12 muted">Or try one:</p><div class="sug pc-chips">${["A young couple planning their first home budget at the kitchen table, morning light","A staff member helping a customer at a branch desk","بدي صورة لشاب بدفع بالموبايل بكافيه هادي"].map(t=>`<button type="button" data-pcsay="${esc(t)}" dir="auto" data-noi18n>${esc(t)}</button>`).join("")}</div></div>`)+PC.msgs.map(msgHTML).join("")+(PC.busy?`<div class="pc-m a busy"><span class="rl-typing"><i></i><i></i><i></i></span><span class="t12 muted" id="pcBusy" data-noi18n>${esc(PC.busy)}</span></div>`:"");
+  function draw(){ const box=$("pcMsgs"), seen=PC._seen===1e9?PC.msgs.length:(PC.msgs.length<(PC._seen??0)?0:(PC._seen??0)), sumWas=!$("pcSum").hidden, rowsWas=[...el.querySelectorAll("#pcSum .pc-recap>li")].map(x=>x.dataset.v);
+    const stick=box.scrollHeight-box.scrollTop-box.clientHeight<64, st0=box.scrollTop, txWas=$("pcTxt")?{k:PC.pick?.kind,v:$("pcTxt").value,f:document.activeElement===$("pcTxt")}:null, fWas=document.activeElement&&el.contains(document.activeElement)&&document.activeElement!==inp?[...document.activeElement.attributes].find(x=>/^data-pc/.test(x.name)):null, fSel=fWas?`[${fWas.name}="${CSS.escape(fWas.value)}"]`:"";
+    if(!PC.busy) PC.mk=0;
+    /* v180: the messages are rebuilt only when they changed. A tap in a picker or on the summary no longer re-creates every picture of the chat */
+    const mh=(PC.msgs.length?"":`<div class="pc-empty"><p class="t16" dir="auto">Say what you need, in your own words. You can add pictures too: your design, a photo you like, colours you like.</p><p class="t12 muted">Or try one:</p><div class="sug pc-chips">${(UX.lang==="ar"?["أب وبنته بيضحكوا على الفطور بمطبخ مضوّي","صبية بتقرأ على الكنباية بمسا هادي","شاب مبسوط مع أهله على غدا الجمعة"]:["A father and his daughter laughing over breakfast in a bright kitchen","A young woman reading on her sofa on a quiet evening","A young man enjoying Friday lunch with his family"]).map(t=>`<button type="button" data-pcsay="${esc(t)}" dir="auto" data-noi18n>${esc(t)}</button>`).join("")}</div></div>`)+PC.msgs.map(msgHTML).join("")+(PC.busy?`<div class="pc-m a busy"><span class="rl-typing"><i></i><i></i><i></i></span><span class="t12 muted" id="pcBusy" data-noi18n>${esc(uxL(PC.busy))}</span>${PC.mk?`<span class="pc-sks n${Math.min(4,PC.mk)}" aria-hidden="true">${`<i class="pc-sk" style="--ar:${/^\d+:\d+$/.test(PC.card.aspect||"")?PC.card.aspect.replace(":","/"):"16/9"}"></i>`.repeat(Math.min(4,PC.mk))}</span>`:""}</div>`:"");
+    const rebuilt=mh!==PC._mh; if(rebuilt){ box.innerHTML=mh; PC._mh=mh; }
     { const sm=$("pcSum"), keep=[...el.querySelectorAll("#pcPick .pc-pkb, #pcPick .pc-pgrid")].map(x=>x.scrollTop), h=sumHTML(); sm.hidden=!h; sm.innerHTML=h; el.classList.toggle("has-sum",!!h); document.documentElement.classList.toggle("pc-sheet",!!(h&&PC.pick)); [...el.querySelectorAll("#pcPick .pc-pkb, #pcPick .pc-pgrid")].forEach((x,i)=>{ if(keep[i]) x.scrollTop=keep[i]; }); }
-    box.scrollTop=box.scrollHeight; if(PC.msgs.length>(PC._n||0)&&getComputedStyle(box).overflowY==="visible") (box.lastElementChild||box).scrollIntoView({block:"nearest"}); PC._n=PC.msgs.length; drawCard(); document.body.classList.toggle("talk-res",!!cur()); clearTimeout(tkT); if(!PC.busy) tkT=setTimeout(()=>tkSave().catch(()=>{}),900);
+    /* v180 motion: only what is NEW moves. A message that was already on screen never animates again */
+    if(rebuilt){ const M=[...box.querySelectorAll(":scope>.pc-m:not(.busy)")]; M.forEach((e,i)=>{ if(i>=seen){ e.classList.add("pc-in"); e.querySelectorAll(".pc-im img").forEach(im=>{ const ok=()=>im.classList.add("ld"); if(im.complete&&im.naturalWidth) ok(); else { im.addEventListener("load",ok,{once:true}); im.addEventListener("error",ok,{once:true}); } }); } else e.querySelectorAll(".pc-im img").forEach(im=>im.classList.add("ld","no")); }); PC._seen=PC.msgs.length;
+      const bz=box.querySelector(":scope>.pc-m.busy"); if(bz&&!PC._bz) bz.classList.add("pc-in"); PC._bz=!!bz; }
+    {
+      const sm=$("pcSum"); if(!sm.hidden&&!sumWas){ sm.classList.add("pc-in"); setTimeout(()=>sm.classList.remove("pc-in"),700); } else if(sm.hidden) sm.classList.remove("pc-in");
+      if(sumWas&&!sm.hidden) [...sm.querySelectorAll(".pc-recap>li")].forEach((li,i)=>{ if(rowsWas[i]!==undefined&&li.dataset.v!==undefined&&rowsWas[i]!==li.dataset.v) li.classList.add("chg"); });
+      const sv=$("pcSave"); if(sv&&!PC._sv) sv.classList.add("pc-in"); PC._sv=!!sv;
+      const pk=$("pcPick"), kind=PC.pick?.kind||"", tx=$("pcTxt"); if(pk&&getComputedStyle(pk).position==="fixed") pk.setAttribute("aria-modal","true");
+      if(tx&&txWas&&txWas.k===kind){ tx.value=txWas.v; if(txWas.f) tx.focus({preventScroll:true}); }
+      if(pk&&kind!==PC._pk){ pk.classList.add("pc-open"); (tx||pk.querySelector(".pc-pkx"))?.focus({preventScroll:true}); }
+      else if(!pk&&PC._pk) el.querySelector(`.pc-rb[data-pcpick="${PC._pk}"]`)?.focus({preventScroll:true});
+      else if(fSel&&!el.contains(document.activeElement)){ try{ const n=el.querySelector(fSel); if(n&&!n.disabled) n.focus({preventScroll:true}); }catch{} }
+      PC._pk=kind;
+      if(PC._tap){ try{ el.querySelector(PC._tap)?.classList.add("pc-pop"); }catch{} PC._tap=""; } }
+    if(PC.msgs.length>(PC._n||0)||PC.busy||stick) box.scrollTop=box.scrollHeight; else if(box.scrollTop!==st0){ box.style.scrollBehavior="auto"; box.scrollTop=st0; box.style.scrollBehavior=""; }
+    if(PC.msgs.length>(PC._n||0)&&getComputedStyle(box).overflowY==="visible") (box.lastElementChild||box).scrollIntoView({block:"nearest",behavior:matchMedia("(prefers-reduced-motion:reduce)").matches?"auto":"smooth"}); PC._n=PC.msgs.length; drawCard(); document.body.classList.toggle("talk-res",!!cur()); clearTimeout(tkT); if(!PC.busy) tkT=setTimeout(()=>tkSave().catch(()=>{}),900);
     $("pcRefs").innerHTML=PC.refs.length?`<span class="pc-refh t12 muted">Your pictures. Under each one: what I take from it.</span>`+PC.refs.map((r,i)=>`<span class="pc-ref"><button type="button" class="pc-im" data-pcrefv="${i}" aria-label="View picture ${i+1}"><img src="${r.url}" alt=""></button><i>${i+1}</i><button type="button" class="bi-x" data-pcrefx="${i}" aria-label="Remove picture ${i+1}">×</button><select data-pcrole="${i}" aria-label="What to take from picture ${i+1}">${ROLES.map(([v,l])=>`<option value="${v}" ${(r.role||"look")===v?"selected":""}>${l}</option>`).join("")}</select>${r.also?.length?`<small class="t12 pc-also">+ ${r.also.map(a=>esc(uxL((ROLES.find(x=>x[0]===a)||[])[1]||a))).join(" + ")}</small>`:""}${r.old&&!r.id&&(ROLE_USE[r.role]||r.role==="remake")?`<small class="t12 pc-again">Add it again to use it</small>`:""}</span>`).join(""):"";
     $("pcAtt").innerHTML=PC.att.map((a,i)=>`<span class="th"><img src="${a.url}" alt=""><button type="button" data-pcatt="${i}" aria-label="Remove">×</button></span>`).join(""); if(typeof uxT==="function") uxT(el);
     const cs=$("pcCost"); if(cs&&typeof uxCost==="function"){ const base=cs.textContent; uxCost({k:"image",n:PC.n}).then(v=>{ if(v&&cs.isConnected) cs.textContent=`${base} · ${v.unlimited?"included in your plan":"about "+v.credits+" credits"}`; }).catch(()=>{}); } }
@@ -6039,7 +6106,9 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
   function dropRef(i){ if(!PC.refs[i]) return; setRole(i,"look"); PC.refs.splice(i,1); }
   function ask(text,fresh){ const lib=atChars().map(c=>"@"+c.name.split("/")[0].trim()+(c.name.includes("/")?" (also written "+c.name.split("/").slice(1).map(x=>x.trim()).join(", ")+")":"")).slice(0,60).join(", ")||"(none yet)", c=cur(), tail=PC.msgs.slice(-13,-1).map(m=>`${m.r==="u"?"DESIGNER":"YOU"}: ${String(m.t||m.ask?.q||(m.res?"[you delivered an image]":"")).slice(0,400)}${m.r==="u"&&m.imgs?.length?` [with ${m.imgs.length} picture(s)]`:""}${m.dirs?" [you offered: "+m.dirs.map(d=>d.title).join(" / ")+"]":""}`).join("\n");
     const pics=PC.refs.map((r,i)=>`${i+1}. ${fresh.includes(i)?"NEW — attached to this message as image "+(fresh.indexOf(i)+1):"role: "+[r.role||"look",...(r.also||[])].join(" + ")+(r.lock?" (the designer chose this by hand; keep it)":"")+(r.what?" — "+r.what:"")}`).join("\n");
-    return `You are Claude, working as the art director inside BAE Studio, the image studio of Bank al Etihad (Jordan). The person talking to you is a designer or a marketing colleague. Some are not technical and some are in their forties or fifties. Talk like a helpful colleague in THEIR language (usually Jordanian Arabic, sometimes English): plain everyday words, short sentences, never formal, no jargon (say "الألوان", not "color grading", unless they said it first). You are free to think: give your opinion, suggest ideas, say why, answer any question about the picture or the campaign. The goal is ONE photograph they are happy with, in as few steps as possible. You keep a shot card; the studio writes the final image prompt from it, so you never write that prompt.
+    return `You are Claude, working as the art director inside BAE Studio, the image studio of Bank al Etihad (Jordan). The person talking to you is a designer or a marketing colleague. Some are not technical and some are in their forties or fifties. Talk like a helpful colleague in THEIR language (usually Jordanian Arabic, sometimes English): plain everyday words, short sentences, never formal, no jargon (say "الألوان", not "color grading", unless they said it first). You are free to think: give your opinion, suggest ideas, say why, answer any question about the picture or the campaign. The goal is ONE photograph they are proud of. Quality comes before speed: think the picture through before you answer. You keep a shot card; the studio writes the final image prompt from it, so you never write that prompt.
+${LEVEL()}
+${BANK}
 
 HOUSE RULES (never broken; if a wish would break one, adjust the card so it respects the rule and say so in one short phrase):
 - Candid: nobody looks at the camera; people are caught in the middle of a real action.
@@ -6054,6 +6123,7 @@ HOUSE RULES (never broken; if a wish would break one, adjust the card so it resp
 - The product appears ONLY when the designer asks for it in words (a bank card, a phone and its screen, a car, car keys, a payment machine). Any phone is a modern iPhone 18 with no visible logo.
 
 LIBRARY. Characters (write exactly "@Name"): ${lib}
+BAE REFERENCE PHOTOS (the bank's own look. The studio sends the ones you choose to guide ONLY the colour, the light and the finish, never the scene or the people): ${ALL_REFS.filter(r=>r.bl).map(r=>r.id+" = "+String(r.d||"").replace(/^BAE reference: /,"")).join("; ")}
 Outfits (write exactly "[outfit: Name]"): ${AT_OUTFITS.map(o=>o.name+" ("+o.cat+")").join("; ")}
 Camera angles (write exactly "[shot: Name]"): ${AT_SHOTS.map(s=>s[0]).join("; ")}
 
@@ -6071,7 +6141,7 @@ composition (how the frame is built: where things sit, the distance, the empty s
 - When they speak about an earlier picture ("الصورة الثالثة هي زاوية التصوير", "the second one is for colours") and change its use, return an entry for that number too.
 - A new picture with NO hint of what they want from it: role "look", say in one line what you see, and ASK what to take from it, with options such as the same scene with our people / only the camera angle / only the colours / only the place.
 - A person in a picture is NEVER copied. The first time it matters, say kindly in one phrase that the face will be one of the bank's characters, and offer names.
-- A layout: read its copy, say in one line what the message is, set "aspect" in the card from the empty picture area, and set do to "directions" with 3 clearly different ideas for what fills it (for example a scene with people, the product itself, a close detail). If a 3D icon would serve the message better than a photo, say so in "say".
+- A layout: read its copy, say in one line what the message is, set "aspect" in the card from the empty picture area, and set do to "directions" with 3 clearly different ideas for what fills it (three different lived MOMENTS: when, where and what the person is doing; never the product itself). If a 3D icon would serve the message better than a photo, say so in "say".
 
 HOW TO FILL THE CARD. Each field is a phrase that reads as one sentence when joined: who + action + place, light.
 - who: the subject, with "@Name" for every library character ("@Sara, a young mother"); or an object if there are no people.
@@ -6087,6 +6157,7 @@ Return ONLY JSON:
 {"say":"1 to 3 short sentences in the designer's language: what you understood, your idea, or what you did. No lists.",
 "card":{"who":"","outfit":"","action":"","place":"","camera":"","light":"","grade":"","setting":"","aspect":"","extra":""},
 "kind":"photo",
+"refs":[],
 "count":0,
 "pictures":[],
 "ask":null,
@@ -6102,10 +6173,11 @@ Return ONLY JSON:
 - "count": how many images they asked for: 1, 2, 4 or 8 (the studio makes them in one go from the same prompt; another number goes up to the next of these); 0 when they did not say.
 - "ask": null, or {"q":"ONE short question","options":["2 to 4 short answers"]}; only when who, action or place is truly missing and you cannot choose well yourself, when a new picture came with no hint${PC.src?", or when the source photo shows a person and the card has no @character to replace them (offer library names as options)":""}. Never more than one question.
 - "chips": 2 to 4 very short things the designer might say next, in their language, fitted to this moment (for example "تمام، صوّرها", "غيّر المكان", "أعطيني أفكار", "بدي ٤ صور"). [] when "ask" has options.
+- "refs": for a photograph, the ids of the 2 or 3 BAE REFERENCE PHOTOS whose light, time of day, indoor or outdoor feeling and mood are closest to THIS picture (for example ["br22","br14"]). Choose again whenever the scene changes. Empty for an icon.
 - "kind": "icon" when the designer asks for an icon, a 3D icon or أيقونة instead of a photograph; "photo" otherwise (say "photo" again when they go back to a photograph). For an icon the studio uses its own ICON system and image model: a 3D glass icon in the BAE style, one object, centred, on a Light Stone background, 16:9. So for an icon put in "action" ONE object described plainly in English (what it is and how it sits, e.g. "a small modern city car, three-quarter view"); leave who, outfit, place, camera, light and grade empty; never describe a photo scene, a room or studio light. The people, location, distance and "be present" rules do not apply to icons. In the recap say it is a 3D icon in the BAE icon style.
 - "do": "edit" ONLY when an image is on screen and the designer asks to change something in it. The studio does NOT render by itself: it shows the designer a "Change this image" button, so never say the change is done; say in one short line what will change. ALWAYS return the updated "card" and the full updated "recap" with it, so the summary under the chat shows the new scene and text. "edit" is that single change in plain English (use "[outfit: Name]" when a library outfit is meant). "angles" when they ask for other angles of the same moment. "directions" when they ask for ideas or options, or gave a layout: then "directions" holds exactly 3 clearly different, on-brand ways to show the same message, each {"title":"3 to 5 words in the designer's language","card":{…full card…}}. "ready" when the card has who (or an object), action and place and the designer wants the picture, has nothing to add, or asks to send it to the brief or to sum it up ("ابعث للبريف", "لخّص", "خلص", "تمام"); then "say" tells them in one line to check the summary under the chat and press Create. Otherwise "talk".
 - "check" (only when do is "ready"): exactly these five, each {"rule":"…","ok":true|false,"fix":"if you had to adjust the card for this rule, what you changed, in the designer's language; else empty"}: "Candid, nobody looks at the camera" · "Camera from the side, behind or three-quarter" · "Subject in the centre" · "Quiet, clean background" · "No logos or text". After your adjustments every rule should be ok.
-- "recap" (only when do is "ready"): the photo summed up for the designer, in THEIR language, plain words, each value one short line: [{"k":"label","v":"…"}] with these rows in this order — the scene (what happens) · the person or people (character names without @) · the clothes · the place · the camera and the light · the colours (or the number of the picture they come from) · the style (on location or studio) · their pictures (one line: which number gives what; skip the row when there are none). Do not add size or count; the studio adds them.
+- "recap" (only when do is "ready"): the photo summed up for the designer, in THEIR language, plain words, each value one short line: [{"id":"scene","k":"label","v":"…"}] where "id" is exactly one of scene, who, outfit, place, cam, grade, style (never translated; leave "id" out for any other row), with these rows in this order — the scene (what happens) · the person or people (character names without @) · the clothes · the place · the camera and the light · the colours (or the number of the picture they come from) · the style (on location or studio) · their pictures (one line: which number gives what; skip the row when there are none). Do not add size or count; the studio adds them.
 - "source" and "keep": ONLY when a NEW picture has the role remake. "source" = what that photo shows, field by field {"who":"people described generically (age range, build, what they wear); empty if there are no people; never a name or an identity","outfit":"","action":"","place":"","camera":"","light":"","issues":["house rules the photo breaks, e.g. looks at the camera, subject off centre, busy background"]} and "keep" = {"outfit":true|false,"action":true|false,"place":true|false,"camera":true|false,"light":true|false} from what the designer said to change (everything they did not mention is kept). In the card, fill ONLY the fields that change.`; }
   async function turn(text,files){ text=String(text||"").trim(); if(PC.busy||(!text&&!files?.length)) return;
     const room=Math.max(0,8-PC.refs.length), cap=Math.min(4,sampleImages?.maxCount||4), all=(files||[]), take=all.slice(0,Math.min(room,cap));
@@ -6116,7 +6188,7 @@ Return ONLY JSON:
     if(!sample){ undo(); say("Claude isn't connected in this view. Open the studio in claude.ai, or write the brief yourself under All tools.",{err:true}); draw(); return; }
     if(fresh.length&&!sampleImages){ undo(); say("I can't look at pictures in this view. Describe it in words and I'll build it.",{err:true}); draw(); return; }
     PC.busy=fresh.length?"Looking at your pictures…":"Thinking…"; draw();
-    try{ const r=await rlAsk(ask(text||"Look at the attached pictures.",fresh),{...mdl(),modelTier:fresh.length?"complex":"default",cache:false,...(fresh.length?{images:fresh.map(i=>PC.refs[i].blob)}:{})}); await handle(r||{},fresh); if(all.length>take.length) say(`I took ${take.length} of your ${all.length} pictures. Send the others in the next message.`); }
+    try{ const r=await rlAsk(ask(text||"Look at the attached pictures.",fresh),{...mdl(),modelTier:"complex",cache:false,...(fresh.length?{images:fresh.map(i=>PC.refs[i].blob)}:{})}); await handle(r||{},fresh); if(all.length>take.length) say(`I took ${take.length} of your ${all.length} pictures. Send the others in the next message.`); }
     catch(e){ undo(); log("✕","talking",{code:e?.code,message:e?.message}); say(e?.code==="rate_limited"?"Too many requests right now. Try again in a minute.":e?.code==="not_granted"?"Claude needs your permission in this page first.":"I couldn't answer that. Try again.",{err:true}); }
     PC.busy=""; draw(); }
   async function handle(r,fresh){ const txt=String(r.say||"").trim().slice(0,900);
@@ -6126,31 +6198,61 @@ Return ONLY JSON:
       try{ const bmp=await createImageBitmap(PC.src.blob), ar=bmp.width/bmp.height, as=$("aspect"), best=[...as.options].map(o=>o.value).filter(v=>/^\d+:\d+$/.test(v)).map(v=>[v,Math.abs(Math.log(ar/(v.split(":")[0]/v.split(":")[1])))]).sort((a,b)=>a[1]-b[1])[0]; if(best) PC.card.aspect=best[0]; }catch{} }
     if(r.card&&typeof r.card==="object") PC.card={...PC.card,...clean(r.card)};
     if(r.kind==="icon"||r.kind==="photo"){ PC.card.kind=r.kind; modeFor(); }
+    if(Array.isArray(r.refs)){ const L=r.refs.map(x=>String(x||"").trim()).filter(id=>refById(id)?.bl); if(L.length) PC.look=[...new Set(L)].slice(0,3); }
     if(+r.count>=1) PC.n=nFit(r.count);
     if(PC.src){ if(r.keep&&typeof r.keep==="object") for(const [k] of F) if(k!=="who"&&typeof r.keep[k]==="boolean") PC.keep[k]=r.keep[k]; PC.keep.who=false; for(const [k] of F) if(k!=="who"&&PC.card[k]&&r.card?.[k]&&r.keep?.[k]===undefined&&!fresh.length) PC.keep[k]=false; }
     const m={r:"a",t:txt}; if(r.ask&&typeof r.ask==="object"&&r.ask.q) m.ask={q:String(r.ask.q).slice(0,240),options:(Array.isArray(r.ask.options)?r.ask.options:[]).map(o=>String(o).slice(0,70)).slice(0,5)};
     if(!m.ask&&Array.isArray(r.chips)){ const ch=r.chips.map(o=>String(o||"").trim().slice(0,60)).filter(Boolean).slice(0,4); if(ch.length) m.chips=ch; }
     if(r.do==="directions"&&Array.isArray(r.directions)){ const d=r.directions.filter(x=>x?.card).slice(0,3).map(x=>({title:String(x.title||"Direction").slice(0,60),card:{...PC.card,...clean(x.card)}})); if(d.length) m.dirs=d; }
     if((r.do==="ready"||r.do==="angles")&&!m.ask){ if(PC.src&&PC.src.f.who&&!chars(PC.card.who).length){ m.ask={q:"Which character replaces the person in the photo? Type @ and pick one.",options:atChars().slice(0,4).map(c=>"@"+c.name)}; }
-      else { m.ready=true; delete m.chips; try{ apply(); }catch{} if(Array.isArray(r.recap)){ const rc=r.recap.filter(x=>x&&x.k&&x.v).slice(0,9).map(x=>({k:String(x.k).slice(0,40),v:String(x.v).slice(0,220)})); if(rc.length) m.recap=rc; } const ck=(Array.isArray(r.check)?r.check:[]).filter(c=>c?.rule).slice(0,6).map(c=>({rule:String(c.rule).slice(0,80),ok:c.ok!==false,fix:String(c.fix||"").slice(0,160)})); if(ck.length) m.check=ck;
+      else { m.ready=true; delete m.chips; try{ apply(); }catch{} if(Array.isArray(r.recap)){ const rc=r.recap.filter(x=>x&&x.k&&x.v).slice(0,9).map(x=>({k:String(x.k).slice(0,40),v:String(x.v).slice(0,220),...(RKS.includes(x.id)?{id:x.id}:{})})); if(rc.length) m.recap=rc; } const ck=(Array.isArray(r.check)?r.check:[]).filter(c=>c?.rule).slice(0,6).map(c=>({rule:String(c.rule).slice(0,80),ok:c.ok!==false,fix:String(c.fix||"").slice(0,160)})); if(ck.length) m.check=ck;
         if(PC.src&&PC.src.issues.length&&PC.fix===null){ m.ready=false; m.fixq=true; m.t=(m.t?m.t+" ":"")+"The photo breaks a house rule: "+PC.src.issues.join(", ")+"."; } } }
     PC.msgs.push(m);
     /* v178: a change request never starts a render by itself. The summary is updated and the designer chooses: change this image, or create again */
-    if(r.do==="edit"&&String(r.edit||"").trim()){ if(Array.isArray(r.recap)){ const rc=r.recap.filter(x=>x&&x.k&&x.v).slice(0,9).map(x=>({k:String(x.k).slice(0,40),v:String(x.v).slice(0,220)})); if(rc.length){ m.recap=rc; m.ready=true; try{ apply(); }catch{} } } if(cur()) m.editAsk=String(r.edit).trim().slice(0,400); else m.ready=!m.ask; } }
+    if(r.do==="edit"&&String(r.edit||"").trim()){ if(Array.isArray(r.recap)){ const rc=r.recap.filter(x=>x&&x.k&&x.v).slice(0,9).map(x=>({k:String(x.k).slice(0,40),v:String(x.v).slice(0,220),...(RKS.includes(x.id)?{id:x.id}:{})})); if(rc.length){ m.recap=rc; m.ready=true; try{ apply(); }catch{} } } if(cur()) m.editAsk=String(r.edit).trim().slice(0,400); else m.ready=!m.ask; } }
   /* v177: a result message remembers the Magnific identifiers of its images and the prompt that made them, so the chat it belongs to can go on editing them after it is opened again */
   const mkRes=(k,imgs)=>{ const o=(cards[k]?.outs||[]).filter(x=>x.img||x.url).slice(-imgs.length); return {imgs,ids:o.map(x=>x.id||""),k,p:String($(MODELS[k]?.prompt)?.value||"").slice(0,2500)}; };
   const snap=(k,from)=>{ const c=cards[k], outs=(c?.outs||[]).slice(from||0).filter(o=>o.img||o.url); return outs.map(o=>o.img||o.url); };
   const watch=()=>setInterval(()=>{ const s=$("pcBusy"), c=cards[genKeys()[0]], i=c?.steps?.lastIndexOf("run"), n=(i>=0&&c.stepNote?.[i])||c?.editMsg||$("flowMsg")?.textContent; if(s&&n) s.textContent=String(n).slice(0,90); },900);
-  async function doEdit(change){ const x=cur(); if(!x){ say("There is no image to change yet.",{err:true}); return; } PC.busy="Changing it…"; draw(); const n=x.c.outs.length, t=watch();
-    try{ await editImage(x.k,change); }catch{} clearInterval(t); PC.busy=""; if(x.c.outs.length>n) PC.msgs.push({r:"a",t:"",res:mkRes(x.k,snap(x.k,n))}); else say(x.c.editErr||"The change didn't come back. Nothing else was touched.",{err:true}); }
+  /* v180 quality: when a picture comes back, Claude LOOKS at it against what was asked and the house rules, and says plainly what it sees.
+     Nothing is fixed or rendered by itself: "Fix picture N" is a press. The check sees a reduced copy, and the note says so */
+  async function inspect(m){ try{ if(!sampleImages||!m?.res?.ids?.length||isIcon()) return; const c=cards[m.res.k]; const outs=m.res.ids.map(id=>(c?.outs||[]).find(o=>o.id&&o.id===id)).filter(Boolean).slice(0,sampleImages.maxCount||4); if(!outs.length) return;
+      PC.busy="Checking the picture against the house rules…"; draw(); const imgs=[];
+      for(const o of outs){ let bl=o.blob||null; if(!bl&&o.id){ try{ bl=await rlFullImage(o.id); }catch{} } if(!bl) continue; try{ imgs.push(await toJpeg(bl,1568)); }catch{ imgs.push(bl); } }
+      if(!imgs.length){ PC.busy=""; return; }
+      const who=chars(PC.card.who||""), named=(PC.card.who||"").trim();
+      const r=await rlAsk(`You inspect ${imgs.length>1?imgs.length+" finished photographs (numbered 1 to "+imgs.length+" in order)":"a finished photograph"} made for Bank al Etihad, before the designer uses ${imgs.length>1?"them":"it"}. Report only what you can SEE. When you cannot tell, put it in "unsure"; never guess a pass and never say "perfect".
+IT WAS MEANT TO SHOW: ${compose(PC.card)||"(not described)"}
+PEOPLE ASKED: ${who.length?who.length+" ("+who.map(x=>charAliases(x.id)[0]).join(", ")+")":named?"as described: "+named:"not stated"}
+SETTING: ${PC.card.setting||S.setting}
+For EACH picture look at:
+- people: count every person, including partial, blurred, reflected or far figures. More or fewer than asked is a fault.
+- gaze: is any face turned to the lens or any eyes on the camera?
+- marks: any logo, emblem, lettering, sign, screen text, number plate or watermark, and on which garment or object.
+- centre: is the main subject on the vertical centre of the frame, at a medium distance (about the middle third of the width)?
+- sides: could a headline sit on the left third and on the right third (calm, plain)? What is in the way.
+- product: any bank product or transaction in view (card, cash, key handover, contract, payment machine, phone screen, branch counter) that the description did not ask for.
+- place: modern, premium, tidy? Anything old, worn or cluttered.
+- body: hands, faces, limbs or objects that are wrong or doubled.
+- match: is it the scene asked (who, doing what, where)?
+"verdict": "use" = nothing a viewer or a brand manager would notice · "fix" = ONE thing an edit can change while everything else stays · "redo" = the people count, the main person's gaze, the composition or the anatomy is wrong and an edit will not save it.
+"tell": 1 to 3 short sentences for the designer in ${UX.lang==="ar"?"Jordanian Arabic":"the language of this talk (Jordanian Arabic if they wrote Arabic, else English)"}${UX.level==="pro"?", in a professional's terms":", in plain everyday words"}: what works, then exactly what is wrong and in which picture. No softening.
+"fix": for "fix" only, the single change as an edit instruction in English.
+Return ONLY JSON: {"images":[{"n":1,"people_seen":0,"problems":["short, at most 10 words each"],"verdict":"use|fix|redo","fix":""}],"best":1,"tell":"","unsure":["what you could not check"]}`,{...mdl(),modelTier:"complex",cache:false,images:imgs});
+      const L=(Array.isArray(r?.images)?r.images:[]).slice(0,imgs.length).map(x=>({v:/^(use|fix|redo)$/.test(x?.verdict)?x.verdict:"use",p:(Array.isArray(x?.problems)?x.problems:[]).map(q=>String(q).slice(0,90)).filter(Boolean).slice(0,4),fix:String(x?.fix||"").trim().slice(0,300)}));
+      if(L.length) m.qc={tell:String(r?.tell||"").trim().slice(0,500),best:Math.min(L.length,Math.max(1,+r?.best||1)),items:L,unsure:(Array.isArray(r?.unsure)?r.unsure:[]).map(q=>String(q).slice(0,90)).filter(Boolean).slice(0,3)};
+    }catch(e){ try{ log("✕","talking inspect",{message:e?.message}); }catch{} } finally{ PC.busy=""; draw(); } }
+  async function doEdit(change){ const x=cur(); if(!x){ say("There is no image to change yet.",{err:true}); return; } PC.busy="Changing it…"; PC.mk=1; draw(); const n=x.c.outs.length, t=watch();
+    try{ await editImage(x.k,change); }catch{} clearInterval(t); PC.busy=""; if(x.c.outs.length>n){ const m={r:"a",t:"",res:mkRes(x.k,snap(x.k,n))}; PC.msgs.push(m); draw(); await inspect(m); } else say(x.c.editErr||"The change didn't come back. Nothing else was touched.",{err:true}); }
   const uses=()=>PC.refs.filter(r=>ROLE_USE[r.role]&&(r.id||r.file||r.blob)).slice(0,5);
   async function create(angles){ if(PC.busy) return; modeFor(); if(isIcon()) angles=false; if(!isIcon()&&(PC.src||(uses().length&&!angles))) return shoot(); if(!compose(PC.card).replace(/\W/g,"")){ say("Tell me the photo first.",{err:true}); draw(); return; }
+    if(!isIcon()&&PC.look?.length){ try{ S.picked=[...S.picked.filter(id=>!refById(id)?.bl),...PC.look]; renderRefs(); }catch{} } /* the look references Claude chose for this scene replace the fixed four */
     const b=apply(), n=angles?1:PC.n, got=[]; const t=watch(); S.quiet=true; const cEl=$("count"), c0=cEl?.value;
-    PC.busy=angles?"Creating 4 angles…":n>1?`Creating ${n} images…`:"Creating the image…"; draw();
+    PC.busy=angles?"Creating 4 angles…":n>1?`Creating ${n} images…`:"Creating the image…"; PC.mk=angles?4:n; draw();
     try{ if(angles){ S.angles=ANGLES4; try{ await createAll(); } finally{ S.angles=null; } } else { if(cEl) cEl.value=String(n); S.batch=true; await createAll(); } }catch(e){ log("✕","talking create",{message:e?.message}); } finally{ S.batch=false; if(cEl) cEl.value=c0; }
     got.push(...snap(genKeys()[0]));
     S.quiet=false; clearInterval(t); PC.busy="";
-    const k=genKeys()[0]; if(got.length) PC.msgs.push({r:"a",t:"",res:mkRes(k,got.slice(-Math.max(n,angles?4:1))),brief:b}); else say(cards[k]?.err||$("flowMsg")?.textContent||"The image didn't come back.",{err:true}); draw(); }
+    const k=genKeys()[0]; let made1=null; if(got.length){ made1={r:"a",t:"",res:mkRes(k,got.slice(-Math.max(n,angles?4:1))),brief:b}; PC.msgs.push(made1); } else say(cards[k]?.err||$("flowMsg")?.textContent||"The image didn't come back.",{err:true}); draw(); if(made1) await inspect(made1); }
   /* a library image as a Magnific reference: linked library first, then a one-time upload that is remembered */
   async function magId(id){ let U={}; try{ U=JSON.parse(localStorage.getItem("bae_user_magids")||"{}"); }catch{} const have=S.magIds?.[String(id).toLowerCase()]||U[id]; if(have) return have;
     const r=refById(id); let blob=r?.blob||null; if(!blob&&r?.lib){ try{ blob=r.blob=await clBlob(r.docId); }catch{} } if(!blob&&r?.bl){ try{ blob=await blBlob(r); }catch{} } if(!blob){ const res=await fetch(`refs/${id}.jpg`); if(res.ok) blob=await res.blob(); } if(!blob) return null;
@@ -6163,13 +6265,13 @@ Return ONLY JSON:
     const w=await rlAsk(`Look at the photo. You describe it for a photographer who will NEVER see it and must match ${need.map(x=>x==="grade"?"its colour grading":"its light").join(" and ")} in a completely different scene.
 ${need.includes("grade")?`"grade": ONLY the colour grading, 45 to 70 words: the overall palette as 5 hex colours with their role (shadows, midtones, highlights, skin, accent), white balance and temperature, contrast, saturation, how the blacks and the whites sit, any tint in shadows or highlights, the film or digital look. `:""}${need.includes("light")?`"light": ONLY the light, 35 to 60 words: direction and height of the key light, hard or soft, how the shadows fall, fill, time-of-day feeling, any rim or practical light. `:""}
 Do NOT name any object, person, piece of clothing, room, place or action from the photo.
-Return ONLY JSON: {${need.map(x=>`"${x}":"…"`).join(",")}}`,{modelTier:"quick",cache:false,images:[img]});
+Return ONLY JSON: {${need.map(x=>`"${x}":"…"`).join(",")}}`,{...mdl(),modelTier:"complex",cache:false,images:[img]});
     R.words={...(R.words||{})}; for(const x of need){ const t=String(w?.[x]||"").trim().slice(0,600); if(t) R.words[x]=t; } return R.words; }
   async function shoot(){ const c=PC.card, s=PC.src, k="nano"; if(PC.busy) return; const cast=chars(c.who).slice(0,3), U=uses();
     if(s&&s.f.who&&!cast.length){ say("",{ask:{q:"Which character replaces the person in the photo? Type @ and pick one.",options:atChars().slice(0,4).map(x=>"@"+x.name)}}); draw(); return; }
     if(!s&&!compose(c).replace(/\W/g,"")){ say("Tell me the photo first.",{err:true}); draw(); return; }
     if(/@\S/.test(c.who||"")&&!cast.length){ say("I can't find that character in the library, so I stopped before spending anything. Type @ and pick the name from the list.",{err:true}); draw(); return; }
-    if(S.mode==="icon") setMode("photo"); PC.busy="Sending your pictures to Magnific at full size…"; draw(); const b=apply(); let made=[];
+    if(S.mode==="icon") setMode("photo"); PC.busy="Sending your pictures to Magnific at full size…"; PC.mk=PC.n; draw(); const b=apply(); let made=[];
     try{ if(!mcp||S.web) throw {code:"x",message:"Magnific isn't reachable in this view. Open the studio in claude.ai."}; if(!S.connected) await connect(true);
       const refs=[], give=async(R,name)=>{ if(!R.id){ const up=await rlUploadMag(R.file||R.blob,name); if(!up?.id) throw {code:"tool_error",message:"Magnific returned no identifier for one of your pictures."}; R.id=up.id; } return R.id; };
       if(s) refs.push({id:await give(s.ref,"remake-source"),tag:"@img1",what:"the designer's source photo",img:s.blob});
@@ -6203,7 +6305,7 @@ Return ONLY JSON: {"prompt":"…","summary":"what this photo is, in 8 words or f
         try{ const out=await rlJob(()=>rlImage({prompt,aspect:aspectText(),refs:refs.map(r=>({id:r.id,tag:r.tag})),label:"talking",count:need})); for(const x of (out.all||[{id:out.id,web:out.web}])){ const o=await mk(x.id); o.webUrl=x.web||out.web||null; made.push(o); } }
         catch(e){ lastErr=e; if(!made.length) throw e; break; } }
       cards[k]={busy:false,done:true,t0:Date.now(),steps:["ok","ok","ok","ok"],stepNote:[s?"remake of your photo":"built on your pictures","","",""],outs:made,sel:0,editMsg:"Change one thing, or keep talking."}; renderCard(k,cards[k]); try{ syncButtons(); }catch{} for(const o of made) if(o.url||o.img) addHistory(o,k);
-      PC.busy=""; const im=snap(k); if(im.length) PC.msgs.push({r:"a",t:made.length<PC.n?`I made ${made.length} of ${PC.n}. The others didn't come back.`:"",res:mkRes(k,im),brief:b}); else say("Magnific finished but sent no picture. Open Recent under All tools in a minute.",{err:true});
+      PC.busy=""; const im=snap(k); let made2=null; if(im.length){ made2={r:"a",t:made.length<PC.n?`I made ${made.length} of ${PC.n}. The others didn't come back.`:"",res:mkRes(k,im),brief:b}; PC.msgs.push(made2); draw(); await inspect(made2); } else say("Magnific finished but sent no picture. Open Recent under All tools in a minute.",{err:true});
     }catch(e){ log("✕","talking shoot",{code:e?.code,message:e?.message}); PC.busy=""; say(e?.code==="refs_missing"?"Couldn't attach your pictures. Nothing was spent.":(e?.code==="x"||e?.code==="bad_answer"?e.message:(["not_granted","rate_limited","refused"].includes(e?.code)&&!e.server?sampleCopy(e):mcpCopy(e))),{err:true}); }
     draw(); }
   /* the picture placed inside the layout he dropped: Claude marks the picture area and the areas that must stay on top */
@@ -6221,7 +6323,7 @@ Return ONLY JSON: {"prompt":"…","summary":"what this photo is, in 8 words or f
     paint(); document.body.appendChild(d); d.addEventListener("click",e=>{ const u=e.target.closest("[data-use]"); if(u){ x.c.sel=+u.dataset.use; renderCard(x.k,x.c); d.remove(); draw(); } else if(e.target.closest("[data-x]")||e.target===d) d.remove(); });
     d.addEventListener("change",e=>{ const s=e.target.closest("[data-side]"); if(s){ if(s.dataset.side==="0") a=+s.value; else b=+s.value; paint(); } }); d.addEventListener("keydown",e=>{ if(e.key==="Escape") d.remove(); }); d.tabIndex=-1; d.focus(); }
   /* ----- input ----- */
-  const send=()=>{ const t=inp.value, files=PC.att.map(a=>a.file); if(!t.trim()&&!files.length) return; inp.value=""; turn(t,files); };
+  const send=()=>{ const t=inp.value, files=PC.att.map(a=>a.file); if(PC.busy||(!t.trim()&&!files.length)) return; /* while I am thinking, what you type stays in the box */ inp.value=""; turn(t,files); };
   const attach=fs=>{ const L=[...(fs&&fs.length!==undefined&&!(fs instanceof Blob)?fs:[fs])].filter(f=>f&&/^image\//.test(f.type)); if(!L.length) return; PC.att=[...PC.att,...L.map(f=>({file:f,url:URL.createObjectURL(f)}))].slice(0,4); draw(); inp.focus(); };
   inp.addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&!(e.ctrlKey||e.metaKey)){ e.preventDefault(); send(); } });
   inp.addEventListener("paste",e=>{ const im=[...(e.clipboardData?.files||[])].filter(f=>/^image\//.test(f.type)); if(im.length){ e.preventDefault(); attach(im); } });
@@ -6231,19 +6333,22 @@ Return ONLY JSON: {"prompt":"…","summary":"what this photo is, in 8 words or f
   { const ms=$("pcModel"); if(ms){ ms.value=PC.model; if(ms.value!==PC.model){ PC.model=""; ms.value=""; } } $("pcMod")?.addEventListener("toggle",e=>{ if(e.target.open&&!$("pcUsing").textContent) probe(); }); }
   el.addEventListener("change",e=>{ if(e.target.id==="pcModel"){ PC.model=e.target.value; try{ localStorage.setItem("bae_talk_model",PC.model); }catch{} probe(); return; } if(e.target.id==="pcAspect"){ PC.card.aspect=e.target.value; apply(); } const rs=e.target.closest?.("[data-pcrole]"); if(rs){ setRole(+rs.dataset.pcrole,rs.value); draw(); } });
   el.addEventListener("change",e=>{ const t=e.target; if(t.id==="pcAsp2"){ PC.card.aspect=t.value; try{ apply(); }catch{} draw(); } else if(t.matches?.("[data-pcof]")&&PC.pick){ PC.pick.of[t.dataset.pcof]=t.value; draw(); } });
+  el.addEventListener("keydown",e=>{ if(e.key==="Escape"&&PC.pick&&!document.querySelector(".at-menu:not([hidden])")){ e.preventDefault(); PC.pick=null; draw(); } });
   el.addEventListener("click",async e=>{ const t=e.target, q=s=>t.closest(s); let b;
+    { const tp=t.closest?.("[data-pcbl],[data-pcchar],[data-pcofp],[data-pctake],[data-pcnn],[data-pcstyle]"); if(tp){ const a=["pcbl","pcchar","pcofp","pctake","pcnn","pcstyle"].find(k=>tp.dataset[k]!==undefined); try{ PC._tap=`[data-${a}="${CSS.escape(tp.dataset[a])}"]`; }catch{} } }
     if((b=q("[data-pcsay]"))){ if(!PC.busy) turn(b.dataset.pcsay); return; }
     if((b=q("[data-pcatt]"))){ PC.att.splice(+b.dataset.pcatt,1); draw(); return; }
     if((b=q("[data-pcopen]"))){ tkOpen(b.dataset.pcopen); return; }
-    if((b=q("[data-pcdel]"))){ const mine=b.dataset.pcdel===PC.id; clearTimeout(tkT); await tkDel(b.dataset.pcdel); if(mine){ stale(); PC.msgs=[]; PC.pend=null; PC.card={}; modeFor(); PC.src=null; PC.keep={}; PC.fix=null; PC.att=[]; PC.edit=null; PC.refs=[]; PC.layout=null; PC.n=1; draw(); } await tkRecent(true); return; }
+    if((b=q("[data-pcdel]"))){ const mine=b.dataset.pcdel===PC.id; clearTimeout(tkT); await tkDel(b.dataset.pcdel); if(mine){ stale(); PC.msgs=[]; PC.pend=null; PC.card={}; PC.look=[]; PC.pick=null; modeFor(); PC.src=null; PC.keep={}; PC.fix=null; PC.att=[]; PC.edit=null; PC.refs=[]; PC.layout=null; PC.n=1; draw(); } await tkRecent(true); return; }
     if((b=q("[data-pcrefx]"))){ if(!PC.busy){ dropRef(+b.dataset.pcrefx); draw(); } return; }
     if((b=q("[data-pcrefv]"))){ openLightbox(PC.refs[+b.dataset.pcrefv]?.url); return; }
-    if((b=q("[data-pcpick]"))){ const k=b.dataset.pcpick, one=PC.pend?.photos?.length===1?PC.pend.photos[0]:null; PC.pick=!k||PC.pick?.kind===k?null:{kind:k,sel:castNow().map(r=>r.id),of:{...(PC.pend?.of||{})},takes:one?[...one.takes]:k==="grade"?["grade"]:["angle","light"],id:one?one.id:null}; draw(); const pk=$("pcPick"); if(pk&&getComputedStyle(pk).position!=="fixed") pk.scrollIntoView({block:"nearest"}); if(k==="scene"||k==="place") $("pcTxt")?.focus(); return; }
+    if((b=q("[data-pcpick]"))){ const k=b.dataset.pcpick, want=k==="grade"?["grade"]:["composition","angle","light"], one=(k==="cam"||k==="grade")?(PC.pend?.photos||[]).find(x=>x.takes.some(t=>want.includes(t)))||null:null; PC.pick=!k||PC.pick?.kind===k?null:{kind:k,sel:castNow().map(r=>r.id),of:{...(PC.pend?.of||{})},takes:one?[...one.takes]:k==="grade"?["grade"]:["angle","light"],id:one?one.id:null}; draw(); const pk=$("pcPick"); if(pk&&getComputedStyle(pk).position!=="fixed") pk.scrollIntoView({block:"nearest"}); if(k==="scene"||k==="place") $("pcTxt")?.focus(); return; }
     if((b=q("[data-pctake]"))&&PC.pick){ const v=b.dataset.pctake, T=PC.pick.takes, i=T.indexOf(v); if(i>=0) T.splice(i,1); else T.push(v); draw(); return; }
     if((b=q("[data-pcchar]"))&&PC.pick){ const id=b.dataset.pcchar, L=PC.pick.sel, i=L.indexOf(id); if(i>=0) L.splice(i,1); else if(L.length<3) L.push(id); draw(); return; }
     if((b=q("[data-pcofp]"))&&PC.pick){ const [cid,oid]=b.dataset.pcofp.split("|"); PC.pick.of[cid]=PC.pick.of[cid]===oid?"":oid; draw(); return; }
     if((b=q("[data-pcbl]"))&&PC.pick){ const id=b.dataset.pcbl; PC.pick.id=PC.pick.id===id?null:id; draw(); return; }
-    if((b=q("[data-pcedit]"))){ const m=PC.msgs[+b.dataset.pcedit]; if(m?.editAsk){ const a=m.editAsk; delete m.editAsk; draw(); await doEdit(a); draw(); } return; }
+    if((b=q("[data-pcqfix]"))){ const [mi,k]=b.dataset.pcqfix.split(":").map(Number), m=PC.msgs[mi], x=m?.qc?.items?.[k], id=m?.res?.ids?.[k], c=cards[m?.res?.k]; if(!x?.fix||!id||!c||PC.busy) return; const j=c.outs.findIndex(o=>o.id===id); if(j<0){ say("That picture is no longer in the studio. Create it again.",{err:true}); draw(); return; } c.sel=j; try{ renderCard(m.res.k,c); }catch{} await doEdit(x.fix); draw(); return; }
+    if((b=q("[data-pcchg]"))){ const m=PC.msgs[+b.dataset.pcchg]; if(m?.editAsk){ const a=m.editAsk; delete m.editAsk; draw(); await doEdit(a); draw(); } return; }
     if(q("[data-pcsave]")){ await pendSend(); return; }
     if(q("[data-pcdiscard]")){ PC.pend=null; PC.pick=null; draw(); return; }
     if((b=q("[data-pcstyle]"))){ const v=b.dataset.pcstyle, Q=PC.pend=PC.pend||{}; Q.style=(PC.card.setting||S.setting)===v?null:v; PC.pick=null; draw(); $("pcSave")?.scrollIntoView({block:"nearest"}); return; }
@@ -6251,7 +6356,7 @@ Return ONLY JSON: {"prompt":"…","summary":"what this photo is, in 8 words or f
       if(w==="who"){ const cur=chars(PC.card.who||"").slice(0,3).map(r=>r.id); Q.who=P.sel.length&&P.sel.join()!==cur.join()?[...P.sel]:null; if(Q.of){ const keep=new Set(castNow().map(r=>r.id)); for(const k of Object.keys(Q.of)) if(!keep.has(k)) delete Q.of[k]; } }
       else if(w==="outfit") Q.of={...P.of};
       else if(w==="photo"&&P.id){ const takes=TAKES.map(t=>t[0]).filter(t=>P.takes.includes(t)); Q.photos=(Q.photos||[]).filter(x=>x.id!==P.id); if(takes.length) Q.photos.push({id:P.id,takes}); Q.photos=Q.photos.slice(-3); }
-      else if(w==="txt"){ const v=String(tv||"").trim().slice(0,400), was=sumMsg()?.recap?.[RK.indexOf(P.kind)]?.v||""; Q.txt=Q.txt||{}; if(v&&v!==was) Q.txt[P.kind]=v; else delete Q.txt[P.kind]; }
+      else if(w==="txt"){ const v=String(tv||"").trim().slice(0,400), was=rowOf(sumMsg(),P.kind)?.v||""; Q.txt=Q.txt||{}; if(v&&v!==was) Q.txt[P.kind]=v; else delete Q.txt[P.kind]; }
       draw(); $("pcSave")?.scrollIntoView({block:"nearest"}); return; }
     if((b=q("[data-pcnn]"))){ PC.n=nFit(+b.dataset.pcnn); draw(); return; }
     if((b=q("[data-pcn]"))){ PC.n=NS[Math.max(0,Math.min(NS.length-1,NS.indexOf(nFit(PC.n))+(+b.dataset.pcn)))]; draw(); return; }
@@ -6270,7 +6375,7 @@ Return ONLY JSON: {"prompt":"…","summary":"what this photo is, in 8 words or f
     else if(k==="open"){ const x=cur(); document.body.classList.add("talk-res"); $(MODELS[x?.k||"nano"].el)?.scrollIntoView({behavior:"smooth",block:"center"}); }
     else if(k==="more"){ const on=document.body.classList.toggle("talk-more"); b.setAttribute("aria-expanded",String(on)); b.textContent=on?"Hide the tools":"All tools"; if(typeof uxT==="function") uxT(el); if(on) $("optCard")?.scrollIntoView({behavior:"smooth",block:"start"}); }
     else if(k==="recent"){ await tkRecent(!PC.recent); }
-    else if(k==="new"){ if(PC.busy) return; clearTimeout(tkT); await tkSave().catch(()=>{}); PC.id=tkNew(); PC.recent=null; drawRecent(); stale(); PC.msgs=[]; PC.pend=null; PC.card={}; modeFor(); PC.src=null; PC.keep={}; PC.fix=null; PC.att=[]; PC.edit=null; PC.refs=[]; PC.layout=null; PC.n=1; draw(); inp.focus(); } });
+    else if(k==="new"){ if(PC.busy) return; clearTimeout(tkT); await tkSave().catch(()=>{}); PC.id=tkNew(); PC.recent=null; drawRecent(); stale(); PC.msgs=[]; PC.pend=null; PC.card={}; PC.look=[]; PC.pick=null; modeFor(); PC.src=null; PC.keep={}; PC.fix=null; PC.att=[]; PC.edit=null; PC.refs=[]; PC.layout=null; PC.n=1; draw(); inp.focus(); } });
   /* ----- chats (v167): every talk is kept. "New chat" starts a clean one, "Recent" opens an old one.
      Kept: the words, the summary, small copies of the pictures, and each picture's Magnific id once it was sent. The original files are not kept:
      a picture that never reached Magnific must be added again before it can be used. Saved in this browser and, when the account is there, in it. ----- */
@@ -6279,20 +6384,20 @@ Return ONLY JSON: {"prompt":"…","summary":"what this photo is, in 8 words or f
     let out=""; try{ const im=new Image(); im.crossOrigin="anonymous"; await new Promise((res,rej)=>{ im.onload=res; im.onerror=rej; im.src=src; }); const k=Math.min(1,max/Math.max(im.naturalWidth,im.naturalHeight)), cv=document.createElement("canvas"); cv.width=Math.max(1,Math.round(im.naturalWidth*k)); cv.height=Math.max(1,Math.round(im.naturalHeight*k)); cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height); out=cv.toDataURL("image/jpeg",.76); }catch{ out=/^https?:/.test(src)?src:""; }
     tkSmall.set(key,out); return out; }
   const tkTitle=()=>{ const u=PC.msgs.find(m=>m.r==="u"&&m.t); return (u?String(u.t).replace(/\[(?:outfit|shot): ([^\]]+)\]/g,"$1").replace(/\s+/g," ").trim().slice(0,70):"")||"Pictures"; };
-  async function tkPack(){ const msgs=[]; for(const m of PC.msgs){ const o={r:m.r,t:m.t||""}; for(const k of ["ask","chips","dirs","check","recap","ready","err","rate","why","brief"]) if(m[k]!==undefined) o[k]=m[k];
-      if(m.imgs?.length) o.imgs=(await Promise.all(m.imgs.map(u=>small(u,220)))).filter(Boolean); if(m.res?.imgs?.length){ const im=await Promise.all(m.res.imgs.map(u=>small(u,760))); o.res={imgs:im.filter(Boolean)}; if(m.res.ids&&im.every(Boolean)){ o.res.ids=m.res.ids; o.res.k=m.res.k; o.res.p=m.res.p; } } if(o.res&&!o.res.imgs.length) delete o.res; msgs.push(o); }
-    const refs=[]; for(const r of PC.refs) refs.push({url:await small(r.url,360),role:r.role||"look",also:r.also||[],lock:!!r.lock,what:r.what||"",id:r.id||null});
-    return {kind:"talk",id:PC.id,title:tkTitle(),updatedAt:Date.now(),msgs,card:PC.card,n:PC.n,refs,srcI:PC.src?PC.refs.indexOf(PC.src.ref):-1,srcF:PC.src?.f||null,srcIssues:PC.src?.issues||[],keep:PC.keep,fix:PC.fix}; }
+  async function tkPack(){ const id0=PC.id, M0=PC.msgs.slice(), R0=PC.refs.slice(), card0={...PC.card}, look0=(PC.look||[]).slice(), n0=PC.n, title0=tkTitle(); const msgs=[]; for(const m of M0){ const o={r:m.r,t:m.t||""}; for(const k of ["ask","chips","dirs","check","recap","ready","err","rate","why","brief","qc"]) if(m[k]!==undefined) o[k]=m[k];
+      if(m.imgs?.length) o.imgs=(await Promise.all(m.imgs.map(u=>small(u,220)))).filter(Boolean); if(m.res?.imgs?.length){ const im=await Promise.all(m.res.imgs.map(u=>small(u,760))), keep=im.map((x,j)=>x?j:-1).filter(j=>j>=0); o.res={imgs:keep.map(j=>im[j])}; if(m.res.ids){ o.res.ids=keep.map(j=>m.res.ids[j]||""); o.res.k=m.res.k; o.res.p=m.res.p; } if(o.qc&&keep.length!==im.length) delete o.qc; } if(o.res&&!o.res.imgs.length) delete o.res; msgs.push(o); }
+    const refs=[]; for(const r of R0) refs.push({url:await small(r.url,360),role:r.role||"look",also:r.also||[],lock:!!r.lock,what:r.what||"",id:r.id||null,lib:r.lib||null,words:r.words||null});
+    return {kind:"talk",id:id0,title:title0,updatedAt:Date.now(),msgs,card:card0,look:look0,n:n0,refs,srcI:PC.src?PC.refs.indexOf(PC.src.ref):-1,srcF:PC.src?.f||null,srcIssues:PC.src?.issues||[],keep:PC.keep,fix:PC.fix}; }
   const tkBytes=o=>new Blob([JSON.stringify(o)]).size;
   async function tkSave(){ if(!PC.msgs.some(m=>m.r==="u")) return; if(tkBusy) await tkBusy.catch(()=>{}); return tkBusy=(async()=>{ const c=await tkPack();
       let list=lsGet(TK,[]).filter(x=>x&&x.id!==c.id); list.unshift(c); list=list.slice(0,TK_MAX); let okLocal=lsSet(TK,list); while(!okLocal&&list.length>1){ list.pop(); okLocal=lsSet(TK,list); }
-      let okAcc=false; try{ await rlStoreInit(); if(RLS.db&&RLS.uid){ const d=JSON.parse(JSON.stringify(c)); for(const m of d.msgs){ if(tkBytes(d)<=235000) break; if(m.res) delete m.res; } for(const m of d.msgs){ if(tkBytes(d)<=235000) break; delete m.imgs; } if(tkBytes(d)<=250000){ await rlCol().doc("talk_"+c.id).set(d); okAcc=true; } } }catch(e){ log("✕","talk save",{code:e?.code,message:e?.message}); }
+      let okAcc=false; try{ await rlStoreInit(); if(RLS.db&&RLS.uid){ const d=JSON.parse(JSON.stringify(c)); for(const px of [420,260]) for(const m of d.msgs){ if(tkBytes(d)<=235000) break; if(m.res?.imgs){ m.res.imgs=(await Promise.all(m.res.imgs.map(u=>small(u,px).catch(()=>u)))).map((x,j)=>x||m.res.imgs[j]); } } for(const m of d.msgs){ if(tkBytes(d)<=235000) break; if(m.res) delete m.res; } for(const m of d.msgs){ if(tkBytes(d)<=235000) break; delete m.imgs; } if(tkBytes(d)<=250000){ await rlCol().doc("talk_"+c.id).set(d); okAcc=true; } } }catch(e){ log("✕","talk save",{code:e?.code,message:e?.message}); }
       tkWhere=okAcc?"account":okLocal?"device":"none"; const w=$("pcWhere"); if(w) w.textContent=tkWhereText(); })(); }
   const tkWhereText=()=>tkWhere==="account"?"Your chats are saved in your account.":tkWhere==="device"?"Your chats are saved on this device only.":tkWhere==="none"?"This chat could not be saved.":"";
   async function tkList(){ let list=lsGet(TK,[]).filter(x=>x&&x.id); try{ await rlStoreInit(); if(RLS.db&&RLS.uid){ const snap=await rlCol().where("kind","==","talk").get(), by=new Map(list.map(x=>[x.id,x])); for(const d of snap.docs){ const v=d.data(); if(v?.id&&(!by.has(v.id)||(by.get(v.id).updatedAt||0)<(v.updatedAt||0))) by.set(v.id,v); } list=[...by.values()]; if(!tkWhere) tkWhere="account"; } }catch{} if(!tkWhere&&list.length) tkWhere="device";
     return list.sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).slice(0,40); }
-  function tkLoad(c){ stale(); PC.pend=null; PC.pick=null; PC.id=c.id; PC.msgs=(c.msgs||[]).map(m=>({...m})); PC.card={...(c.card||{})}; PC.n=nFit(c.n); PC.att=[]; PC.edit=null; PC.layout=null; PC.busy="";
-    PC.refs=(c.refs||[]).map(r=>({file:null,blob:null,url:r.url,role:r.role||"look",also:r.also||[],lock:!!r.lock,what:r.what||"",id:r.id||null,old:true}));
+  function tkLoad(c){ stale(); PC.pend=null; PC.pick=null; PC._seen=1e9; PC.id=c.id; PC.msgs=(c.msgs||[]).map(m=>({...m})); PC.card={...(c.card||{})}; PC.look=Array.isArray(c.look)?c.look.filter(id=>refById(id)?.bl).slice(0,3):[]; PC.n=nFit(c.n); PC.att=[]; PC.edit=null; PC.layout=null; PC.busy="";
+    PC.refs=(c.refs||[]).map(r=>({file:null,blob:null,url:r.url,role:r.role||"look",also:r.also||[],lock:!!r.lock,what:r.what||"",id:r.id||null,lib:r.lib||null,words:r.words||null,old:true}));
     const sr=PC.refs[c.srcI]; if(sr&&sr.id&&sr.role==="remake"){ PC.src={ref:sr,blob:null,file:null,url:sr.url,f:c.srcF||{},issues:c.srcIssues||[]}; PC.keep={...(c.keep||{})}; PC.fix=c.fix??null; } else { PC.src=null; PC.keep={}; PC.fix=null; PC.refs.forEach(r=>{ if(r.role==="remake"&&!r.id) r.role="look"; }); }
     /* the chat's own last image goes back on screen, so "change this" works on IT and on nothing else */
     try{ const m=[...PC.msgs].reverse().find(x=>x.res?.ids?.some(Boolean)); if(m){ const k=cards[m.res.k]?m.res.k:"nano", c=cards[k]; c.outs=m.res.imgs.map((img,i)=>({img,url:null,id:m.res.ids[i]||null,long:0,old:true})); c.sel=Math.max(0,c.outs.map(o=>!!o.id).lastIndexOf(true)); c.editing=false; c.editErr=""; c.editMsg=""; for(const o of c.outs) if(o.id) PC.stale.delete(o.id); const ta=$(MODELS[k]?.prompt); if(ta&&m.res.p) ta.value=m.res.p; try{ renderCard(k,c); }catch{} } }catch{} }
