@@ -15,7 +15,7 @@ Read this whole file before touching anything. It replaces the memory of a very 
 
 "BAE Studio" is one web page with several apps on its home screen. It is published as a **claude.ai artifact**:
 
-`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 178 at the time of writing)
+`https://claude.ai/artifact/4tomrLrEEaVDTAC3Z3A5h7` (version 179 at the time of writing)
 
 Home cards (`index.html`, ids `openGallery`, `openReels`, `openAnim`, `openUpscale`, `openResize`, `openBrand`):
 
@@ -385,3 +385,6 @@ Known limits: tiles appear in his Magnific history; a 2560×1440 source means th
 - A reference chosen for COLOURS or LIGHT is not sent to Magnific. `refWords(R)` has Claude describe only the colour grading / light (no objects, people or places) and `shoot()` puts those words in the writer prompt ("MATCH THESE, GIVEN AS WORDS"). A photo that also gives camera angle or scene is still sent, named for those only. If Claude cannot read the image the old route (photo sent with its role) is used. Real test (50 credits, seen at 512 px): the grade and hard low sun of br06 moved to a kitchen scene with nothing of the terrace or the man.
 - Chat rule: exactly the people asked for; never add a person.
 - Phones: the message box is one row ([+] [text] [round send]); suggestion chips are full-width (`.pc-chips.sug`), result buttons are back in rows.
+
+## v179: an icon asked for in Talking is made by the Icons pipeline
+- Bug: Samer asked the chat for a 3D icon of a car and got four photo-style renders (Seedream, studio wall), because Talking only knew the photo pipeline. Now Claude answers `"kind":"icon"` (kept in `PC.card.kind`); `modeFor()` puts the studio in Icons mode while the chat stays visible (`sync()` no longer hides it for an icon chat), `apply()` writes the icon idea as the brief, `create()` skips `shoot()` and "4 angles". `"kind":"photo"`, New chat and opening a photo chat switch back. Test: `node dev/icon-chat-test.js`. Not tested with real Claude or a real icon render.

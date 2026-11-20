@@ -5918,7 +5918,10 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
   const inner=document.createElement("div"); inner.className="pc-classic-in"; cls.appendChild(inner);
   for(const n of [host.querySelector(".brief-meta"),brief,$("presets"),$("lvDrop"),host.querySelector(".create-row")]) if(n) inner.appendChild(n);
   host.prepend(cls); host.prepend(el); el.after(cls); atMake("pcInput",true); const inp=$("pcInput");
-  const sync=()=>{ const icon=S.mode==="icon"||!!S.web; el.hidden=icon; if(icon) cls.open=true; document.body.classList.toggle("talk",!icon); };
+  /* v179: a chat can be about a 3D ICON. Then the studio is in Icons mode (its own rules and image model) and the chat stays on screen */
+  const isIcon=()=>PC.card?.kind==="icon";
+  const modeFor=()=>{ const want=isIcon()?"icon":"photo"; if(!S.web&&S.mode!==want&&(isIcon()||PC._wasIcon)){ try{ setMode(want); }catch{} } PC._wasIcon=isIcon(); sync(); };
+  const sync=()=>{ const icon=(S.mode==="icon"&&!isIcon())||!!S.web; el.hidden=icon; if(icon) cls.open=true; document.body.classList.toggle("talk",!icon); };
   $("modeSeg")?.addEventListener("click",()=>setTimeout(sync,0)); document.querySelectorAll("#landing [data-enter]").forEach(b=>b.addEventListener("click",()=>setTimeout(sync,60))); setTimeout(sync,0); setTimeout(sync,1500);
   try{ const T=$("tour"); let byTour=false; if(T) new MutationObserver(()=>{ if(!T.hidden){ document.body.classList.add("talk-tour"); if(!cls.open){ cls.open=true; byTour=true; } } else { document.body.classList.remove("talk-tour"); if(byTour){ cls.open=false; byTour=false; } } }).observe(T,{attributes:true,attributeFilter:["hidden","class"]}); }catch{}
   /* ----- taste memory: what he liked, what he rejected and why ----- */
@@ -5931,7 +5934,8 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
   const clean=o=>{ const c={}; for(const k of ["who","outfit","action","place","camera","light","grade","setting","aspect","extra"]){ const v=o?.[k]; if(typeof v==="string"&&v.trim()) c[k]=v.trim().slice(0,400); } if(c.setting&&!/^(On-location|Studio)$/.test(c.setting)) delete c.setting; return c; };
   const pretty=v=>esc(String(v||"")).replace(/\[(?:outfit|shot): ([^\]]+)\]/g,"$1");
   const compose=c=>[[c.who,c.action,c.place].filter(Boolean).join(" ")+(c.light?", "+c.light:""),c.outfit?"Wearing "+c.outfit:"",c.grade?"Colours: "+c.grade:"",c.extra||"",c.camera||""].map(s=>String(s).trim().replace(/\.$/,"")).filter(Boolean).join(". ")+".";
-  function apply(){ const c=PC.card, b=compose(c); brief.value=b; brief.dispatchEvent(new Event("input",{bubbles:true}));
+  function apply(){ const c=PC.card; if(isIcon()){ modeFor(); const b=[c.action,c.extra].filter(Boolean).join(". ")||compose(c); brief.value=b; brief.dispatchEvent(new Event("input",{bubbles:true})); return b; }
+    const b=compose(c); brief.value=b; brief.dispatchEvent(new Event("input",{bubbles:true}));
     if(c.setting){ const bt=document.querySelector(`.seg[data-key="setting"] button[data-v="${c.setting}"]`); if(bt&&bt.getAttribute("aria-pressed")!=="true") bt.click(); }
     const as=$("aspect"); if(as&&c.aspect&&as.value!==c.aspect&&[...as.options].some(o=>o.value===c.aspect)){ as.value=c.aspect; as.dispatchEvent(new Event("change",{bubbles:true})); } return b; }
   /* v176: the "image on screen" belongs to ONE chat. Images that were already in the studio when a chat started (new chat, or an older chat opened again) are not this chat's image, so Claude is told "no image yet" and can never edit them */
@@ -5989,7 +5993,7 @@ Return ONLY JSON: {"sharp":0,"grain":0,"faith":0}`,{modelTier:"quick",cache:fals
     if(ed&&pendN()) h+=`<div class="pc-save" id="pcSave"><span class="t13">Your choices are not sent yet</span><button type="button" class="go" data-pcsave>Save and send</button><button type="button" data-pcdiscard>Discard</button></div>`;
     else if(ed) h+=goHTML(made);
     return h; }
-  function goHTML(made){ const nu=uses().length; return `<div class="pc-go"><span class="t12 muted" id="pcCost">${PC.n} ${PC.n>1?"images":"image"}${PC.src?" · same photo with your changes":nu?` · built on ${nu} of your pictures`:""} · Seedream 5.5 · 2K</span><div class="pc-chips strong"><button type="button" class="go" data-pc="create" ${PC.n>1?"data-noi18n":""}>${PC.n>1?(UX.lang==="ar"?`اعمل ${PC.n} صور`:`Create ${PC.n} images`):made?"Create again":"Create image"}</button>${PC.src||nu?"":`<button type="button" data-pc="angles">Create 4 angles</button>`}<button type="button" data-pcsay="Give me three different directions for this">3 ideas</button></div></div>`; }
+  function goHTML(made){ const nu=isIcon()?0:uses().length, ic=isIcon(); return `<div class="pc-go"><span class="t12 muted" id="pcCost">${PC.n} ${ic?(PC.n>1?"icons":"icon"):PC.n>1?"images":"image"}${ic?" · BAE 3D icon style · 16:9":(PC.src?" · same photo with your changes":nu?` · built on ${nu} of your pictures`:"")+" · Seedream 5.5 · 2K"}</span><div class="pc-chips strong"><button type="button" class="go" data-pc="create" ${PC.n>1?"data-noi18n":""}>${PC.n>1?(UX.lang==="ar"?`اعمل ${PC.n} صور`:`Create ${PC.n} images`):made?"Create again":"Create image"}</button>${PC.src||nu||ic?"":`<button type="button" data-pc="angles">Create 4 angles</button>`}<button type="button" data-pcsay="Give me three different directions for this">3 ideas</button></div></div>`; }
   function msgHTML(m,i){ const last=i===PC.msgs.length-1, live=m.res&&i===PC.msgs.map(x=>!!x.res).lastIndexOf(true);
     if(m.r==="u") return `<div class="pc-m u" dir="auto" data-noi18n>${m.imgs?.length?`<span class="pc-imgs">${m.imgs.map(u=>`<img src="${u}" alt="">`).join("")}</span>`:""}${esc(m.t)}</div>`;
     let h=`<div class="pc-m a${m.err?" err":""}">${m.t?`<p dir="auto" data-noi18n>${esc(m.t)}</p>`:""}`;
@@ -6082,6 +6086,7 @@ Choose camera, light and outfit yourself when the designer did not say; do not a
 Return ONLY JSON:
 {"say":"1 to 3 short sentences in the designer's language: what you understood, your idea, or what you did. No lists.",
 "card":{"who":"","outfit":"","action":"","place":"","camera":"","light":"","grade":"","setting":"","aspect":"","extra":""},
+"kind":"photo",
 "count":0,
 "pictures":[],
 "ask":null,
@@ -6097,6 +6102,7 @@ Return ONLY JSON:
 - "count": how many images they asked for: 1, 2, 4 or 8 (the studio makes them in one go from the same prompt; another number goes up to the next of these); 0 when they did not say.
 - "ask": null, or {"q":"ONE short question","options":["2 to 4 short answers"]}; only when who, action or place is truly missing and you cannot choose well yourself, when a new picture came with no hint${PC.src?", or when the source photo shows a person and the card has no @character to replace them (offer library names as options)":""}. Never more than one question.
 - "chips": 2 to 4 very short things the designer might say next, in their language, fitted to this moment (for example "تمام، صوّرها", "غيّر المكان", "أعطيني أفكار", "بدي ٤ صور"). [] when "ask" has options.
+- "kind": "icon" when the designer asks for an icon, a 3D icon or أيقونة instead of a photograph; "photo" otherwise (say "photo" again when they go back to a photograph). For an icon the studio uses its own ICON system and image model: a 3D glass icon in the BAE style, one object, centred, on a Light Stone background, 16:9. So for an icon put in "action" ONE object described plainly in English (what it is and how it sits, e.g. "a small modern city car, three-quarter view"); leave who, outfit, place, camera, light and grade empty; never describe a photo scene, a room or studio light. The people, location, distance and "be present" rules do not apply to icons. In the recap say it is a 3D icon in the BAE icon style.
 - "do": "edit" ONLY when an image is on screen and the designer asks to change something in it. The studio does NOT render by itself: it shows the designer a "Change this image" button, so never say the change is done; say in one short line what will change. ALWAYS return the updated "card" and the full updated "recap" with it, so the summary under the chat shows the new scene and text. "edit" is that single change in plain English (use "[outfit: Name]" when a library outfit is meant). "angles" when they ask for other angles of the same moment. "directions" when they ask for ideas or options, or gave a layout: then "directions" holds exactly 3 clearly different, on-brand ways to show the same message, each {"title":"3 to 5 words in the designer's language","card":{…full card…}}. "ready" when the card has who (or an object), action and place and the designer wants the picture, has nothing to add, or asks to send it to the brief or to sum it up ("ابعث للبريف", "لخّص", "خلص", "تمام"); then "say" tells them in one line to check the summary under the chat and press Create. Otherwise "talk".
 - "check" (only when do is "ready"): exactly these five, each {"rule":"…","ok":true|false,"fix":"if you had to adjust the card for this rule, what you changed, in the designer's language; else empty"}: "Candid, nobody looks at the camera" · "Camera from the side, behind or three-quarter" · "Subject in the centre" · "Quiet, clean background" · "No logos or text". After your adjustments every rule should be ok.
 - "recap" (only when do is "ready"): the photo summed up for the designer, in THEIR language, plain words, each value one short line: [{"k":"label","v":"…"}] with these rows in this order — the scene (what happens) · the person or people (character names without @) · the clothes · the place · the camera and the light · the colours (or the number of the picture they come from) · the style (on location or studio) · their pictures (one line: which number gives what; skip the row when there are none). Do not add size or count; the studio adds them.
@@ -6119,6 +6125,7 @@ Return ONLY JSON:
     if(PC.src&&r.source&&typeof r.source==="object"&&fresh.some(i=>PC.refs[i]===PC.src.ref)){ const f={}; for(const [k] of F) if(typeof r.source[k]==="string") f[k]=r.source[k].trim().slice(0,300); PC.src.f=f; PC.src.issues=(Array.isArray(r.source.issues)?r.source.issues:[]).map(String).slice(0,5);
       try{ const bmp=await createImageBitmap(PC.src.blob), ar=bmp.width/bmp.height, as=$("aspect"), best=[...as.options].map(o=>o.value).filter(v=>/^\d+:\d+$/.test(v)).map(v=>[v,Math.abs(Math.log(ar/(v.split(":")[0]/v.split(":")[1])))]).sort((a,b)=>a[1]-b[1])[0]; if(best) PC.card.aspect=best[0]; }catch{} }
     if(r.card&&typeof r.card==="object") PC.card={...PC.card,...clean(r.card)};
+    if(r.kind==="icon"||r.kind==="photo"){ PC.card.kind=r.kind; modeFor(); }
     if(+r.count>=1) PC.n=nFit(r.count);
     if(PC.src){ if(r.keep&&typeof r.keep==="object") for(const [k] of F) if(k!=="who"&&typeof r.keep[k]==="boolean") PC.keep[k]=r.keep[k]; PC.keep.who=false; for(const [k] of F) if(k!=="who"&&PC.card[k]&&r.card?.[k]&&r.keep?.[k]===undefined&&!fresh.length) PC.keep[k]=false; }
     const m={r:"a",t:txt}; if(r.ask&&typeof r.ask==="object"&&r.ask.q) m.ask={q:String(r.ask.q).slice(0,240),options:(Array.isArray(r.ask.options)?r.ask.options:[]).map(o=>String(o).slice(0,70)).slice(0,5)};
@@ -6137,7 +6144,7 @@ Return ONLY JSON:
   async function doEdit(change){ const x=cur(); if(!x){ say("There is no image to change yet.",{err:true}); return; } PC.busy="Changing it…"; draw(); const n=x.c.outs.length, t=watch();
     try{ await editImage(x.k,change); }catch{} clearInterval(t); PC.busy=""; if(x.c.outs.length>n) PC.msgs.push({r:"a",t:"",res:mkRes(x.k,snap(x.k,n))}); else say(x.c.editErr||"The change didn't come back. Nothing else was touched.",{err:true}); }
   const uses=()=>PC.refs.filter(r=>ROLE_USE[r.role]&&(r.id||r.file||r.blob)).slice(0,5);
-  async function create(angles){ if(PC.busy) return; if(PC.src||(uses().length&&!angles)) return shoot(); if(!compose(PC.card).replace(/\W/g,"")){ say("Tell me the photo first.",{err:true}); draw(); return; }
+  async function create(angles){ if(PC.busy) return; modeFor(); if(isIcon()) angles=false; if(!isIcon()&&(PC.src||(uses().length&&!angles))) return shoot(); if(!compose(PC.card).replace(/\W/g,"")){ say("Tell me the photo first.",{err:true}); draw(); return; }
     const b=apply(), n=angles?1:PC.n, got=[]; const t=watch(); S.quiet=true; const cEl=$("count"), c0=cEl?.value;
     PC.busy=angles?"Creating 4 angles…":n>1?`Creating ${n} images…`:"Creating the image…"; draw();
     try{ if(angles){ S.angles=ANGLES4; try{ await createAll(); } finally{ S.angles=null; } } else { if(cEl) cEl.value=String(n); S.batch=true; await createAll(); } }catch(e){ log("✕","talking create",{message:e?.message}); } finally{ S.batch=false; if(cEl) cEl.value=c0; }
@@ -6228,7 +6235,7 @@ Return ONLY JSON: {"prompt":"…","summary":"what this photo is, in 8 words or f
     if((b=q("[data-pcsay]"))){ if(!PC.busy) turn(b.dataset.pcsay); return; }
     if((b=q("[data-pcatt]"))){ PC.att.splice(+b.dataset.pcatt,1); draw(); return; }
     if((b=q("[data-pcopen]"))){ tkOpen(b.dataset.pcopen); return; }
-    if((b=q("[data-pcdel]"))){ const mine=b.dataset.pcdel===PC.id; clearTimeout(tkT); await tkDel(b.dataset.pcdel); if(mine){ stale(); PC.msgs=[]; PC.pend=null; PC.card={}; PC.src=null; PC.keep={}; PC.fix=null; PC.att=[]; PC.edit=null; PC.refs=[]; PC.layout=null; PC.n=1; draw(); } await tkRecent(true); return; }
+    if((b=q("[data-pcdel]"))){ const mine=b.dataset.pcdel===PC.id; clearTimeout(tkT); await tkDel(b.dataset.pcdel); if(mine){ stale(); PC.msgs=[]; PC.pend=null; PC.card={}; modeFor(); PC.src=null; PC.keep={}; PC.fix=null; PC.att=[]; PC.edit=null; PC.refs=[]; PC.layout=null; PC.n=1; draw(); } await tkRecent(true); return; }
     if((b=q("[data-pcrefx]"))){ if(!PC.busy){ dropRef(+b.dataset.pcrefx); draw(); } return; }
     if((b=q("[data-pcrefv]"))){ openLightbox(PC.refs[+b.dataset.pcrefv]?.url); return; }
     if((b=q("[data-pcpick]"))){ const k=b.dataset.pcpick, one=PC.pend?.photos?.length===1?PC.pend.photos[0]:null; PC.pick=!k||PC.pick?.kind===k?null:{kind:k,sel:castNow().map(r=>r.id),of:{...(PC.pend?.of||{})},takes:one?[...one.takes]:k==="grade"?["grade"]:["angle","light"],id:one?one.id:null}; draw(); const pk=$("pcPick"); if(pk&&getComputedStyle(pk).position!=="fixed") pk.scrollIntoView({block:"nearest"}); if(k==="scene"||k==="place") $("pcTxt")?.focus(); return; }
@@ -6263,7 +6270,7 @@ Return ONLY JSON: {"prompt":"…","summary":"what this photo is, in 8 words or f
     else if(k==="open"){ const x=cur(); document.body.classList.add("talk-res"); $(MODELS[x?.k||"nano"].el)?.scrollIntoView({behavior:"smooth",block:"center"}); }
     else if(k==="more"){ const on=document.body.classList.toggle("talk-more"); b.setAttribute("aria-expanded",String(on)); b.textContent=on?"Hide the tools":"All tools"; if(typeof uxT==="function") uxT(el); if(on) $("optCard")?.scrollIntoView({behavior:"smooth",block:"start"}); }
     else if(k==="recent"){ await tkRecent(!PC.recent); }
-    else if(k==="new"){ if(PC.busy) return; clearTimeout(tkT); await tkSave().catch(()=>{}); PC.id=tkNew(); PC.recent=null; drawRecent(); stale(); PC.msgs=[]; PC.pend=null; PC.card={}; PC.src=null; PC.keep={}; PC.fix=null; PC.att=[]; PC.edit=null; PC.refs=[]; PC.layout=null; PC.n=1; draw(); inp.focus(); } });
+    else if(k==="new"){ if(PC.busy) return; clearTimeout(tkT); await tkSave().catch(()=>{}); PC.id=tkNew(); PC.recent=null; drawRecent(); stale(); PC.msgs=[]; PC.pend=null; PC.card={}; modeFor(); PC.src=null; PC.keep={}; PC.fix=null; PC.att=[]; PC.edit=null; PC.refs=[]; PC.layout=null; PC.n=1; draw(); inp.focus(); } });
   /* ----- chats (v167): every talk is kept. "New chat" starts a clean one, "Recent" opens an old one.
      Kept: the words, the summary, small copies of the pictures, and each picture's Magnific id once it was sent. The original files are not kept:
      a picture that never reached Magnific must be added again before it can be used. Saved in this browser and, when the account is there, in it. ----- */
@@ -6289,7 +6296,7 @@ Return ONLY JSON: {"prompt":"…","summary":"what this photo is, in 8 words or f
     const sr=PC.refs[c.srcI]; if(sr&&sr.id&&sr.role==="remake"){ PC.src={ref:sr,blob:null,file:null,url:sr.url,f:c.srcF||{},issues:c.srcIssues||[]}; PC.keep={...(c.keep||{})}; PC.fix=c.fix??null; } else { PC.src=null; PC.keep={}; PC.fix=null; PC.refs.forEach(r=>{ if(r.role==="remake"&&!r.id) r.role="look"; }); }
     /* the chat's own last image goes back on screen, so "change this" works on IT and on nothing else */
     try{ const m=[...PC.msgs].reverse().find(x=>x.res?.ids?.some(Boolean)); if(m){ const k=cards[m.res.k]?m.res.k:"nano", c=cards[k]; c.outs=m.res.imgs.map((img,i)=>({img,url:null,id:m.res.ids[i]||null,long:0,old:true})); c.sel=Math.max(0,c.outs.map(o=>!!o.id).lastIndexOf(true)); c.editing=false; c.editErr=""; c.editMsg=""; for(const o of c.outs) if(o.id) PC.stale.delete(o.id); const ta=$(MODELS[k]?.prompt); if(ta&&m.res.p) ta.value=m.res.p; try{ renderCard(k,c); }catch{} } }catch{} }
-  async function tkOpen(id){ if(PC.busy) return; await tkSave(); const c=(await tkList()).find(x=>x.id===id); if(!c) return; tkLoad(c); PC.recent=null; drawRecent(); draw(); try{ el.scrollIntoView({block:"start"}); const bx=$("pcMsgs"); if(bx) bx.scrollTop=0; }catch{} }
+  async function tkOpen(id){ if(PC.busy) return; await tkSave(); const c=(await tkList()).find(x=>x.id===id); if(!c) return; tkLoad(c); PC.recent=null; drawRecent(); modeFor(); draw(); try{ el.scrollIntoView({block:"start"}); const bx=$("pcMsgs"); if(bx) bx.scrollTop=0; }catch{} }
   async function tkDel(id){ lsSet(TK,lsGet(TK,[]).filter(x=>x&&x.id!==id)); try{ await rlStoreInit(); if(RLS.db&&RLS.uid) await rlCol().doc("talk_"+id).delete(); }catch{} if(id===PC.id){ PC.id=tkNew(); } }
   async function tkRecent(show){ PC.recent=show?(await tkList()).filter(c=>c.id!==PC.id||PC.msgs.length):null; drawRecent(); }
   function drawRecent(){ const box=$("pcRecent"), L=PC.recent; $("pc")?.querySelector('[data-pc="recent"]')?.setAttribute("aria-expanded",String(!!L)); if(!box) return; box.hidden=!L; if(!L){ box.innerHTML=""; return; }
