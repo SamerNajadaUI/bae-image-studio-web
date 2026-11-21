@@ -385,7 +385,7 @@ const logLines=[];
 function scrub(v){ try{ return JSON.parse(JSON.stringify(v,(k,x)=>{ if(x&&typeof x==="object"&&x.$file) return "[file "+(x.$file.name||"")+"]"; if(typeof x==="string"&&x.length>600) return x.slice(0,600)+"…("+x.length+" chars)"; return x; })); }catch{ return String(v); } }
 /* v180 health log: the last 200 problems, kept in this browser so they survive a reload and can be copied for the team.
    Only the time, the version, where it happened, an error code and a short message. Never a prompt, a name, an id or a picture */
-const APP_VER="180"; /* shown on the home screen; dev/preflight.sh checks it against the commit */
+const APP_VER="183"; /* shown on the home screen; dev/preflight.sh checks it against the commit */
 const HEALTH_KEY="bae_health";
 function health(where,code,msg){ try{ const L=JSON.parse(localStorage.getItem(HEALTH_KEY)||"[]"); L.push({t:new Date().toISOString().slice(0,19),v:typeof APP_VER==="string"?APP_VER:"?",w:String(where||"").slice(0,40),c:String(code||"").slice(0,30),m:String(msg||"").replace(/https?:\/\/\S+/g,"[link]").replace(/[\w.+-]+@[\w-]+\.[\w.]+/g,"[email]").slice(0,140)}); localStorage.setItem(HEALTH_KEY,JSON.stringify(L.slice(-200))); }catch{} }
 try{ addEventListener("error",e=>health("page","error",e?.message)); addEventListener("unhandledrejection",e=>health("page",e?.reason?.code||"rejection",e?.reason?.message||String(e?.reason||""))); }catch{}
@@ -1909,7 +1909,7 @@ const GRADS=[["circle_1","Circle 01","3700 × 3700"],["circle_2","Circle 02","37
   const save=async(name,blob)=>{ if(downloads){ try{ await downloads.save({filename:name,data:blob}); return; }catch(e){ if(e?.code==="declined") return; if(!/unavailable|not_granted|capability/.test(e?.code||"")) throw e; } }
     const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); };
   const file=id=>`grad/BAE_gradient_${id}.png`;
-  grid.innerHTML=GRADS.map(([id,name,size])=>`<div class="g-card"><div class="g-prev" data-full="${file(id)}" data-name="${name}" role="button" tabindex="0" aria-label="View ${name} larger"><img src="grad/BAE_gradient_${id}_preview.webp" alt="${name}" loading="lazy"></div><div class="g-meta"><div><b>${name}</b><small>${size} px · PNG</small></div></div><button class="g-dl" type="button" data-id="${id}">Download PNG</button></div>`).join("");
+  const fill=()=>{ if(grid.dataset.filled) return; grid.dataset.filled="1"; grid.innerHTML=GRADS.map(([id,name,size])=>`<div class="g-card"><div class="g-prev" data-full="${file(id)}" data-name="${name}" role="button" tabindex="0" aria-label="View ${name} larger"><img src="grad/BAE_gradient_${id}_preview.webp" alt="${name}" loading="lazy"></div><div class="g-meta"><div><b>${name}</b><small>${size} px · PNG</small></div></div><button class="g-dl" type="button" data-id="${id}">Download PNG</button></div>`).join(""); };
   grid.addEventListener("click",async e=>{ const b=e.target.closest(".g-dl"); if(b){ b.disabled=true; const old=b.textContent; b.textContent="Preparing…"; note("");
       try{ const r=await fetch(file(b.dataset.id)); if(!r.ok) throw new Error("file not found"); await save(`BAE_gradient_${b.dataset.id}.png`,await r.blob()); }
       catch(err){ note("Couldn't download: "+(err?.message||err?.code)); } finally{ b.disabled=false; b.textContent=old; } return; }
@@ -1917,9 +1917,9 @@ const GRADS=[["circle_1","Circle 01","3700 × 3700"],["circle_2","Circle 02","37
   $("dlAllGrad").onclick=async()=>{ const b=$("dlAllGrad"); b.disabled=true; const old=b.textContent; b.textContent="Preparing…"; note("");
     try{ if(!window.JSZip) throw new Error("zip library didn't load"); const zip=new JSZip(); for(const [id] of GRADS){ const r=await fetch(file(id)); if(r.ok) zip.file(`BAE_gradient_${id}.png`,await r.blob()); } await save("BAE-Gradient-Elements.zip",await zip.generateAsync({type:"blob"})); }
     catch(err){ note("Couldn't build the zip: "+(err?.message||err?.code)); } finally{ b.disabled=false; b.textContent=old; } };
-  const open=()=>{ G.hidden=false; G.scrollTop=0; setTimeout(()=>$("closeGallery").focus(),50); };
+  const open=()=>{ fill(); G.hidden=false; G.scrollTop=0; setTimeout(()=>$("closeGallery").focus(),50); };
   const close=()=>{ G.hidden=true; $("openGallery")?.focus(); };
-  $("openGallery").addEventListener("click",open); $("closeGallery").addEventListener("click",close);
+  $("openGallery").addEventListener("click",()=>{ if(typeof window.baeBrandOpen==="function") window.baeBrandOpen("files","biFShapes"); else open(); }); $("closeGallery").addEventListener("click",close);
   document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&!G.hidden&&!document.querySelector(".lightbox:not([hidden])")) close(); });
 })();
 /* Animation direction: BAE After Effects templates (EN + AR), each with a looping video preview and a template download */
@@ -4556,6 +4556,7 @@ async function rlBible(){
 
 /* ================= New look + features (v84) ================= */
 /*UXDICT*/const UX_AR={
+"Guide":"الدليل","Make":"اعمل","Downloads":"التنزيلات","Copy all colours":"انسخ كل الألوان","Every HEX in one go":"كل أكواد HEX مرة وحدة","Copied ✓":"انتسخ ✓","Post background":"خلفية بوست","Orange gradient, 1:1":"تدرج برتقالي، 1:1","Frame":"إطار","Soft L frame, EN or AR":"إطار L ناعم، إنجليزي أو عربي","Official shapes":"الأشكال الرسمية","The six PNGs":"ملفات PNG الستة","Logo files":"ملفات الشعار","Symbol SVGs":"الرمز SVG","Adobe palette":"ألوان Adobe","Swatches .ase":"ملف .ase","Colour":"الألوان","Logo":"الشعار","Typography":"الخط","Grid":"الشبكة","Imagery":"الصور","Motion":"الحركة","Concept":"الفكرة","Make a gradient":"اعمل تدرّج","Official gradient shapes":"أشكال التدرّج الرسمية","Download all (.zip)":"نزّل الكل (.zip)","Download PNG":"نزّل PNG","Team files":"ملفات الفريق","Palette":"الألوان","Logo symbol":"رمز الشعار","Position X":"الموقع X","Position Y":"الموقع Y","Rotation":"الدوران","Stretch":"المط","Blur":"التنعيم","Fill angle":"زاوية التعبئة","Strength":"القوة","Redo":"إعادة","Snap to grid":"التقاط على الشبكة","Add shape":"أضف شكل","Shuffle":"خلط","Mirror":"عكس","Reset":"رجّع","Colour set":"مجموعة الألوان","Brand colours · official":"ألوان البراند · الرسمية","New colour set":"مجموعة ألوان جديدة","Edit colours":"عدّل الألوان","Export":"صدّر","Import":"استورد","Name":"الاسم","Theme: follows your device":"المظهر: حسب جهازك","Theme: light":"المظهر: فاتح","Theme: dark":"المظهر: داكن",
 "I could not check:":"ما قدرت أتأكد من:",
 "Copy health report":"انسخ تقرير الأعطال","Copied":"انتسخ","Copy this text":"انسخ هذا النص",
 "I looked at it: something to know":"شفتها: في إشي لازم تعرفه","I looked at it: it follows the house rules":"شفتها: ماشية على قواعد البنك","I checked a smaller copy. Look at it at full size before you use it.":"أنا فحصت نسخة مصغّرة. شوفها بحجمها الكامل قبل ما تستعملها.","Fix this":"صلّحها","That picture is no longer in the studio. Create it again.":"هاي الصورة ما عادت بالاستوديو. اعملها من جديد.",
@@ -5147,7 +5148,8 @@ function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span
   const rgb=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
   const cmykOf=c=>{ if(c.print?.cmyk) return {v:c.print.cmyk,official:true}; const [r,g,b]=rgb(c.hex).map(x=>x/255), k=1-Math.max(r,g,b); const f=x=>k>=1?0:Math.round((1-x-k)/(1-k)*100); return {v:[f(r),f(g),f(b),Math.round(k*100)],official:false}; };
   const lum=h=>{ const [r,g,b]=rgb(h).map(v=>{ v/=255; return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4); }); return .2126*r+.7152*g+.0722*b; };
-  const on=h=>lum(h)>.45?"#19181E":"#FFFFFF";
+  const cr=(a,b)=>{ const x=lum(a)+.05, y=lum(b)+.05; return Math.max(x,y)/Math.min(x,y); };
+  const on=h=>cr(h,"#19181E")>=cr(h,"#FFFFFF")?"#19181E":"#FFFFFF";
   const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,"-");
   const copyBtn=(label,val)=>`<button type="button" class="bi-copy" data-copy="${esc(val)}"><span>${label}</span><b>${esc(val)}</b></button>`;
   const save=async(b,name)=>{ if(S.web||!downloads){ const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1500); } else { try{ await downloads.save({filename:name,data:b}); }catch{} } };
@@ -5180,13 +5182,13 @@ function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span
   async function bfAdd(file,shelf){ const MAX=12*1048576; if(file.size>MAX) throw {message:`${file.name} is larger than 12 MB.`};
     const id="f"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); const mime=file.type||(/\.svg$/i.test(file.name)?"image/svg+xml":"application/octet-stream");
     let asset=null; if(file.size>1500000){ try{ const A=await window.claude?.use?.("assets"); if(A){ const r=await A.upload(file); asset=r?.id||null; } }catch{} }
-    let n=0; if(!asset){ const data=b64(await file.arrayBuffer()), SZ=90000; n=Math.ceil(data.length/SZ); if(n>70) throw {message:`${file.name} is too large for the shelf (max about 4.5 MB without the file store).`}; const col=RLS.db.collection("brandblob"); for(let i=0;i<n;i++){ BF.busy=`Saving ${file.name} · ${Math.round((i+1)/n*100)}%`; draw(); await col.doc(id+"_"+i).set({d:data.slice(i*SZ,(i+1)*SZ)}); } }
+    let n=0; if(!asset){ const data=b64(await file.arrayBuffer()), SZ=90000; n=Math.ceil(data.length/SZ); if(n>70) throw {message:`${file.name} is too large for the shelf (max about 4.5 MB without the file store).`}; const col=RLS.db.collection("brandblob"); for(let i=0;i<n;i++){ BF.busy=`Saving ${file.name} · ${Math.round((i+1)/n*100)}%`; drawShelves(); await col.doc(id+"_"+i).set({d:data.slice(i*SZ,(i+1)*SZ)}); } }
     let prev=""; try{ if(/svg/.test(mime)&&file.size<60000) prev="data:image/svg+xml;base64,"+b64(await file.arrayBuffer()); else if(/^image\/(png|jpeg|webp)/.test(mime)){ const bmp=await createImageBitmap(file); const k=Math.min(1,360/Math.max(bmp.width,bmp.height)); const c=document.createElement("canvas"); c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k); c.getContext("2d").drawImage(bmp,0,0,c.width,c.height); prev=c.toDataURL("image/webp",.8); if(prev.length>60000) prev=c.toDataURL("image/jpeg",.6); } }catch{}
     const doc={name:file.name.slice(0,120),shelf,mime,size:file.size,n,asset,prev:prev.length<=60000?prev:"",at:Date.now()}; await RLS.db.collection("brandfiles").doc(id).set(doc); BF.list.push({id,...doc}); BF.list.sort((a,b)=>String(a.name).localeCompare(String(b.name))); }
   async function bfBlob(f){ if(f.asset){ const r=await fetch("/_blob/"+f.asset); if(r.ok){ const b=await r.blob(); return new Blob([b],{type:f.mime}); } }
     const col=RLS.db.collection("brandblob"); const parts=await Promise.all([...Array(+f.n||0)].map((_,i)=>col.doc(f.id+"_"+i).get())); const bin=atob(parts.map(x=>x.exists?x.data()?.d||"":"").join("")); const u=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return new Blob([u],{type:f.mime}); }
-  async function bfDownload(f,btn){ const t=btn.textContent; btn.disabled=true; btn.textContent="Preparing…"; try{ const b=await bfBlob(f); await save(b,f.name); }catch(e){ BF.err="Couldn't download "+f.name+"."; draw(); } btn.disabled=false; btn.textContent=t; }
-  async function bfRemove(f){ BF.list=BF.list.filter(x=>x.id!==f.id); draw(); try{ await RLS.db.collection("brandfiles").doc(f.id).delete(); const col=RLS.db.collection("brandblob"); for(let i=0;i<(+f.n||0);i++) await col.doc(f.id+"_"+i).delete().catch(()=>{}); if(f.asset){ const A=await window.claude?.use?.("assets"); await A?.delete(f.asset).catch(()=>{}); } }catch{} }
+  async function bfDownload(f,btn){ const t=btn.textContent; btn.disabled=true; btn.textContent="Preparing…"; try{ const b=await bfBlob(f); await save(b,f.name); }catch(e){ BF.err="Couldn't download "+f.name+"."; drawShelves(); } btn.disabled=false; btn.textContent=t; }
+  async function bfRemove(f){ BF.list=BF.list.filter(x=>x.id!==f.id); drawShelves(); try{ await RLS.db.collection("brandfiles").doc(f.id).delete(); const col=RLS.db.collection("brandblob"); for(let i=0;i<(+f.n||0);i++) await col.doc(f.id+"_"+i).delete().catch(()=>{}); if(f.asset){ const A=await window.claude?.use?.("assets"); await A?.delete(f.asset).catch(()=>{}); } }catch{} }
   const kb=n=>n>1048576?(n/1048576).toFixed(1)+" MB":Math.max(1,Math.round(n/1024))+" KB";
   function shelvesHTML(){ if(!BF.loaded) return `<p class="muted">Loading the asset shelves…</p>`;
     return (BF.busy?`<p class="t12" role="status">${esc(BF.busy)}</p>`:"")+(BF.err?`<p class="t12 bad" role="alert">${esc(BF.err)}</p>`:"")+SHELVES.map(([k,title,note])=>{ const L=BF.list.filter(f=>f.shelf===k); if(!L.length&&!BF.canEdit) return "";
@@ -5208,6 +5210,19 @@ function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span
     sdark:["Dark Stone","#CCC3B4","#DDD6CA","#CCC3B4"],stone:["Stone","#ECE8DF","#F6F1E9","#ECE8DF"],
     ndeep:["Deep navy","#06051A","#0E0C26","#06051A"],nmid:["Navy violet","#0E0C26","#2C2A48","#0E0C26"],nlight:["Grey violet","#24223F","#4B4964","#24223F"],nglow:["Light grey violet","#4B4964","#626079","#4B4964"]};
   const FAMS={orange:{name:"Orange",tones:["deep","mid","light","glow","cream","flat"]},stone:{name:"Stone",tones:["sdark","stone","cream","glow"]},dark:{name:"Dark",tones:["ndeep","nmid","nlight","nglow"]}};
+  /* colour sets. "brand" is the official set and never changes. A custom set swaps any brand colour for another one,
+     everywhere the gradient uses it: shape fills, the base, the preview, PNG, SVG, Figma and Illustrator files. */
+  const PAL_KEY="bae_grad_pal_v1", PAL={list:[],cur:"brand",edit:false,v:0,sure:""};
+  try{ const v=JSON.parse(localStorage.getItem(PAL_KEY)||"null"); if(v&&Array.isArray(v.list)){ PAL.list=v.list.filter(p=>p&&p.id&&p.map&&typeof p.map==="object"); PAL.cur=PAL.list.some(p=>p.id===v.cur)?v.cur:"brand"; } }catch{}
+  const HEX=/^#[0-9A-F]{6}$/;
+  const palNow=()=>PAL.cur==="brand"?null:PAL.list.find(p=>p.id===PAL.cur)||null;
+  const pc=h=>{ const p=palNow(), m=p&&p.map[String(h).toUpperCase()]; return m&&HEX.test(m)?m:h; };
+  const toneOf=t=>{ const n=TONES[t]||TONES.deep; return palNow()?[n[0],pc(n[1]),pc(n[2]),pc(n[3])]:n; };
+  const palIt=it=>palNow()?{...it,base:pc(it.base)}:it;
+  function palStore(){ PAL.v++; try{ localStorage.setItem(PAL_KEY,JSON.stringify({list:PAL.list,cur:PAL.cur})); }catch{}
+    if(typeof RLS!=="undefined"&&RLS.db&&RLS.uid) RLS.db.collection("data/users/"+RLS.uid).doc("gradpal").set({list:JSON.parse(JSON.stringify(PAL.list)),cur:PAL.cur,t:Date.now()}).catch(()=>{}); }
+  async function palPull(){ try{ if(typeof rlStoreInit==="function") await rlStoreInit(); if(!RLS.db||!RLS.uid) return; const sn=await RLS.db.collection("data/users/"+RLS.uid).doc("gradpal").get(); const v=sn?.exists?sn.data():null;
+      if(v&&Array.isArray(v.list)&&(v.t||0)>0){ const mine=new Map(PAL.list.map(p=>[p.id,p])); for(const p of v.list) if(p&&p.id&&p.map&&!mine.has(p.id)) PAL.list.push(p); if(PAL.cur==="brand"&&PAL.list.some(p=>p.id===v.cur)) PAL.cur=v.cur; PAL.v++; try{ localStorage.setItem(PAL_KEY,JSON.stringify({list:PAL.list,cur:PAL.cur})); }catch{} } }catch{} }
   /* organic shapes: a closed smooth curve through points at even angles, radius 0..1 */
   const BLOBS=[[1,.8,.93,.68,.86,.98,.74],[.9,1,.7,.82,.62,.9,.76,.96],[1,.86,.6,.76,1,.8,.56,.72],[.76,.96,1,.8,.6,.72,.92,.66,.86],[1,.62,.95,.6,1,.58],[1,.9,.72,.64,.74,.92,1,.82,.62,.8]].map(R=>{ const n=R.length, p=R.map((r,i)=>[Math.cos(i/n*2*Math.PI)*r,Math.sin(i/n*2*Math.PI)*r]), f=v=>v.toFixed(4); let d=`M${f(p[0][0])} ${f(p[0][1])}`;
     for(let i=0;i<n;i++){ const a=p[(i+n-1)%n], b=p[i], c=p[(i+1)%n], e=p[(i+2)%n]; d+=`C${f(b[0]+(c[0]-a[0])/6)} ${f(b[1]+(c[1]-a[1])/6)} ${f(c[0]-(e[0]-b[0])/6)} ${f(c[1]-(e[1]-b[1])/6)} ${f(c[0])} ${f(c[1])}`; } return d+"Z"; });
@@ -5240,6 +5255,10 @@ function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span
     SH("loz_v_1","BAE_gradient_lozenge_v_1","Lozenge vertical · sharp top","loz_v","top",[B(1,.28,.06,.7,20,1.3,"light",30,170,.8),B(0,1.02,.42,.55,80,1.3,"deep",0,170,.9),B(2,.45,1.0,.65,10,1.3,"deep",0,170,.7)]),
     SH("loz_v_2","BAE_gradient_lozenge_v_2","Lozenge vertical · sharp right","loz_v","right",[B(1,.28,.08,.7,20,1.3,"light",30,170,.75),B(0,1.04,.44,.55,80,1.3,"deep",0,170,.95),B(2,.4,1.0,.65,10,1.3,"deep",0,170,.7)])];
   const item=k=>LIB.find(i=>i.k===k)||LIB[0];
+  /* every brand colour the gradients use, by family, with its name */
+  const PAL_SRC=(()=>{ const out=[], seen=new Set(), nm=h=>ALL.find(c=>c.hex.toUpperCase()===h)?.name||Object.values(TONES).find(n=>n[1].toUpperCase()===h)?.[0]||h;
+    for(const [f,F] of Object.entries(FAMS)) for(const h of [...LIB.filter(i=>i.fam===f).map(i=>i.base),...F.tones.flatMap(t=>TONES[t].slice(1))].map(x=>x.toUpperCase())) if(!seen.has(h)){ seen.add(h); out.push({hex:h,name:nm(h),fam:f}); }
+    return out; })();
   const QUAL=[["x1","Standard",0],["4k","4K",3840],["8k","8K",7680]];
   const TP={fmt:3,item:"orange_01",layout:"grad",lang:"en",blobs:null,sel:-1,q:"x1",mesh:"mid",head:"",sub:"",ask:"",busy:"",err:"",note:"",custom:false,seed:0};
   const clone=L=>L.map(q=>({...q}));
@@ -5270,7 +5289,7 @@ function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span
   function gField(it,L,Wf,Hf,res){ const k=Math.min(1,res/Math.max(Wf,Hf)), fw=Math.max(2,Math.round(Wf*k)), fh=Math.max(2,Math.round(Hf*k)), d=new Float32Array(fw*fh*3), bc=rgb(it.base);
     for(let i=0;i<d.length;i+=3){ d[i]=bc[0]; d[i+1]=bc[1]; d[i+2]=bc[2]; }
     const ref=Math.sqrt(fw*fh), ax=clamp(Math.pow(Wf/Hf,.25),.6,1.7); gcv=gcv||document.createElement("canvas");
-    for(const q of L){ const tn=TONES[q.t]||TONES.deep, sig=q.bl/2*ref/1080*BLUR_K, pad=Math.ceil(sig*3)+2, cw=fw+2*pad, ch=fh+2*pad; gcv.width=cw; gcv.height=ch; const c=gcv.getContext("2d",{willReadFrequently:true});
+    for(const q of L){ const tn=toneOf(q.t), sig=q.bl/2*ref/1080*BLUR_K, pad=Math.ceil(sig*3)+2, cw=fw+2*pad, ch=fh+2*pad; gcv.width=cw; gcv.height=ch; const c=gcv.getContext("2d",{willReadFrequently:true});
       const R=q.s*ref/2, an=q.a*Math.PI/180, ca=Math.cos(an), sa=Math.sin(an); c.translate(pad+q.x*fw,pad+q.y*fh); c.scale(ax,1/ax); c.rotate(q.r*Math.PI/180); c.scale(R*q.e,R);
       const g=c.createLinearGradient(-ca,-sa,ca,sa); g.addColorStop(0,tn[1]); g.addColorStop(.61,tn[2]); g.addColorStop(1,tn[3]); c.fillStyle=g; c.fill(blobPath(q.b));
       const im=c.getImageData(0,0,cw,ch).data, n=cw*ch*4; let a=new Float32Array(n), b=new Float32Array(n); for(let i=0;i<n;i+=4){ const al=im[i+3]/255*q.o; a[i]=im[i]*al; a[i+1]=im[i+1]*al; a[i+2]=im[i+2]*al; a[i+3]=al; }
@@ -5338,7 +5357,7 @@ function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span
      a frame with the base, one vector per organic shape with its gradient fill and its layer blur, the logo symbol and live text. ----- */
   const xml=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
   function tplFig(o){ const {w,h}=o, it=o.it, G=geom(o), ref=Math.sqrt(G.w*G.h), ax=clamp(Math.pow(G.w/G.h,.25),.6,1.7), n=v=>+(+v).toFixed(2), shape=it.kind==="shape", solo=o.layout==="grad", u=it.k+"_"+w+"x"+h+"_"; let body="", defs="";
-    o.blobs.forEach((q,i)=>{ const tn=TONES[q.t]||TONES.deep, R=q.s*ref/2, rr=q.r*Math.PI/180, c=Math.cos(rr), s=Math.sin(rr), cx=G.x+q.x*G.w, cy=G.y+q.y*G.h, tf=(x,y)=>{ const X=x*R*q.e, Y=y*R; return [cx+(X*c-Y*s)*ax,cy+(X*s+Y*c)/ax]; };
+    o.blobs.forEach((q,i)=>{ const tn=toneOf(q.t), R=q.s*ref/2, rr=q.r*Math.PI/180, c=Math.cos(rr), s=Math.sin(rr), cx=G.x+q.x*G.w, cy=G.y+q.y*G.h, tf=(x,y)=>{ const X=x*R*q.e, Y=y*R; return [cx+(X*c-Y*s)*ax,cy+(X*s+Y*c)/ax]; };
       let x0=1e9, y0=1e9, x1=-1e9, y1=-1e9; const d=BLOBS[q.b%BLOBS.length].replace(/(-?[\d.]+) (-?[\d.]+)/g,(m,a,b)=>{ const p=tf(+a,+b); x0=Math.min(x0,p[0]); y0=Math.min(y0,p[1]); x1=Math.max(x1,p[0]); y1=Math.max(y1,p[1]); return n(p[0])+" "+n(p[1]); });
       const an=q.a*Math.PI/180, g1=tf(-Math.cos(an),-Math.sin(an)), g2=tf(Math.cos(an),Math.sin(an)), sig=q.bl/2*ref/1080*BLUR_K, m=sig*2;
       defs+=(sig>.2?`<filter id="${u}blur${i}" x="${n(x0-m)}" y="${n(y0-m)}" width="${n(x1-x0+2*m)}" height="${n(y1-y0+2*m)}" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur stdDeviation="${n(sig)}" result="effect1_foregroundBlur_${i}"/></filter>\n`:"")+`<linearGradient id="${u}fill${i}" x1="${n(g1[0])}" y1="${n(g1[1])}" x2="${n(g2[0])}" y2="${n(g2[1])}" gradientUnits="userSpaceOnUse"><stop stop-color="${tn[1]}"/><stop offset="0.61" stop-color="${tn[2]}"/><stop offset="1" stop-color="${tn[3]}"/></linearGradient>\n`;
@@ -5393,31 +5412,59 @@ function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span
       ["",priv.subarray(0,metaEnd)],...blocks.map(b=>["",b])];
     return {blob:new Blob(pdfWrite(objs,1,6),{type:"application/illustrator"}),n:P.length}; }
   /* ----- state, names ----- */
-  const cur=(over)=>{ const f=FLAT[TP.fmt], it=item(TP.item); return {...f,it,blobs:blobs(),layout:TP.layout,lang:TP.lang,head:TP.head,sub:TP.sub,...over}; };
-  const tplName=o=>{ const it=o.it, rk=ratioKey(o.w,o.h); let n=it.file.replace("{r}",rk); if(it.kind==="shape"&&!(o.layout==="grad")) n+="_"+rk; if(o.custom) n+="_custom"; if(o.layout!=="grad") n+="_"+o.layout+"_"+o.lang.toUpperCase(); return n; };
+  const cur=(over)=>{ const f=FLAT[TP.fmt], it=palIt(item(TP.item)); return {...f,it,blobs:blobs(),layout:TP.layout,lang:TP.lang,head:TP.head,sub:TP.sub,...over}; };
+  const tplName=o=>{ const it=o.it, rk=ratioKey(o.w,o.h); let n=it.file.replace("{r}",rk); if(it.kind==="shape"&&!(o.layout==="grad")) n+="_"+rk; if(o.custom) n+="_custom"; const pn=palNow(); if(pn) n+="_"+(slug(pn.name).replace(/^-|-$/g,"")||"colours"); if(o.layout!=="grad") n+="_"+o.layout+"_"+o.lang.toUpperCase(); return n; };
   const qSide=()=>QUAL.find(q=>q[0]===TP.q)?.[2]||0;
   const outSize=o=>{ const s=qSide(), K=s?Math.max(1,s/Math.max(o.w,o.h)):1; return [Math.round(o.w*K),Math.round(o.h*K)]; };
   /* blob centre and outline, in format pixels */
   function bGeo(o,q){ const G=geom(o), ref=Math.sqrt(G.w*G.h), ax=clamp(Math.pow(G.w/G.h,.25),.6,1.7), R=q.s*ref/2; return {cx:G.x+q.x*G.w,cy:G.y+q.y*G.h,tr:`translate(${(G.x+q.x*G.w).toFixed(1)} ${(G.y+q.y*G.h).toFixed(1)}) scale(${ax.toFixed(4)} ${(1/ax).toFixed(4)}) rotate(${q.r}) scale(${(R*q.e).toFixed(2)} ${R.toFixed(2)})`}; }
-  const toneCss=t=>{ const n=TONES[t]||TONES.deep; return `linear-gradient(135deg,${n[1]} 0%,${n[2]} 61%,${n[3]} 100%)`; };
+  const toneCss=t=>{ const n=toneOf(t); return `linear-gradient(135deg,${n[1]} 0%,${n[2]} 61%,${n[3]} 100%)`; };
   /* ----- gallery thumbnails: the whole library side by side, in the chosen size ----- */
-  const thumbs=new Map(); let thumbRun=0;
+  const thumbs=new Map(); let thumbRun=0; const tk=(k,w,h)=>k+"|"+w+"x"+h+"|"+PAL.cur+"."+PAL.v;
   function thumbQueue(){ const run=++thumbRun, f=FLAT[TP.fmt], k=180/Math.max(f.w,f.h), W=Math.max(24,Math.round(f.w*k)), H=Math.max(24,Math.round(f.h*k)); const todo=[...document.querySelectorAll("#biTplBody [data-tpthumb]")];
-    const step=()=>{ if(run!==thumbRun) return; const el=todo.shift(); if(!el) return; const it=item(el.dataset.tpthumb), key=it.k+"|"+f.w+"x"+f.h; let u=thumbs.get(key);
+    const step=()=>{ if(run!==thumbRun) return; const el=todo.shift(); if(!el) return; const it=palIt(item(el.dataset.tpthumb)), key=tk(it.k,f.w,f.h); let u=thumbs.get(key);
       if(!u){ const cv=document.createElement("canvas"); gCanvas(cv,{...f,it,blobs:it.blobs,layout:"grad",lang:"en"},W*2,H*2,72); u=cv.toDataURL("image/png"); thumbs.set(key,u); if(thumbs.size>400) thumbs.delete(thumbs.keys().next().value); }
       if(el.isConnected) el.src=u; (todo.length?setTimeout:()=>{})(step,0); }; step(); }
   /* ----- stage ----- */
   let paintT=0;
   function tplPaint(fast){ const cv=$("tpCv"); if(!cv) return; const o=cur(), k=Math.min(1,(fast?640:1100)/Math.max(o.w,o.h)); gCanvas(cv,o,Math.max(16,Math.round(o.w*k)),Math.max(16,Math.round(o.h*k)),fast?150:300);
-    const ol=$("tpOl"), q=o.blobs[TP.sel]; if(ol) ol.innerHTML=q?`<path d="${BLOBS[q.b%BLOBS.length]}" transform="${bGeo(o,q).tr}" vector-effect="non-scaling-stroke" class="a"/><path d="${BLOBS[q.b%BLOBS.length]}" transform="${bGeo(o,q).tr}" vector-effect="non-scaling-stroke" class="b"/>`:""; }
+    const ol=$("tpOl"), q=o.blobs[TP.sel]; if(ol) ol.innerHTML=gridSVG(o)+(q?`<path d="${BLOBS[q.b%BLOBS.length]}" transform="${bGeo(o,q).tr}" vector-effect="non-scaling-stroke" class="a"/><path d="${BLOBS[q.b%BLOBS.length]}" transform="${bGeo(o,q).tr}" vector-effect="non-scaling-stroke" class="b"/>`:""); }
   const tplSoon=fast=>{ cancelAnimationFrame(paintT); paintT=requestAnimationFrame(()=>tplPaint(fast)); };
   const hpos=(o,q)=>{ const g=bGeo(o,q); return [clamp(g.cx/o.w*100,1,99),clamp(g.cy/o.h*100,1,99)]; };
+  function palHTML(it){ const p=palNow(), where=typeof RLS!=="undefined"&&RLS.mode==="account"?"Saved to your account.":"Saved in this browser.";
+    let h=`<div class="tp-pal"><label class="lbl" for="tpPal">Colour set</label><select class="rl-field" id="tpPal"><option value="brand" ${p?"":"selected"}>Brand colours · official</option>${PAL.list.map(x=>`<option value="${esc(x.id)}" ${p&&x.id===p.id?"selected":""} data-noi18n>${esc(x.name)}</option>`).join("")}</select>
+      <div class="tp-chips"><button type="button" class="br-topic" data-tppal="new">New colour set</button>${p?`<button type="button" class="br-topic" data-tppal="edit" aria-pressed="${PAL.edit}">Edit colours</button><button type="button" class="br-topic" data-tppal="export">Export</button><button type="button" class="br-topic" data-tppal="del">${PAL.sure===p.id?"Delete? Press again":"Delete"}</button>`:""}<button type="button" class="br-topic" data-tppal="import">Import</button><input type="file" id="tpPalFile" accept=".json,application/json" hidden></div>`;
+    if(!p) h+=`<p class="t12 muted">The official colours. A new set starts as a copy of them; change only the colours you need, the shapes stay the same.</p>`;
+    else if(PAL.edit){ const fams=[it.fam,...Object.keys(FAMS).filter(f=>f!==it.fam)];
+      h+=`<label class="t12" for="tpPalName">Name</label><input class="rl-field" id="tpPalName" dir="auto" value="${esc(p.name)}" maxlength="40">
+        ${fams.map(f=>`<span class="lbl">${FAMS[f].name}</span><div class="tp-pcs">${PAL_SRC.filter(c=>c.fam===f).map(c=>{ const v=pc(c.hex); return `<div class="tp-pc${v!==c.hex?" chg":""}"><span class="was" style="background:${c.hex}" title="${c.name} ${c.hex}"></span><span class="nm">${c.name}<small>${c.hex}</small></span><input type="color" data-pcol="${c.hex}" value="${v.toLowerCase()}" aria-label="New colour for ${c.name}"><input class="rl-field tp-hex" data-phex="${c.hex}" value="${v}" maxlength="7" spellcheck="false" aria-label="HEX for ${c.name}" data-noi18n>${v!==c.hex?`<button type="button" class="bi-x" data-ppreset="${c.hex}" aria-label="Back to ${c.hex}">↺</button>`:""}</div>`; }).join("")}</div>`).join("")}
+        <p class="t12 muted">${where} Each colour on the left is a brand colour; the one on the right replaces it in every gradient of this set.</p>`; }
+    else h+=`<p class="t12 muted">${Object.keys(p.map).filter(k=>p.map[k]&&p.map[k]!==k).length} colours changed from the brand set. ${where} Files are named with “${esc(p.name)}”.</p>`;
+    return h+`</div>`; }
+  /* ----- exact values: every shape setting as a slider and a number field ----- */
+  const FIELD={tpX:["Position X",-50,150,.1,"%",q=>q.x*100,(q,v)=>q.x=v/100],tpY:["Position Y",-50,150,.1,"%",q=>q.y*100,(q,v)=>q.y=v/100],
+    tpS:["Size",5,220,.1,"%",q=>q.s*100,(q,v)=>q.s=v/100],tpRot:["Rotation",-180,180,.5,"°",q=>q.r,(q,v)=>q.r=v],tpE:["Stretch",50,300,1,"%",q=>q.e*100,(q,v)=>q.e=v/100],
+    tpBl:["Blur",0,200,1,"",q=>q.bl,(q,v)=>q.bl=v],tpA:["Fill angle",0,360,1,"°",q=>((q.a%360)+360)%360,(q,v)=>q.a=v],tpO:["Strength",10,100,1,"%",q=>q.o*100,(q,v)=>q.o=v/100]};
+  const r1=(v,st)=>+(+v).toFixed(st<1?1:0);
+  const fld=(id,q)=>{ const [label,min,max,st,unit,get]=FIELD[id], v=r1(get(q),st); return `<div class="tp-fld"><label class="t12" for="${id}N">${label}</label><input type="range" id="${id}" min="${min}" max="${max}" step="${st}" value="${v}" aria-label="${label}"><span class="tp-num"><input type="number" id="${id}N" min="${min}" max="${max}" step="${st}" value="${v}" inputmode="decimal"><i aria-hidden="true">${unit}</i></span></div>`; };
+  /* ----- undo and redo ----- */
+  const HS={u:[],r:[],g:false};
+  const hSnap=()=>JSON.stringify({b:TP.blobs,c:TP.custom,i:TP.item,s:TP.sel});
+  const hist=()=>{ const v=hSnap(); if(HS.u[HS.u.length-1]===v) return; HS.u.push(v); if(HS.u.length>100) HS.u.shift(); HS.r.length=0; };
+  const hLoad=v=>{ const x=JSON.parse(v); TP.item=x.i; TP.blobs=x.b; TP.custom=x.c; TP.sel=Math.min(x.s,blobs().length-1); tplDraw(); };
+  const undo=()=>{ if(!HS.u.length) return; HS.r.push(hSnap()); hLoad(HS.u.pop()); };
+  const redo=()=>{ if(!HS.r.length) return; HS.u.push(hSnap()); hLoad(HS.r.pop()); };
+  /* ----- snap: the brand 12 x 12 grid inside the 7% margin, the margin itself, the edges and the centre ----- */
+  const snapLines=(len,m)=>{ const st=(len-2*m)/12, L=[0,len/2,len]; for(let k=0;k<=12;k++) L.push(m+k*st); return L; };
+  const snapTo=(v,L,tol)=>{ let b=v,d=tol; for(const l of L){ const e=Math.abs(l-v); if(e<d){ d=e; b=l; } } return b; };
+  function gridSVG(o){ if(!TP.snap) return ""; const m=Math.round(o.w*.07), st=(o.w-2*m)/12, sv=(o.h-2*m)/12; let p="";
+    for(let k=0;k<=12;k++){ const x=(m+k*st).toFixed(1), y=(m+k*sv).toFixed(1); p+=`M${x} ${m}V${o.h-m}M${m} ${y}H${o.w-m}`; }
+    return `<path d="${p}" class="g"/><path d="M${o.w/2} 0V${o.h}M0 ${o.h/2}H${o.w}" class="c"/>`; }
   function tplDraw(){ const box=$("biTplBody"); if(!box) return; const o=cur(), it=o.it, L=o.blobs, sel=L[TP.sel], [ow,oh]=outSize(o), groups=[...new Set(LIB.map(i=>i.g))];
-    const rng=(id,label,min,max,val,unit)=>`<label class="t12">${label}<input type="range" id="${id}" min="${min}" max="${max}" value="${Math.round(val)}"><output>${Math.round(val)}${unit||""}</output></label>`;
     box.innerHTML=`
       <div class="tp-ask"><label class="lbl" for="tpAsk">Ask for a file</label><div class="row"><input class="rl-field" id="tpAsk" dir="auto" value="${esc(TP.ask)}" placeholder="e.g. a dark gradient background for a story, light in the bottom corner"><button type="button" class="btn small primary" data-tp="ask" ${TP.busy?"disabled":""}>${TP.busy||"Make it"}</button></div>${TP.err?`<span class="t12 bad" role="alert">${esc(TP.err)}</span>`:""}${TP.note?`<span class="t12" dir="auto" data-noi18n>${esc(TP.note)}</span>`:""}</div>
       <div class="tp-top"><div><label class="lbl" for="tpFmt">Size</label><select class="rl-field" id="tpFmt">${FORMATS.map(g=>`<optgroup label="${g[0]}">${g[1].map(f=>{ const i=FLAT.findIndex(x=>x.name===f[0]&&x.g===g[0]); return `<option value="${i}" ${i===TP.fmt?"selected":""}>${f[0]} · ${f[1]}×${f[2]}</option>`; }).join("")}</optgroup>`).join("")}</select></div><p class="t12 muted">The whole gradient library in this size. Pick one to edit and download it.</p></div>
-      <div class="tp-lib">${groups.map(g=>`<div class="tp-group"><span class="lbl">${g}</span><div class="tp-cards">${LIB.filter(i=>i.g===g).map(i=>`<button type="button" class="tp-card${i.kind==="shape"?" clear":""}" data-tpitem="${i.k}" aria-pressed="${i.k===TP.item}"><span class="pv" style="aspect-ratio:${o.w}/${o.h}"><img data-tpthumb="${i.k}" alt="" ${thumbs.get(i.k+"|"+o.w+"x"+o.h)?`src="${thumbs.get(i.k+"|"+o.w+"x"+o.h)}"`:""}></span><b>${i.name}</b></button>`).join("")}</div></div>`).join("")}</div>
+      <div class="tp-lib">${groups.map(g=>`<div class="tp-group"><span class="lbl">${g}</span><div class="tp-cards">${LIB.filter(i=>i.g===g).map(i=>`<button type="button" class="tp-card${i.kind==="shape"?" clear":""}" data-tpitem="${i.k}" aria-pressed="${i.k===TP.item}"><span class="pv" style="aspect-ratio:${o.w}/${o.h}"><img data-tpthumb="${i.k}" alt="" ${thumbs.get(tk(i.k,o.w,o.h))?`src="${thumbs.get(tk(i.k,o.w,o.h))}"`:""}></span><b>${i.name}</b></button>`).join("")}</div></div>`).join("")}</div>
       <div class="tp-grid">
         <div class="tp-side">
           <span class="lbl">Content</span><div class="tp-chips">${LAYOUTS.map(([k,l])=>`<button type="button" class="br-topic" data-tplay="${k}" aria-pressed="${TP.layout===k}">${l}</button>`).join("")}</div>
@@ -5425,14 +5472,17 @@ function rlRenderAtt(){ $("rlAtt").innerHTML=rlPending.map((a,i)=>a.video?`<span
           ${TP.layout==="copy"||TP.layout==="image"?`<input class="rl-field" id="tpHead" dir="auto" value="${esc(TP.head)}" placeholder="Headline (optional)" aria-label="Headline"><input class="rl-field" id="tpSub" dir="auto" value="${esc(TP.sub)}" placeholder="Subhead (optional)" aria-label="Subhead">`:""}
           <span class="lbl">Shapes in this gradient</span>
           <div class="tp-layers">${L.map((q,i)=>`<button type="button" class="tp-layer" data-tpsel="${i}" aria-pressed="${i===TP.sel}"><i style="background:${toneCss(q.t)}"></i><span>${i+1} · ${(TONES[q.t]||TONES.deep)[0]}</span></button>`).join("")}</div>
+          <div class="tp-chips"><button type="button" class="br-topic" data-tp="undo" ${HS.u.length?"":"disabled"} aria-keyshortcuts="Control+Z Meta+Z">Undo</button><button type="button" class="br-topic" data-tp="redo" ${HS.r.length?"":"disabled"} aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z">Redo</button><button type="button" class="br-topic" data-tp="snap" aria-pressed="${!!TP.snap}">Snap to grid</button></div>
           <div class="tp-chips"><button type="button" class="br-topic" data-tp="add">Add shape</button><button type="button" class="br-topic" data-tp="shuffle">Shuffle</button><button type="button" class="br-topic" data-tp="mirror">Mirror</button><button type="button" class="br-topic" data-tp="reset" ${TP.custom?"":"disabled"}>Reset</button></div>
           <p class="t12 muted">Step 1 is the solid ${it.base} base. The list goes from the bottom layer to the top: dark first, lighter on top.</p>
+          ${palHTML(it)}
         </div>
         <div class="tp-main">
           <div class="tp-stage${it.kind==="shape"&&TP.layout==="grad"?" clear":""}" id="tpStage" style="aspect-ratio:${o.w}/${o.h};max-width:min(100%,calc(62vh * ${(o.w/o.h).toFixed(4)}))"><canvas id="tpCv"></canvas><svg id="tpOl" class="tp-ol" viewBox="0 0 ${o.w} ${o.h}" preserveAspectRatio="none" aria-hidden="true"></svg>${L.map((q,i)=>{ const [hx,hy]=hpos(o,q); return `<button type="button" class="tp-pt${i===TP.sel?" on":""}" data-tppt="${i}" style="left:${hx}%;top:${hy}%;background:${toneCss(q.t)}" aria-label="Shape ${i+1}, drag to move">${i+1}</button>`; }).join("")}</div>
           <p class="t12 muted"><b data-noi18n>${esc(tplName({...o,custom:TP.custom}))}.png</b> · ${o.w} × ${o.h} px. Drag a numbered handle to move that shape. Select it to change the shape itself.</p>
           <div class="tp-pt-ed">${sel?`<div class="tp-edrow"><span class="t12"><b>Shape ${TP.sel+1}</b></span><div class="tp-forms">${BLOBS.map((d,i)=>`<button type="button" data-tpform="${i}" aria-pressed="${sel.b%BLOBS.length===i}" aria-label="Organic shape ${i+1}"><svg viewBox="-1.1 -1.1 2.2 2.2"><path d="${d}"/></svg></button>`).join("")}</div><div class="tp-sw">${FAMS[it.fam].tones.map(t=>`<button type="button" data-tptone="${t}" style="background:${toneCss(t)}" title="${TONES[t][0]}" aria-label="${TONES[t][0]}" aria-pressed="${sel.t===t}"></button>`).join("")}</div></div>
-            <div class="tp-edrow">${rng("tpS","Size",5,220,sel.s*100,"%")}${rng("tpRot","Rotation",-180,180,sel.r,"°")}${rng("tpE","Stretch",50,300,sel.e*100,"%")}${rng("tpBl","Blur",0,200,sel.bl)}${rng("tpA","Fill angle",0,360,((sel.a%360)+360)%360,"°")}${rng("tpO","Strength",10,100,sel.o*100,"%")}</div>
+            <div class="tp-flds">${Object.keys(FIELD).map(id=>fld(id,sel)).join("")}</div>
+            <p class="t12 muted">Position is the shape's centre, in % of the gradient area (0 is the left or top edge, 100 the right or bottom). Size is % of the area's mean side. Arrow keys on a handle move it 0.1%, with Shift 1%.</p>
             <div class="tp-edrow"><button type="button" class="btn small" data-tp="up">Bring forward</button><button type="button" class="btn small" data-tp="down">Send back</button><button type="button" class="btn small" data-tp="dup">Duplicate</button><button type="button" class="bi-x" data-tp="del">Remove shape</button></div>`:`<span class="t12 muted">No shape selected. Pick a handle on the image or a layer in the list.</span>`}</div>
           <div class="tp-out"><span class="lbl">PNG quality</span><div class="a-seg" role="group" aria-label="PNG quality">${QUAL.map(([k,l])=>`<button type="button" data-tpq="${k}" aria-pressed="${TP.q===k}">${l}</button>`).join("")}</div><span class="t12 muted">${ow} × ${oh} px${it.kind==="shape"&&TP.layout==="grad"?" · transparent background":""} · fine dither, no banding</span></div>
           ${it.kind!=="shape"?`<div class="tp-out"><span class="lbl">Illustrator freeform gradient</span><div class="a-seg" role="group" aria-label="Colour points">${MESH.map(([k,l])=>`<button type="button" data-tpmesh="${k}" aria-pressed="${TP.mesh===k}">${l}</button>`).join("")}</div><button type="button" class="btn small primary" data-tp="ff">Download .ai for Illustrator</button><span class="t12 muted">A real Illustrator file with one Freeform Gradient: colour points you move and recolour with the Gradient tool (G). It downloads as a ZIP with the .ai inside.</span></div>`:""}
@@ -5450,25 +5500,40 @@ How to choose: orange_* is the hero full-bleed background (dark masses at corner
 layout: grad (gradient only), logo, copy (logo + headline + subhead), image (image frame + copy, not for shapes).
 The gradient is built from blurred organic shapes filled with a linear gradient, darker shapes first and lighter on top, one colour family only. Return "shapes" ONLY when the request asks to move or change something (for example "light in the bottom corner", "darker at the top"); otherwise return an empty list and the library version is used. Each shape: b = organic shape 0 to ${BLOBS.length-1}, x and y = centre from 0 to 1 inside the gradient area (0,0 is top left, values slightly outside are allowed), s = size 0.15 to 1.5, r = rotation in degrees, e = stretch 1 to 2.2, t = tone, bl = blur 60 to 120, o = strength 0.4 to 1. Tones by family — orange: deep, mid, light, glow, cream · stone: sdark, stone, cream, glow · dark: ndeep, nmid, nlight, nglow. Use 3 to 6 shapes; big dark ones at corners and edges, small light ones last.
 Return ONLY JSON: {"size":"exact size name","item":"library key","layout":"grad|logo|copy|image","lang":"en|ar","headline":"","subhead":"","shapes":[{"b":0,"x":0,"y":0,"s":1,"r":0,"e":1.5,"t":"deep","bl":90,"o":1}],"note":"one short sentence in the user's language on what you made"}`,{modelTier:"quick",cache:false});
-      const i=FLAT.findIndex(f=>f.name.toLowerCase()===String(r?.size||"").toLowerCase()); if(i>=0) TP.fmt=i; if(LIB.some(x=>x.k===r?.item)) pick(r.item); if(LAYOUTS.some(l=>l[0]===r?.layout)) TP.layout=r.layout; if(r?.lang==="ar"||r?.lang==="en") TP.lang=r.lang; TP.head=String(r?.headline||""); TP.sub=String(r?.subhead||"");
+      hist(); const i=FLAT.findIndex(f=>f.name.toLowerCase()===String(r?.size||"").toLowerCase()); if(i>=0) TP.fmt=i; if(LIB.some(x=>x.k===r?.item)) pick(r.item); if(LAYOUTS.some(l=>l[0]===r?.layout)) TP.layout=r.layout; if(r?.lang==="ar"||r?.lang==="en") TP.lang=r.lang; TP.head=String(r?.headline||""); TP.sub=String(r?.subhead||"");
       const it=item(TP.item); if(TP.layout==="image"&&it.kind==="shape") TP.layout="copy"; const ok=FAMS[it.fam].tones, n=(v,a,b,d)=>isFinite(+v)?clamp(+v,a,b):d;
       const L=(Array.isArray(r?.shapes)?r.shapes:[]).filter(s=>isFinite(+s?.x)&&isFinite(+s?.y)).slice(0,8).map((s,k)=>({b:Math.abs(Math.round(+s.b||0))%BLOBS.length,x:n(s.x,-.3,1.3,.5),y:n(s.y,-.3,1.3,.5),s:n(s.s,.05,2.2,.6),r:n(s.r,-180,180,0),e:n(s.e,.5,3,1.4),t:ok.includes(s.t)?s.t:ok[Math.min(k,1)],a:n(s.a,0,360,35),bl:n(s.bl,0,200,90),o:n(s.o,.1,1,1)}));
       if(L.length>=2){ TP.blobs=L; TP.custom=true; } TP.note=String(r?.note||"").slice(0,240);
     }catch(e){ TP.err=e?.code==="rate_limited"?"Too many requests. Try again in a minute.":"Couldn't set that up. Try again."; }
     TP.busy=""; tplDraw(); }
+  function palAct(k){ const p=palNow();
+    if(k==="new"){ const id="p"+Date.now().toString(36); PAL.list.push({id,name:"My colours "+(PAL.list.length+1),map:{},t:Date.now()}); PAL.cur=id; PAL.edit=true; PAL.sure=""; palStore(); tplDraw(); setTimeout(()=>$("tpPalName")?.focus(),0); }
+    else if(k==="edit"&&p){ PAL.edit=!PAL.edit; tplDraw(); }
+    else if(k==="export"&&p){ saveText(JSON.stringify({type:"bae-gradient-colours",version:1,name:p.name,map:p.map,source:PAL_SRC.map(c=>({hex:c.hex,name:c.name,family:c.fam}))},null,2),(slug(p.name).replace(/^-|-$/g,"")||"colours")+".bae-colours.json","application/json"); }
+    else if(k==="del"&&p){ if(PAL.sure!==p.id){ PAL.sure=p.id; tplDraw(); setTimeout(()=>{ if(PAL.sure===p.id){ PAL.sure=""; tplDraw(); } },4000); return; } PAL.list=PAL.list.filter(x=>x.id!==p.id); PAL.cur="brand"; PAL.edit=false; PAL.sure=""; palStore(); tplDraw(); }
+    else if(k==="import") $("tpPalFile")?.click(); }
+  async function palImport(f){ try{ if(f.size>200000) throw 0; const v=JSON.parse(await f.text()), sets=Array.isArray(v?.list)?v.list:[v]; let n=0;
+      for(const x of sets){ const map={}; for(const [a,b] of Object.entries(x?.map||{})){ const A=String(a).toUpperCase(), Bv=String(b).toUpperCase(); if(HEX.test(A)&&HEX.test(Bv)&&PAL_SRC.some(c=>c.hex===A)) map[A]=Bv; } if(!Object.keys(map).length) continue;
+        const id="p"+Date.now().toString(36)+n; PAL.list.push({id,name:String(x.name||"Imported colours").slice(0,40),map,t:Date.now()}); PAL.cur=id; n++; }
+      if(!n) throw 0; PAL.edit=true; palStore(); TP.err=""; }catch{ TP.err="That file isn't a colour set from the studio."; } tplDraw(); }
   const flash=(a,msg,back)=>{ a.textContent=msg; setTimeout(()=>{ if(a.isConnected) a.textContent=back; },2600); };
   const OFFICIAL=[["9x16",1080,1920],["3x4",1080,1440],["1x1",1080,1080],["16x9",1920,1080]];
   P.addEventListener("click",async e=>{ const t=e.target; if(!t.closest("#biTplBody")) return;
-    const ib=t.closest("[data-tpitem]"); if(ib){ pick(ib.dataset.tpitem); tplDraw(); $("tpStage")?.scrollIntoView({block:"nearest",behavior:"smooth"}); return; }
+    const pp=t.closest("[data-tppal]"); if(pp){ palAct(pp.dataset.tppal); return; }
+    const pr=t.closest("[data-ppreset]"); if(pr){ const p=palNow(); if(p){ delete p.map[pr.dataset.ppreset]; palStore(); tplDraw(); } return; }
+    const ib=t.closest("[data-tpitem]"); if(ib){ if(ib.dataset.tpitem!==TP.item) hist(); pick(ib.dataset.tpitem); tplDraw(); $("tpStage")?.scrollIntoView({block:"nearest",behavior:"smooth"}); return; }
     const la=t.closest("[data-tplay]"); if(la){ TP.layout=la.dataset.tplay; if(TP.layout==="image"&&item(TP.item).kind==="shape") TP.layout="copy"; tplDraw(); return; }
     const lg=t.closest("[data-tplang]"); if(lg){ TP.lang=lg.dataset.tplang; tplDraw(); return; }
     const mb=t.closest("[data-tpmesh]"); if(mb){ TP.mesh=mb.dataset.tpmesh; tplDraw(); return; }
     const qb=t.closest("[data-tpq]"); if(qb){ TP.q=qb.dataset.tpq; tplDraw(); return; }
     const sl=t.closest("[data-tpsel]"); if(sl){ TP.sel=TP.sel===+sl.dataset.tpsel?-1:+sl.dataset.tpsel; tplDraw(); return; }
-    const fm=t.closest("[data-tpform]"); if(fm){ const q=blobs()[TP.sel]; if(q){ q.b=+fm.dataset.tpform; TP.custom=true; tplDraw(); } return; }
-    const tn=t.closest("[data-tptone]"); if(tn){ const q=blobs()[TP.sel]; if(q){ q.t=tn.dataset.tptone; TP.custom=true; tplDraw(); } return; }
+    const fm=t.closest("[data-tpform]"); if(fm){ const q=blobs()[TP.sel]; if(q){ hist(); q.b=+fm.dataset.tpform; TP.custom=true; tplDraw(); } return; }
+    const tn=t.closest("[data-tptone]"); if(tn){ const q=blobs()[TP.sel]; if(q){ hist(); q.t=tn.dataset.tptone; TP.custom=true; tplDraw(); } return; }
     const pt=t.closest("[data-tppt]"); if(pt){ if(TP.dragged){ TP.dragged=false; return; } TP.sel=+pt.dataset.tppt; tplDraw(); return; }
-    const a=t.closest("[data-tp]"); if(!a) return; const k=a.dataset.tp, L=blobs(), it=item(TP.item), o=cur({custom:TP.custom});
+    const a=t.closest("[data-tp]"); if(!a) return; const k=a.dataset.tp;
+    if(k==="undo"){ undo(); return; } if(k==="redo"){ redo(); return; } if(k==="snap"){ TP.snap=!TP.snap; a.setAttribute("aria-pressed",String(TP.snap)); tplPaint(); return; }
+    if(["shuffle","mirror","reset","add","del","dup","up","down"].includes(k)) hist();
+    const L=blobs(), it=item(TP.item), o=cur({custom:TP.custom});
     if(k==="shuffle"){ const R=(()=>{ let s=(++TP.seed*2654435761)>>>0||1; return ()=>{ s^=s<<13; s^=s>>>17; s^=s<<5; return (s>>>0)/4294967296-.5; }; })(); TP.blobs=clone(it.blobs).map(q=>({...q,b:Math.floor((R()+.5)*BLOBS.length)%BLOBS.length,x:q.x+R()*.1,y:q.y+R()*.1,r:q.r+R()*40,s:q.s*(1+R()*.2),e:clamp(q.e*(1+R()*.3),.6,2.6)})); TP.custom=true; TP.sel=-1; tplDraw(); }
     else if(k==="mirror"){ TP.blobs=mir(L); TP.custom=true; tplDraw(); }
     else if(k==="reset"){ TP.blobs=null; TP.custom=false; TP.sel=-1; tplDraw(); }
@@ -5485,43 +5550,55 @@ Return ONLY JSON: {"size":"exact size name","item":"library key","layout":"grad|
     else if(k==="zip"||k==="set"){ if(!window.JSZip){ TP.err="The zip library didn't load."; tplDraw(); return; } const label=a.textContent; a.disabled=true;
       try{ const z=new JSZip(), big=qSide()?2:1, jobs=[];
         if(k==="zip") for(const f of FLAT) jobs.push([f.g,{...o,...f},0,f.name.replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"")+"_"]);
-        else for(const i of LIB){ if(i.kind==="shape"){ const d=i.form==="circle"?[1850,1850]:i.form==="loz_h"?[3200,1800]:[1300,2200]; jobs.push(["Shapes",{name:i.name,w:d[0],h:d[1],it:i,blobs:i.blobs,layout:"grad",lang:"en"},0]); } else for(const [rk,w,h] of OFFICIAL) jobs.push([i.g.split(" · ").reverse().join(" ").replace(/internal.*/,"Dark").trim()+"/"+rk,{name:i.name,w,h,it:i,blobs:i.blobs,layout:"grad",lang:"en"},Math.max(w,h)*big]); }
+        else for(const i of LIB){ if(i.kind==="shape"){ const d=i.form==="circle"?[1850,1850]:i.form==="loz_h"?[3200,1800]:[1300,2200]; jobs.push(["Shapes",{name:i.name,w:d[0],h:d[1],it:palIt(i),blobs:i.blobs,layout:"grad",lang:"en"},0]); } else for(const [rk,w,h] of OFFICIAL) jobs.push([i.g.split(" · ").reverse().join(" ").replace(/internal.*/,"Dark").trim()+"/"+rk,{name:i.name,w,h,it:palIt(i),blobs:i.blobs,layout:"grad",lang:"en"},Math.max(w,h)*big]); }
         let n=0; for(const [dir,x,side,pre] of jobs){ a.textContent=`Rendering ${++n} of ${jobs.length}`; z.folder(dir).file((pre||"")+tplName(x)+".png",await tplPNG(x,side)); await tick(); }
         a.textContent="Packing…"; await save(await z.generateAsync({type:"blob",compression:"STORE"}),k==="zip"?`${tplName({...o,w:0,h:0}).replace(/_0x0/,"")}_all_sizes.zip`:"BAE_gradients_official_set.zip"); }catch(err){ TP.err="Couldn't build the ZIP."; tplDraw(); return; }
       a.disabled=false; a.textContent=label; } });
-  P.addEventListener("change",e=>{ const id=e.target.id; if(id==="tpFmt"){ TP.fmt=+e.target.value; tplDraw(); } else if(id==="tpHead"||id==="tpSub"){ TP.head=$("tpHead")?.value||""; TP.sub=$("tpSub")?.value||""; tplPaint(); } else if(/^tp(S|Rot|E|Bl|A|O)$/.test(id)) tplPaint(); });
+  P.addEventListener("change",e=>{ const id=e.target.id; if(id==="tpFmt"){ TP.fmt=+e.target.value; tplDraw(); } else if(id==="tpHead"||id==="tpSub"){ TP.head=$("tpHead")?.value||""; TP.sub=$("tpSub")?.value||""; tplPaint(); } else if(/^tp(X|Y|S|Rot|E|Bl|A|O)N?$/.test(id)){ HS.g=false; tplPaint(); if(/N$/.test(id)) tplDraw(); }
+    else if(id==="tpPal"){ PAL.cur=e.target.value; PAL.edit=false; PAL.sure=""; palStore(); tplDraw(); }
+    else if(id==="tpPalName"){ const p=palNow(); if(p){ p.name=(e.target.value.trim()||p.name).slice(0,40); palStore(); tplDraw(); } }
+    else if(e.target.dataset?.pcol||e.target.dataset?.phex){ palStore(); tplDraw(); }
+    else if(id==="tpPalFile"){ const f=e.target.files?.[0]; if(f) palImport(f); } });
   P.addEventListener("input",e=>{ const id=e.target.id, q=blobs()[TP.sel];
-    if(/^tp(S|Rot|E|Bl|A|O)$/.test(id)&&q){ const v=+e.target.value; if(id==="tpS") q.s=v/100; else if(id==="tpRot") q.r=v; else if(id==="tpE") q.e=v/100; else if(id==="tpBl") q.bl=v; else if(id==="tpA") q.a=v; else q.o=v/100; TP.custom=true; const out=e.target.nextElementSibling; if(out) out.textContent=v+(id==="tpBl"?"":id==="tpRot"||id==="tpA"?"°":"%"); tplSoon(true); }
+    const fm=id.match(/^(tp(?:X|Y|S|Rot|E|Bl|A|O))(N?)$/);
+    if(fm&&q){ const F=FIELD[fm[1]], raw=e.target.value; if(raw===""||!isFinite(+raw)) return; const v=clamp(+raw,F[1],F[2]); if(!HS.g){ hist(); HS.g=true; } F[6](q,v); TP.custom=true;
+      const twin=$(fm[2]?fm[1]:fm[1]+"N"); if(twin&&twin!==e.target) twin.value=r1(v,F[3]);
+      if(fm[1]==="tpX"||fm[1]==="tpY"){ const h=document.querySelector(`[data-tppt="${TP.sel}"]`); if(h){ const [hx,hy]=hpos(cur(),q); h.style.left=hx+"%"; h.style.top=hy+"%"; } }
+      tplSoon(true); }
+    else if(e.target.dataset?.pcol||e.target.dataset?.phex){ const p=palNow(); if(!p) return; const src=e.target.dataset.pcol||e.target.dataset.phex; let v=String(e.target.value).trim().toUpperCase(); if(v&&v[0]!=="#") v="#"+v; if(!HEX.test(v)) return;
+      if(v===src) delete p.map[src]; else p.map[src]=v; const row=e.target.closest(".tp-pc"); row?.classList.toggle("chg",v!==src); const c=row?.querySelector("[data-pcol]"), x=row?.querySelector("[data-phex]"); if(c&&c!==e.target) c.value=v.toLowerCase(); if(x&&x!==e.target) x.value=v;
+      PAL.v++; tplSoon(true); }
     else if(id==="tpAsk") TP.ask=e.target.value; else if(id==="tpHead"||id==="tpSub"){ TP.head=$("tpHead")?.value||""; TP.sub=$("tpSub")?.value||""; tplSoon(true); } });
-  P.addEventListener("keydown",e=>{ if(e.target.id==="tpAsk"&&e.key==="Enter"){ e.preventDefault(); tplAsk(); } const pt=e.target.closest?.("[data-tppt]"); if(pt&&/^Arrow/.test(e.key)){ e.preventDefault(); const i=+pt.dataset.tppt, q=blobs()[i], d=e.shiftKey?.05:.01; if(e.key==="ArrowLeft") q.x-=d; if(e.key==="ArrowRight") q.x+=d; if(e.key==="ArrowUp") q.y-=d; if(e.key==="ArrowDown") q.y+=d; TP.custom=true; TP.sel=i; const [hx,hy]=hpos(cur(),q); pt.style.left=hx+"%"; pt.style.top=hy+"%"; tplSoon(true); } });
+  P.addEventListener("keydown",e=>{ if(e.target.id==="tpAsk"&&e.key==="Enter"){ e.preventDefault(); tplAsk(); }
+    if((e.ctrlKey||e.metaKey)&&!e.altKey&&/^[zy]$/i.test(e.key)&&G.tab==="make"&&!/^(tpAsk|tpHead|tpSub|tpPalName)$/.test(e.target.id)&&!e.target.dataset?.phex){ e.preventDefault(); if(e.key.toLowerCase()==="y"||e.shiftKey) redo(); else undo(); return; }
+    const pt=e.target.closest?.("[data-tppt]"); if(pt&&/^Arrow/.test(e.key)){ e.preventDefault(); if(!e.repeat) hist(); const i=+pt.dataset.tppt, q=blobs()[i], d=e.shiftKey?.01:.001; if(e.key==="ArrowLeft") q.x-=d; if(e.key==="ArrowRight") q.x+=d; if(e.key==="ArrowUp") q.y-=d; if(e.key==="ArrowDown") q.y+=d; q.x=+q.x.toFixed(4); q.y=+q.y.toFixed(4); TP.custom=true; TP.sel=i; const nx=$("tpXN"), ny=$("tpYN"); if(nx&&TP.sel===i){ nx.value=r1(q.x*100,.1); $("tpX").value=nx.value; ny.value=r1(q.y*100,.1); $("tpY").value=ny.value; } const [hx,hy]=hpos(cur(),q); pt.style.left=hx+"%"; pt.style.top=hy+"%"; tplSoon(true); } });
   P.addEventListener("pointerdown",e=>{ const pt=e.target.closest?.("[data-tppt]"); if(!pt) return; const i=+pt.dataset.tppt, st=$("tpStage"), q=blobs()[i]; if(!st||!q) return; pt.setPointerCapture(e.pointerId); let moved=false; const sx=e.clientX, sy=e.clientY, x0=q.x, y0=q.y;
-    const mv=ev=>{ if(!moved&&Math.hypot(ev.clientX-sx,ev.clientY-sy)<3) return; const r=st.getBoundingClientRect(), o=cur(), G=geom(o); q.x=clamp(x0+(ev.clientX-sx)/r.width*o.w/G.w,-.5,1.5); q.y=clamp(y0+(ev.clientY-sy)/r.height*o.h/G.h,-.5,1.5); const [hx,hy]=hpos(o,q); pt.style.left=hx+"%"; pt.style.top=hy+"%"; moved=true; TP.custom=true; TP.sel=i; tplSoon(true); };
+    const mv=ev=>{ if(!moved&&Math.hypot(ev.clientX-sx,ev.clientY-sy)<3) return; if(!moved) hist(); const r=st.getBoundingClientRect(), o=cur(), G=geom(o); let nx=clamp(x0+(ev.clientX-sx)/r.width*o.w/G.w,-.5,1.5), ny=clamp(y0+(ev.clientY-sy)/r.height*o.h/G.h,-.5,1.5);
+      if(TP.snap&&!ev.altKey){ const m=Math.round(o.w*.07), tx=8/r.width*o.w, ty=8/r.height*o.h; nx=(snapTo(G.x+nx*G.w,snapLines(o.w,m),tx)-G.x)/G.w; ny=(snapTo(G.y+ny*G.h,snapLines(o.h,m),ty)-G.y)/G.h; }
+      q.x=+nx.toFixed(4); q.y=+ny.toFixed(4); const [hx,hy]=hpos(o,q); pt.style.left=hx+"%"; pt.style.top=hy+"%"; moved=true; TP.custom=true; TP.sel=i; tplSoon(true); };
     const up=()=>{ pt.removeEventListener("pointermove",mv); pt.removeEventListener("pointerup",up); pt.removeEventListener("pointercancel",up); if(moved){ TP.dragged=true; setTimeout(()=>{ TP.dragged=false; tplDraw(); },0); } };
     pt.addEventListener("pointermove",mv); pt.addEventListener("pointerup",up); pt.addEventListener("pointercancel",up); });
   /* ---------- page ---------- */
   const G={w:1080,h:1920,mode:"rgb"};
   function gridHTML(){ const m=Math.round(G.w*.07), cw=(G.w-2*m)/12, rh=(G.h-2*m)/12; return `<div class="bi-gridres"><div><b>${m} px</b><span>Margin (7% of width)</span></div><div><b>${cw.toFixed(1)} px</b><span>Column width (12)</span></div><div><b>${rh.toFixed(1)} px</b><span>Row height (12)</span></div><div><b>${Math.round(G.w-2*m)} × ${Math.round(G.h-2*m)}</b><span>Safe area</span></div></div>`; }
-  function draw(){
-    const sc=P.scrollTop;
-    body.innerHTML=`
-    <nav class="bi-nav" aria-label="Sections">${[["biColour","Colour"],["biLogo","Logo"],["biType","Typography"],["biGrid","Grid"],["biRules","Gradient, illustration, photo"],["biMotion","Motion"],["biTpl","Templates"],["biAssets","Assets"]].map(([id,l])=>`<a href="#${id}" data-jump="${id}">${l}</a>`).join("")}</nav>
-    <section class="bi-card bi-concept"><div><span class="t12 muted">Creative concept</span><h3>Deep Clarity</h3><p>Three layers of structured intelligence, moving from depth to surface, from indistinct to certain.</p></div><div class="bi-pillars"><div><b>Intelligence</b><span>Proactive · precise · adaptive · clear</span></div><div><b>Warmth</b><span>Present · generous · familiar · celebratory</span></div></div></section>
-
+  const TABS=[["guide","Guide"],["make","Make"],["files","Downloads"]];
+  const GUIDE=[["biColour","Colour"],["biLogo","Logo"],["biType","Typography"],["biGrid","Grid"],["biRules","Imagery"],["biMotion","Motion"],["biConcept","Concept"]];
+  const QUICK=[["colours","Copy all colours","Every HEX in one go"],["post","Post background","Orange gradient, 1:1"],["frame","Frame","Soft L frame, EN or AR"],["shapes","Official shapes","The six PNGs"],["logo","Logo files","Symbol SVGs"],["ase","Adobe palette","Swatches .ase"]];
+  G.tab="guide";
+  function shapesHTML(){ return `<section class="bi-sec" id="biFShapes"><div class="bi-h"><div><h3>Official gradient shapes</h3><p>The six shapes from the brand library: high-res PNG, transparent background.</p></div><button type="button" class="btn small primary" data-bishape="all">Download all (.zip)</button></div>
+      <div class="bi-shapes">${GRADS.map(([id,name,size])=>`<div class="bi-shape"><div class="pv"><img src="grad/BAE_gradient_${id}_preview.webp" alt="${name}" loading="lazy"></div><div class="tx"><b>${name}</b><span class="t12 muted">${size} px · PNG</span></div><button type="button" class="btn small" data-bishape="${id}">Download PNG</button></div>`).join("")}</div><span class="t12" id="biShapeNote" aria-live="polite"></span></section>`; }
+  function guideHTML(){ return `<nav class="bi-nav" aria-label="Sections">${GUIDE.map(([id,l])=>`<a href="#${id}" data-jump="${id}">${l}</a>`).join("")}</nav>
     <section class="bi-sec" id="biColour"><div class="bi-h"><div><h3>Colour</h3><p>Click any value to copy it.</p></div>
       <div class="a-seg" role="group" aria-label="Colour space"><button type="button" data-bimode="rgb" aria-pressed="${G.mode==="rgb"}">Screen · RGB</button><button type="button" data-bimode="cmyk" aria-pressed="${G.mode==="cmyk"}">Print · CMYK</button></div></div>
-      <div class="bi-weight" role="img" aria-label="Palette weighting: Primary 40%, Neutral light 30%, Neutral dark 20%, Complimentary 5% and 5%"><i style="flex:40;background:#FA6428;color:#fff">Primary 40%</i><i style="flex:30;background:#ECE8DF;color:#19181E">Neutral light 30%</i><i style="flex:20;background:#19181E;color:#fff">Neutral dark 20%</i><i style="flex:5;background:#A33755" title="Complimentary 5%"></i><i style="flex:5;background:#32969B" title="Complimentary 5%"></i></div>
+      <div class="bi-weight" role="img" aria-label="Palette weighting: Primary 40%, Neutral light 30%, Neutral dark 20%, Complimentary 5% and 5%"><i style="flex:40;background:#FA6428;color:#19181E">Primary 40%</i><i style="flex:30;background:#ECE8DF;color:#19181E">Neutral light 30%</i><i style="flex:20;background:#19181E;color:#fff">Neutral dark 20%</i><i style="flex:5;background:#A33755" title="Complimentary 5%"></i><i style="flex:5;background:#32969B" title="Complimentary 5%"></i></div>
       ${TIERS.map(t=>`<div class="bi-tier"><div class="bi-tierhead"><b>${t.title}</b><span class="t12 muted">${t.note} · ${t.share}</span></div><div class="bi-swatches">${t.list.map(c=>{ const k=cmykOf(c), r=rgb(c.hex); return `<div class="bi-sw"><div class="bi-chip" style="background:${c.hex};color:${on(c.hex)}${/^#FFF/.test(c.hex)?";box-shadow:inset 0 0 0 1px #CCC3B4":""}"><b>${c.name}</b>${c.print?.pantone&&G.mode==="cmyk"?`<span>PANTONE ${c.print.pantone}</span>`:""}</div>
         <div class="vals">${G.mode==="rgb"?copyBtn("HEX",c.hex)+copyBtn("RGB",r.join(", ")):copyBtn("CMYK",k.v.join(" / "))+(c.print?.pantone?copyBtn("Pantone",c.print.pantone):"")+`<span class="t12 ${k.official?"ok":"warn"}">${k.official?"Official print value":"Converted from screen — confirm before print"}</span>`}</div></div>`; }).join("")}</div></div>`).join("")}
-      <div class="bi-dl"><b>Download the palette</b><div class="rl-btns">
-        <button type="button" class="btn small primary" data-bidl="ase-rgb">Adobe swatches · RGB (.ase)</button><button type="button" class="btn small primary" data-bidl="ase-cmyk">Adobe swatches · CMYK (.ase)</button>
-        <button type="button" class="btn small" data-bidl="svg-rgb">Palette sheet · RGB (.svg)</button><button type="button" class="btn small" data-bidl="svg-cmyk">Palette sheet · CMYK (.svg)</button>
-        <button type="button" class="btn small" data-bidl="css">CSS variables</button><button type="button" class="btn small" data-bidl="json">Design tokens (.json)</button></div>
-        <p class="t12 muted">The guidelines give official print values (Pantone + CMYK) for Orange, Ink, Burgundy and Teal only. Every other CMYK value here is a plain conversion and is marked so.</p></div>
+      <p class="t12 muted">Palette files for Adobe, Figma and code are in <button type="button" class="bi-link" data-bitab="files" data-bianchor="biFPalette">Downloads → Palette</button>.</p>
     </section>
 
     <section class="bi-sec" id="biLogo"><div class="bi-h"><div><h3>Logo</h3><p>Four lockups: Symbol · English · Arabic · Bilingual. Match the lockup to the language of the message.</p></div></div>
-      <div class="bi-combos">${COMBOS.map(([rank,fg,bg,label],i)=>`<div class="bi-combo"><div class="tile" style="background:${bg}${/^#FFF/.test(bg)?";box-shadow:inset 0 0 0 1px #CCC3B4":""}">${symbolSVG(fg)}</div><div class="tx"><span class="t12 muted">${rank}</span><b>${label}</b></div><div class="rl-btns"><button type="button" class="btn small" data-bisym="${i}" data-bg="0">Symbol SVG</button><button type="button" class="btn small" data-bisym="${i}" data-bg="1">With background</button></div></div>`).join("")}</div>
-      <p class="t12 muted">Only these six pairs are approved, plus monochrome light-on-dark and dark-on-light. The full lockups (English, Arabic, Bilingual) are in Assets → Logos below.</p>
+      <div class="bi-combos">${COMBOS.map(([rank,fg,bg,label],i)=>`<div class="bi-combo"><div class="tile" style="background:${bg}${/^#FFF/.test(bg)?";box-shadow:inset 0 0 0 1px #CCC3B4":""}">${symbolSVG(fg)}</div><div class="tx"><span class="t12 muted">${rank}</span><b>${label}</b></div></div>`).join("")}</div>
+      <p class="t12 muted">Only these six pairs are approved, plus monochrome light-on-dark and dark-on-light. Download them in <button type="button" class="bi-link" data-bitab="files" data-bianchor="biFLogo">Downloads → Logo</button>.</p>
       <div class="bi-rules"><div><b>Safe space</b><p>1X = the logo's x-height. Keep at least 1X clear on every side; 2X for hero moments.</p></div><div><b>Position</b><p>English: left. Arabic: right. Top = brand-led. Bottom = signature. Logo-led pieces: optically centred.</p></div><div><b>Partner lockups</b><p>1X of logo height around, 1.5X between the two marks, both in one matching monotone.</p></div><div><b>Never</b><p>Redraw, recolour, stretch or modify. Never on a busy or low-contrast background.</p></div></div>
     </section>
 
@@ -5537,7 +5614,7 @@ Return ONLY JSON: {"size":"exact size name","item":"library key","layout":"grad|
         <div class="bi-blocks"><table class="bi-table"><thead><tr><th>Block</th><th>Rows</th><th>Columns · 9:16, 3:4, 1:1</th><th>Columns · 16:9</th></tr></thead><tbody><tr><td>Headline</td><td>2–5</td><td>8–12</td><td>8–12</td></tr><tr><td>Subhead</td><td>1</td><td>3–6</td><td>2–4</td></tr><tr><td>Logo</td><td>1</td><td>4–6</td><td>2–4</td></tr></tbody></table></div></div>
     </section>
 
-    <section class="bi-sec" id="biRules"><div class="bi-h"><div><h3>Gradient, illustration, photography</h3></div><button type="button" class="btn small" data-bigo="gallery">Open gradient elements</button></div>
+    <section class="bi-sec" id="biRules"><div class="bi-h"><div><h3>Imagery</h3><p>Gradient, illustration, photography.</p></div><button type="button" class="btn small" data-bitab="make">Make a gradient</button></div>
       <div class="bi-rules"><div><b>Gradient</b><p>Soft, blurred organic shapes, layered and diffused. Never a linear blend. Three roles: background, frame, shape. Shapes sit between the cut-out subject and the background.</p></div><div><b>Dark gradient</b><p>Internal and corporate audiences only. Keep it minimal in external work.</p></div><div><b>Illustration</b><p>One focal point. No text inside. Light version on light, dark version on dark; never invert. Sizes 96, 144, 192, 256 px.</p></div><div><b>Photography</b><p>Depth over flatness. Clarity through focus. Colour with warmth. A Jordanian lens: real faces and places.</p></div><div><b>AI imagery</b><p>Fine for tactical campaigns, rapid content and concepts. Not for evergreen hero images, core portraits or trust-critical use.</p></div><div><b>Social treatment</b><p>Primary: gradient shape between subject and background. Secondary: black-and-white subject with gradient overlay, on flat orange only.</p></div></div>
     </section>
 
@@ -5548,21 +5625,59 @@ Return ONLY JSON: {"size":"exact size name","item":"library key","layout":"grad|
         <tr><td>Frame gradient reveal</td><td>1200 ms</td><td>—</td><td>Opacity or position</td></tr><tr><td>Gradient loop</td><td>30 s (or 15, 8, 6 s)</td><td>—</td><td>Linear, no easing, each shape 360° clockwise</td></tr></tbody></table></div>
     </section>
 
-    <section class="bi-sec" id="biTpl"><div class="bi-h"><div><h3>Templates and gradients</h3><p>Built the way the guideline builds it: a solid brand colour, blurred organic shapes filled with the brand gradient, lighter shades on top. Background, Frame, Dark and Shape, in every digital size, as a high-quality PNG up to 8K.</p></div></div>
-      <div id="biTplBody"></div>
+    <section class="bi-card bi-concept" id="biConcept"><div><span class="t12 muted">Creative concept</span><h3>Deep Clarity</h3><p>Three layers of structured intelligence, moving from depth to surface, from indistinct to certain.</p></div><div class="bi-pillars"><div><b>Intelligence</b><span>Proactive · precise · adaptive · clear</span></div><div><b>Warmth</b><span>Present · generous · familiar · celebratory</span></div></div></section>`; }
+  function filesHTML(){ return `<section class="bi-sec" id="biFPalette"><div class="bi-h"><div><h3>Palette</h3><p>Every brand colour, ready for Adobe, Figma and code.</p></div></div>
+      <div class="bi-dl"><b>Download the palette</b><div class="rl-btns">
+        <button type="button" class="btn small primary" data-bidl="ase-rgb">Adobe swatches · RGB (.ase)</button><button type="button" class="btn small primary" data-bidl="ase-cmyk">Adobe swatches · CMYK (.ase)</button>
+        <button type="button" class="btn small" data-bidl="svg-rgb">Palette sheet · RGB (.svg)</button><button type="button" class="btn small" data-bidl="svg-cmyk">Palette sheet · CMYK (.svg)</button>
+        <button type="button" class="btn small" data-bidl="css">CSS variables</button><button type="button" class="btn small" data-bidl="json">Design tokens (.json)</button></div>
+        <p class="t12 muted">The guidelines give official print values (Pantone + CMYK) for Orange, Ink, Burgundy and Teal only. Every other CMYK value here is a plain conversion and is marked so.</p></div>
     </section>
-
-    <section class="bi-sec" id="biAssets"><div class="bi-h"><div><h3>Assets</h3><p>${BF.canEdit?"Add the official files once. Everyone on the team downloads them from here.":"Official files, ready to download."}</p></div></div>
+    <section class="bi-sec" id="biFLogo"><div class="bi-h"><div><h3>Logo symbol</h3><p>The six approved colour pairs, as SVG. The full lockups (English, Arabic, Bilingual) are in Team files below.</p></div></div>
+      <div class="bi-combos">${COMBOS.map(([rank,fg,bg,label],i)=>`<div class="bi-combo"><div class="tile" style="background:${bg}${/^#FFF/.test(bg)?";box-shadow:inset 0 0 0 1px #CCC3B4":""}">${symbolSVG(fg)}</div><div class="tx"><span class="t12 muted">${rank}</span><b>${label}</b></div><div class="rl-btns"><button type="button" class="btn small" data-bisym="${i}" data-bg="0">Symbol SVG</button><button type="button" class="btn small" data-bisym="${i}" data-bg="1">With background</button></div></div>`).join("")}</div>
+    </section>
+    ${shapesHTML()}
+    <section class="bi-sec" id="biAssets"><div class="bi-h"><div><h3>Team files</h3><p>${BF.canEdit?"Add the official files once. Everyone on the team downloads them from here.":"Official files, ready to download."}</p></div></div>
       <div id="biShelves">${shelvesHTML()}</div>
       <p class="t12 muted">Questions, asset requests and approvals go to the brand team.</p>
-    </section>`;
-    tplDraw(); P.scrollTop=sc; if(typeof uxT==="function") uxT(P);
+    </section>`; }
+  function draw(){
+    const sc=P.scrollTop, same=draw.tab===G.tab; draw.tab=G.tab;
+    body.innerHTML=`<div class="bi-bar"><div class="bi-tabs" role="tablist" aria-label="Brand identity">${TABS.map(([k,l])=>`<button type="button" role="tab" id="biTab_${k}" aria-selected="${G.tab===k}" tabindex="${G.tab===k?0:-1}" data-bitab="${k}">${l}</button>`).join("")}</div></div>
+    ${G.tab==="guide"?`<div class="bi-quick" aria-label="Quick actions">${QUICK.map(([k,l,s])=>`<button type="button" class="bi-q" data-biq="${k}"><b>${l}</b><span>${s}</span></button>`).join("")}</div>`:""}
+    <div class="bi-panel" role="tabpanel" aria-labelledby="biTab_${G.tab}">${G.tab==="guide"?guideHTML():G.tab==="make"?`<section class="bi-sec" id="biTpl"><div class="bi-h"><div><h3>Make a gradient</h3><p>Built the way the guideline builds it: a solid brand colour, blurred organic shapes filled with the brand gradient, lighter shades on top. Background, Frame, Dark and Shape, in every digital size, as a high-quality PNG up to 8K.</p></div></div>
+      <div id="biTplBody"></div>
+    </section>`:filesHTML()}</div>`;
+    if(G.tab==="make") tplDraw();
+    P.querySelectorAll(".bi-table").forEach(t=>{ const h=[...t.querySelectorAll("thead th")].map(x=>x.textContent); t.querySelectorAll("tbody tr").forEach(r=>[...r.children].forEach((td,i)=>td.dataset.label=h[i]||"")); });
+    P.scrollTop=same?sc:0; if(typeof uxT==="function") uxT(P); spy();
   }
+  /* the section bar shows where you are */
+  let spyIO=null;
+  function spy(){ spyIO?.disconnect(); spyIO=null; if(G.tab!=="guide"||!("IntersectionObserver" in window)) return; const links=[...P.querySelectorAll(".bi-nav [data-jump]")];
+    spyIO=new IntersectionObserver(es=>{ for(const e of es) if(e.isIntersecting){ links.forEach(a=>a.toggleAttribute("aria-current",a.dataset.jump===e.target.id)); const a=links.find(x=>x.dataset.jump===e.target.id); a?.scrollIntoView?.({block:"nearest",inline:"center"}); } },{root:P,rootMargin:"-30% 0px -60% 0px"});
+    GUIDE.forEach(([id])=>{ const el=$(id); if(el) spyIO.observe(el); }); }
+  function drawShelves(){ const el=$("biShelves"); if(el){ el.innerHTML=shelvesHTML(); if(typeof uxT==="function") uxT(el); } }
+  function redrawSec(id){ const el=$(id); if(!el) return draw(); const t=document.createElement("div"); t.innerHTML=guideHTML(); const n=t.querySelector("#"+id); if(!n) return draw(); el.replaceWith(n); if(typeof uxT==="function") uxT(n); spy(); }
+  function goTab(tab,anchor,kb){ G.tab=tab; draw(); if(anchor) requestAnimationFrame(()=>$(anchor)?.scrollIntoView({block:"start"})); else if(!kb) $("biTab_"+tab)?.focus({preventScroll:true,focusVisible:false}); if(kb) $("biTab_"+tab)?.focus({preventScroll:true}); }
   P.addEventListener("click",async e=>{
     const c=e.target.closest("[data-copy]"); if(c){ try{ await navigator.clipboard.writeText(c.dataset.copy); c.classList.add("done"); setTimeout(()=>c.classList.remove("done"),1200); }catch{} return; }
     const j=e.target.closest("[data-jump]"); if(j){ e.preventDefault(); $(j.dataset.jump)?.scrollIntoView({behavior:"smooth",block:"start"}); return; }
-    const m=e.target.closest("[data-bimode]"); if(m){ G.mode=m.dataset.bimode; draw(); return; }
-    const z=e.target.closest("[data-bisize]"); if(z){ const [w,h]=z.dataset.bisize.split("x").map(Number); G.w=w; G.h=h; draw(); return; }
+    const tb=e.target.closest("[data-bitab]"); if(tb){ goTab(tb.dataset.bitab,tb.dataset.bianchor); return; }
+    const qa=e.target.closest("[data-biq]"); if(qa){ const k=qa.dataset.biq;
+      if(k==="colours"){ const txt=ALL.map(c=>`${c.name}\t${c.hex}`).join("\n"); try{ await navigator.clipboard.writeText(txt); qa.classList.add("done"); qa.querySelector("span").textContent="Copied ✓"; setTimeout(()=>{ if(qa.isConnected){ qa.classList.remove("done"); qa.querySelector("span").textContent="Every HEX in one go"; } },1600); }catch{} return; }
+      if(k==="ase"){ save(ase("RGB"),"BAE_palette_RGB.ase"); return; }
+      if(k==="logo") return goTab("files","biFLogo");
+      if(k==="shapes") return goTab("files","biFShapes");
+      if(k==="post"||k==="frame"){ const want=k==="post"?"Instagram post 1:1":"Story / Reel 9:16", i=FLAT.findIndex(f=>f.name===want); if(i>=0) TP.fmt=i; pick(k==="post"?"orange_01":(typeof UX!=="undefined"&&UX.lang==="ar"?"frame_01_ar":"frame_01_en")); TP.layout="grad"; return goTab("make","tpStage"); }
+      return; }
+    const bs=e.target.closest("[data-bishape]"); if(bs){ const id=bs.dataset.bishape, note=$("biShapeNote"), old=bs.textContent; bs.disabled=true; bs.textContent="Preparing…"; if(note) note.textContent="";
+      try{ const f=x=>`grad/BAE_gradient_${x}.png`;
+        if(id==="all"){ if(!window.JSZip) throw new Error("the zip library didn't load"); const zip=new JSZip(); for(const [x] of GRADS){ const r=await fetch(f(x)); if(r.ok) zip.file(`BAE_gradient_${x}.png`,await r.blob()); } await save(await zip.generateAsync({type:"blob"}),"BAE-Gradient-Elements.zip"); }
+        else { const r=await fetch(f(id)); if(!r.ok) throw new Error("file not found"); await save(await r.blob(),`BAE_gradient_${id}.png`); } }
+      catch(err){ if(note) note.textContent="Couldn't download: "+(err?.message||err?.code); } finally{ bs.disabled=false; bs.textContent=old; } return; }
+    const m=e.target.closest("[data-bimode]"); if(m){ G.mode=m.dataset.bimode; redrawSec("biColour"); return; }
+    const z=e.target.closest("[data-bisize]"); if(z){ const [w,h]=z.dataset.bisize.split("x").map(Number); G.w=w; G.h=h; redrawSec("biGrid"); return; }
     const go=e.target.closest("[data-bigo]"); if(go){ P.hidden=true; $("openGallery")?.click(); return; }
     const sy=e.target.closest("[data-bisym]"); if(sy){ const [rank,fg,bg,label]=COMBOS[+sy.dataset.bisym]; saveText(symbolSVG(fg,sy.dataset.bg==="1"?bg:null),`BAE_symbol_${slug(label)}${sy.dataset.bg==="1"?"_bg":""}.svg`,"image/svg+xml"); return; }
     const d=e.target.closest("[data-bidl]"); if(d){ const k=d.dataset.bidl;
@@ -5577,11 +5692,15 @@ Return ONLY JSON: {"size":"exact size name","item":"library key","layout":"grad|
   P.addEventListener("change",async e=>{
     if(e.target.id==="biW"||e.target.id==="biH"){ G.w=Math.max(100,+$("biW").value||1080); G.h=Math.max(100,+$("biH").value||1920); $("biGridRes").innerHTML=gridHTML(); return; }
     const a=e.target.matches?.("[data-bfadd]")?e.target:null; if(a&&a.files?.length){ const shelf=a.dataset.bfadd, files=[...a.files].slice(0,20); a.value=""; BF.err="";
-      for(const f of files){ BF.busy=`Saving ${f.name}…`; draw(); try{ await bfAdd(f,shelf); }catch(err){ BF.err=String(err?.message||err?.code||err).slice(0,200); } }
-      BF.busy=""; draw(); } });
-  const open=()=>{ P.hidden=false; P.scrollTop=0; draw(); if(!BF.loaded) bfLoad().then(draw); };
-  const close=()=>{ P.hidden=true; $("openBrand")?.focus(); };
-  $("openBrand")?.addEventListener("click",open); $("closeBrand")?.addEventListener("click",close);
+      for(const f of files){ BF.busy=`Saving ${f.name}…`; drawShelves(); try{ await bfAdd(f,shelf); }catch(err){ BF.err=String(err?.message||err?.code||err).slice(0,200); } }
+      BF.busy=""; drawShelves(); } });
+  let opener=null;
+  const open=(tab,anchor)=>{ opener=document.activeElement; G.tab=typeof tab==="string"?tab:"guide"; P.hidden=false; P.scrollTop=0; draw(); if(anchor) requestAnimationFrame(()=>$(anchor)?.scrollIntoView({block:"start"})); if(!BF.loaded) bfLoad().then(drawShelves); if(!PAL.pulled){ PAL.pulled=true; palPull().then(()=>{ if(G.tab==="make"&&!P.hidden) tplDraw(); }); } setTimeout(()=>$("closeBrand")?.focus({preventScroll:true,focusVisible:false}),30); };
+  const close=()=>{ P.hidden=true; spyIO?.disconnect(); (opener&&opener.isConnected?opener:$("openBrand"))?.focus(); };
+  window.baeBrandOpen=open;
+  $("openBrand")?.addEventListener("click",()=>open("guide")); $("closeBrand")?.addEventListener("click",close);
+  document.addEventListener("keydown",e=>{ if(P.hidden) return; if(e.key==="Escape"&&!document.querySelector(".lightbox:not([hidden])")){ e.preventDefault(); close(); return; }
+    const tb=e.target.closest?.(".bi-tabs [role=tab]"); if(tb&&(e.key==="ArrowRight"||e.key==="ArrowLeft")){ e.preventDefault(); const i=TABS.findIndex(t=>t[0]===tb.dataset.bitab), d=(e.key==="ArrowRight")!==(getComputedStyle(tb).direction==="rtl")?1:-1; goTab(TABS[(i+d+TABS.length)%TABS.length][0],null,true); } });
 })();
 
 
@@ -7502,6 +7621,17 @@ Return JSON: {"image": <number of the picture, 1-based> or null, "box": {"x","y"
   $("closeBooth")?.addEventListener("click",()=>clearTimeout(T.timer));
   $("openBooth")?.addEventListener("click",()=>window.__boWork.ready());
 })();
+
+/* ---------- theme: follows the device, or Light, or Dark. The page's colours change; pictures, swatches and files never do. ---------- */
+(function(){ const KEY="bae_theme", mq=window.matchMedia?matchMedia("(prefers-color-scheme: dark)"):null, btns=[...document.querySelectorAll(".top-theme")]; let pref="system"; try{ pref=localStorage.getItem(KEY)||"system"; }catch{} if(!/^(system|light|dark)$/.test(pref)) pref="system";
+  const LBL={system:["Theme: follows your device","المظهر: حسب جهازك"],light:["Theme: light","المظهر: فاتح"],dark:["Theme: dark","المظهر: داكن"]};
+  const apply=()=>{ const dark=pref==="dark"||(pref==="system"&&!!mq?.matches); document.documentElement.dataset.theme=dark?"dark":"light";
+    let m=document.querySelector('meta[name="theme-color"]'); if(!m){ m=document.createElement("meta"); m.name="theme-color"; document.head.appendChild(m); } m.content=dark?"#19181E":"#FFFAF4";
+    const l=LBL[pref][typeof UX!=="undefined"&&UX.lang==="ar"?1:0]; for(const b of btns){ b.dataset.pref=pref; b.setAttribute("aria-label",l); b.title=l; } };
+  mq?.addEventListener?.("change",()=>{ if(pref==="system") apply(); });
+  btns.forEach(b=>b.addEventListener("click",()=>{ pref={system:"light",light:"dark",dark:"system"}[pref]; try{ localStorage.setItem(KEY,pref); }catch{} apply(); }));
+  document.querySelectorAll("[data-uxlang]").forEach(b=>b.addEventListener("click",()=>setTimeout(apply,0)));
+  apply(); })();
 
 boot();
 })();
